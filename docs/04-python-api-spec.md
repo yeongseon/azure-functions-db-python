@@ -43,36 +43,41 @@ def handle_orders(events, context):
         print(event.pk, event.after)
 ```
 
-### 2.2 Decorator Sugar
+### 2.2 Decorator API (DbFunctionApp)
 
 ```python
 import azure.functions as func
-from azure_functions_db import BlobCheckpointStore, SqlAlchemySource, db
+from azure.storage.blob import ContainerClient
+from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
+db = DbFunctionApp()
+
+source = SqlAlchemySource(
+    url="%ORDERS_DB_URL%",
+    table="orders",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+)
+
+checkpoint_store = BlobCheckpointStore(
+    container_client=ContainerClient.from_connection_string(
+        conn_str="%AzureWebJobsStorage%",
+        container_name="db-state",
+    ),
+    source_fingerprint=source.source_descriptor.fingerprint,
+)
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-@db.poll(
-    name="orders",
-    source=SqlAlchemySource(
-        url="%ORDERS_DB_URL%",
-        table="orders",
-        schema="public",
-        cursor_column="updated_at",
-        pk_columns=["id"],
-    ),
-    checkpoint_store=BlobCheckpointStore(
-        connection="AzureWebJobsStorage",
-        container="db-state",
-    ),
-    batch_size=100,
-)
-def handle_orders(events, context):
-    ...
+@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
+    for event in events:
+        print(event.pk, event.after)
 ```
 
-In the actual implementation, the decorator creates a wrapper while keeping the wrapper signature simple to avoid conflicts with Azure Functions decorators.
+The `DbFunctionApp` class provides Azure Functions-style decorators (`db_trigger`, `db_input`, `db_output`). Internally, `db_trigger` wraps `PollTrigger` and manages `__signature__` to hide injected parameters from the Azure runtime. Decorator order contract: Azure decorators outermost, db decorators closest to the function.
 
 ## 3. Core Types
 
@@ -200,11 +205,11 @@ class SerializationError(PollerError): ...
 
 ## 8. Future API
 
-- `db.outbox(...)`
-- `db.backfill(...)`
-- `db.relay(service_bus=...)`
-- `db.model(OrderModel)`
-- `db.partitioned(...)`
+- Outbox strategy support
+- Backfill mode
+- Service Bus / Event Hub relay integration
+- Pydantic model mapping for `db_trigger` events
+- Partitioned polling
 
 ## 9. API Stability Policy
 
@@ -214,7 +219,6 @@ class SerializationError(PollerError): ...
 - dynamic partitioning
 
 ### Beta
-- decorator sugar
 - Pydantic mapping
 
 ### Stable Target
@@ -223,6 +227,9 @@ class SerializationError(PollerError): ...
 - BlobCheckpointStore
 - RowChange
 - PollContext
+- DbFunctionApp (db_trigger, db_input, db_output)
+- DbReader
+- DbWriter
 
 ## 10. Binding API
 
@@ -249,6 +256,67 @@ writer.upsert_many(rows=[...], conflict_columns=["id"])
 ```
 
 ### 10.3 Combined Trigger + Binding Example
+
+Using the decorator API with `DbFunctionApp`:
+
+```python
+import azure.functions as func
+from azure.storage.blob import ContainerClient
+
+from azure_functions_db import (
+    BlobCheckpointStore,
+    DbFunctionApp,
+    DbWriter,
+    EngineProvider,
+    RowChange,
+    SqlAlchemySource,
+)
+
+app = func.FunctionApp()
+db = DbFunctionApp()
+
+engine_provider = EngineProvider()
+
+source = SqlAlchemySource(
+    url="%SOURCE_DB_URL%",
+    table="orders",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+    engine_provider=engine_provider,
+)
+
+checkpoint_store = BlobCheckpointStore(
+    container_client=ContainerClient.from_connection_string(
+        conn_str="%AzureWebJobsStorage%",
+        container_name="db-state",
+    ),
+    source_fingerprint=source.source_descriptor.fingerprint,
+)
+
+@app.function_name(name="orders_poll")
+@app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
+@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.db_output(
+    arg_name="writer",
+    url="%DEST_DB_URL%",
+    table="processed_orders",
+    engine_provider=engine_provider,
+)
+def orders_poll(timer: func.TimerRequest, events: list[RowChange], writer: DbWriter) -> None:
+    for event in events:
+        if event.after is not None:
+            writer.upsert(
+                data={
+                    "order_id": event.pk["id"],
+                    "customer": event.after["name"],
+                    "processed_at": str(event.cursor),
+                },
+                conflict_columns=["order_id"],
+            )
+```
+
+Using the imperative API directly:
 
 ```python
 import azure.functions as func
@@ -332,6 +400,43 @@ class DbConnectionError(DbError): ...
 class QueryError(DbError): ...
 class WriteError(DbError): ...
 ```
+
+### 10.7 Decorator API for Bindings (DbFunctionApp)
+
+The `DbFunctionApp` class provides `db_input` and `db_output` decorators that inject
+`DbReader` / `DbWriter` instances per invocation with automatic lifecycle management.
+
+#### db_input (inject DbReader)
+
+```python
+from azure_functions_db import DbFunctionApp, DbReader
+
+db = DbFunctionApp()
+
+@db.db_input("reader", url="%DB_URL%", table="users")
+def load_user(reader: DbReader) -> dict[str, object] | None:
+    return reader.get(pk={"id": 42})
+
+@db.db_input("reader", url="%DB_URL%")
+def list_active(reader: DbReader) -> list[dict[str, object]]:
+    return reader.query("SELECT * FROM users WHERE active = :active", params={"active": True})
+```
+
+#### db_output (inject DbWriter)
+
+```python
+from azure_functions_db import DbFunctionApp, DbWriter
+
+db = DbFunctionApp()
+
+@db.db_output("writer", url="%DB_URL%", table="orders")
+def write_order(writer: DbWriter) -> None:
+    writer.insert(data={"id": 1, "status": "pending", "total": 99.99})
+    writer.upsert(data={"id": 1, "status": "shipped"}, conflict_columns=["id"])
+```
+
+Both decorators support sync and async handlers.  The injected instance is created
+fresh per invocation and closed automatically in a `finally` block.
 
 ## 11. Shared Core API
 

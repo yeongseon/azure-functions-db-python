@@ -18,7 +18,7 @@
 - CLI reset/inspect
 
 ## v0.3
-- binding decorator sugar (`@db.input`, `@db.output`)
+- ~~binding decorator sugar~~ (done: `DbFunctionApp` with `db_trigger`, `db_input`, `db_output`)
 - Mongo adapter
 - outbox helper
 - Service Bus/Event Hub relay mode

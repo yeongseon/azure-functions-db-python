@@ -14,9 +14,13 @@
    - polling orchestrator, source adapter, state management, Azure Functions integration
    - consumes `core` to handle pseudo trigger execution
 3. **binding**
-   - `DbReader` (input binding)
-   - `DbWriter` (output binding)
-   - per-invocation session/connection lifecycle management
+    - `DbReader` (input binding)
+    - `DbWriter` (output binding)
+    - per-invocation session/connection lifecycle management
+4. **decorator**
+    - `DbFunctionApp` class providing Azure Functions-style decorators
+    - `db_trigger` wraps `PollTrigger`, `db_input` injects `DbReader`, `db_output` injects `DbWriter`
+    - consumes both `trigger` and `binding` modules
 
 ### 1.1 Core Layer
 
@@ -44,6 +48,7 @@ The binding layer provides an imperative API called directly from Azure Function
 
 - `trigger -> core` dependency only
 - `binding -> core` dependency only
+- `decorator -> trigger, binding, core` (thin orchestration layer)
 - Cross-import between `trigger` and `binding` is forbidden
 
 ### 1.5 Binding Execution Flow

@@ -66,9 +66,10 @@ azure-functions-db[postgres]
 ```python
 import azure.functions as func
 from azure.storage.blob import ContainerClient
-from azure_functions_db import BlobCheckpointStore, PollTrigger, RowChange, SqlAlchemySource
+from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
+db = DbFunctionApp()
 
 source = SqlAlchemySource(
     url="%ORDERS_DB_URL%",
@@ -78,29 +79,20 @@ source = SqlAlchemySource(
     pk_columns=["id"],
 )
 
-trigger = PollTrigger(
-    name="orders",
-    source=source,
-    checkpoint_store=BlobCheckpointStore(
-        container_client=ContainerClient.from_connection_string(
-            conn_str="%AzureWebJobsStorage%",
-            container_name="db-state",
-        ),
-        source_fingerprint=source.source_descriptor.fingerprint,
+checkpoint_store = BlobCheckpointStore(
+    container_client=ContainerClient.from_connection_string(
+        conn_str="%AzureWebJobsStorage%",
+        container_name="db-state",
     ),
-    batch_size=100,
+    source_fingerprint=source.source_descriptor.fingerprint,
 )
-
-
-def handle_orders(events: list[RowChange]) -> None:
-    for event in events:
-        print(f"Order {event.pk}: {event.op}")
-
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-def orders_poll(timer: func.TimerRequest) -> None:
-    trigger.run(timer=timer, handler=handle_orders)
+@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
+    for event in events:
+        print(f"Order {event.pk}: {event.op}")
 ```
 
 > See [Python API Spec](docs/04-python-api-spec.md) for the full API reference.
@@ -108,45 +100,43 @@ def orders_poll(timer: func.TimerRequest) -> None:
 ### Input Binding (DbReader)
 
 ```python
-from azure_functions_db import DbReader
+from azure_functions_db import DbFunctionApp, DbReader
 
-# Look up a single row by primary key
-reader = DbReader(url="%DB_URL%", table="users")
-try:
+db = DbFunctionApp()
+
+@db.db_input("reader", url="%DB_URL%", table="users")
+def load_user(reader: DbReader) -> None:
     user = reader.get(pk={"id": 42})
     if user:
         print(user["name"])
-finally:
-    reader.close()
 
-# Raw SQL queries
-with DbReader(url="%DB_URL%") as reader:
+@db.db_input("reader", url="%DB_URL%")
+def list_active_users(reader: DbReader) -> None:
     active_users = reader.query(
         "SELECT * FROM users WHERE active = :active",
         params={"active": True},
     )
-    for u in active_users:
-        print(u["email"])
+    for user in active_users:
+        print(user["email"])
 ```
 
 ### Output Binding (DbWriter)
 
 ```python
-from azure_functions_db import DbWriter
+from azure_functions_db import DbFunctionApp, DbWriter
 
-# Insert a single row
-with DbWriter(url="%DB_URL%", table="orders") as writer:
+db = DbFunctionApp()
+
+@db.db_output("writer", url="%DB_URL%", table="orders")
+def write_orders(writer: DbWriter) -> None:
     writer.insert(data={"id": 1, "status": "pending", "total": 99.99})
-
-# Upsert (insert or update on conflict)
-with DbWriter(url="%DB_URL%", table="orders") as writer:
     writer.upsert(
         data={"id": 1, "status": "shipped", "total": 99.99},
         conflict_columns=["id"],
     )
 
-# Batch operations (all-or-nothing transaction)
-with DbWriter(url="%DB_URL%", table="orders") as writer:
+@db.db_output("writer", url="%DB_URL%", table="orders")
+def write_order_batch(writer: DbWriter) -> None:
     writer.insert_many(rows=[
         {"id": 2, "status": "pending", "total": 49.99},
         {"id": 3, "status": "pending", "total": 29.99},
@@ -160,11 +150,20 @@ Supported upsert dialects: PostgreSQL, SQLite, MySQL.
 Process database changes and write results to another table. Uses `EngineProvider` for shared connection pooling.
 
 ```python
+import azure.functions as func
 from azure.storage.blob import ContainerClient
 
 from azure_functions_db import (
-    BlobCheckpointStore, DbWriter, EngineProvider, PollTrigger, SqlAlchemySource,
+    BlobCheckpointStore,
+    DbFunctionApp,
+    DbWriter,
+    EngineProvider,
+    RowChange,
+    SqlAlchemySource,
 )
+
+app = func.FunctionApp()
+db = DbFunctionApp()
 
 engine_provider = EngineProvider()
 
@@ -176,36 +175,34 @@ source = SqlAlchemySource(
     engine_provider=engine_provider,
 )
 
-trigger = PollTrigger(
-    name="orders",
-    source=source,
-    checkpoint_store=BlobCheckpointStore(
-        container_client=ContainerClient.from_connection_string(
-            conn_str="%AzureWebJobsStorage%",
-            container_name="db-state",
-        ),
-        source_fingerprint=source.source_descriptor.fingerprint,
+checkpoint_store = BlobCheckpointStore(
+    container_client=ContainerClient.from_connection_string(
+        conn_str="%AzureWebJobsStorage%",
+        container_name="db-state",
     ),
+    source_fingerprint=source.source_descriptor.fingerprint,
 )
 
-def process_orders(events):
-    with DbWriter(
-        url="%DEST_DB_URL%", table="processed_orders",
-        engine_provider=engine_provider,
-    ) as writer:
-        for event in events:
-            if event.after is not None:
-                writer.upsert(
-                    data={
-                        "order_id": event.pk["id"],
-                        "customer": event.after["name"],
-                        "processed_at": str(event.cursor),
-                    },
-                    conflict_columns=["order_id"],
-                )
-
-# In your Azure Function:
-# trigger.run(timer=timer, handler=process_orders)
+@app.function_name(name="orders_poll")
+@app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
+@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.db_output(
+    arg_name="writer",
+    url="%DEST_DB_URL%",
+    table="processed_orders",
+    engine_provider=engine_provider,
+)
+def orders_poll(timer: func.TimerRequest, events: list[RowChange], writer: DbWriter) -> None:
+    for event in events:
+        if event.after is not None:
+            writer.upsert(
+                data={
+                    "order_id": event.pk["id"],
+                    "customer": event.after["name"],
+                    "processed_at": str(event.cursor),
+                },
+                conflict_columns=["order_id"],
+            )
 ```
 
 See [`examples/trigger_with_binding/`](examples/trigger_with_binding/) for a complete runnable sample.
