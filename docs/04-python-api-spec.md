@@ -77,7 +77,14 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
         print(event.pk, event.after)
 ```
 
-The `DbFunctionApp` class provides Azure Functions-style decorators (`db_trigger`, `db_input`, `db_output`). Internally, `db_trigger` wraps `PollTrigger` and manages `__signature__` to hide injected parameters from the Azure runtime. Decorator order contract: Azure decorators outermost, db decorators closest to the function.
+The `DbFunctionApp` class provides Azure Functions-style decorators:
+
+- **`db_trigger`** — pseudo-trigger wrapping `PollTrigger` for change detection
+- **`db_input`** — data injection (injects query results directly)
+- **`db_output`** — auto-write (writes handler return value to DB)
+- **`db_reader`** / **`db_writer`** — client injection (imperative escape hatches)
+
+Internally, decorators manage `__signature__` to hide injected parameters from the Azure runtime. Decorator order contract: Azure decorators outermost, db decorators closest to the function.
 
 ## 3. Core Types
 
@@ -227,7 +234,7 @@ class SerializationError(PollerError): ...
 - BlobCheckpointStore
 - RowChange
 - PollContext
-- DbFunctionApp (db_trigger, db_input, db_output)
+- DbFunctionApp (db_trigger, db_input, db_output, db_reader, db_writer)
 - DbReader
 - DbWriter
 
@@ -257,7 +264,7 @@ writer.upsert_many(rows=[...], conflict_columns=["id"])
 
 ### 10.3 Combined Trigger + Binding Example
 
-Using the decorator API with `DbFunctionApp`:
+Using the decorator API with `DbFunctionApp` (data injection):
 
 ```python
 import azure.functions as func
@@ -266,7 +273,6 @@ from azure.storage.blob import ContainerClient
 from azure_functions_db import (
     BlobCheckpointStore,
     DbFunctionApp,
-    DbWriter,
     EngineProvider,
     RowChange,
     SqlAlchemySource,
@@ -298,22 +304,22 @@ checkpoint_store = BlobCheckpointStore(
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
 @db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 @db.db_output(
-    arg_name="writer",
     url="%DEST_DB_URL%",
     table="processed_orders",
+    action="upsert",
+    conflict_columns=["order_id"],
     engine_provider=engine_provider,
 )
-def orders_poll(timer: func.TimerRequest, events: list[RowChange], writer: DbWriter) -> None:
-    for event in events:
-        if event.after is not None:
-            writer.upsert(
-                data={
-                    "order_id": event.pk["id"],
-                    "customer": event.after["name"],
-                    "processed_at": str(event.cursor),
-                },
-                conflict_columns=["order_id"],
-            )
+def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> list[dict]:
+    return [
+        {
+            "order_id": event.pk["id"],
+            "customer": event.after["name"],
+            "processed_at": str(event.cursor),
+        }
+        for event in events
+        if event.after is not None
+    ]
 ```
 
 Using the imperative API directly:
@@ -403,40 +409,103 @@ class WriteError(DbError): ...
 
 ### 10.7 Decorator API for Bindings (DbFunctionApp)
 
-The `DbFunctionApp` class provides `db_input` and `db_output` decorators that inject
-`DbReader` / `DbWriter` instances per invocation with automatic lifecycle management.
+The `DbFunctionApp` class provides two styles of binding decorators:
 
-#### db_input (inject DbReader)
+#### db_input (data injection)
+
+Injects actual query results into the handler parameter. Exactly one of `pk` or `query` must be provided.
 
 ```python
-from azure_functions_db import DbFunctionApp, DbReader
+from azure_functions_db import DbFunctionApp
 
 db = DbFunctionApp()
 
-@db.db_input("reader", url="%DB_URL%", table="users")
-def load_user(reader: DbReader) -> dict[str, object] | None:
-    return reader.get(pk={"id": 42})
+# Single row by primary key (static)
+@db.db_input("user", url="%DB_URL%", table="users", pk={"id": 42})
+def load_user(user: dict | None) -> None:
+    if user:
+        print(user["name"])
 
-@db.db_input("reader", url="%DB_URL%")
-def list_active(reader: DbReader) -> list[dict[str, object]]:
-    return reader.query("SELECT * FROM users WHERE active = :active", params={"active": True})
+# Single row by primary key (dynamic — resolved from handler kwargs)
+@db.db_input("user", url="%DB_URL%", table="users",
+             pk=lambda req: {"id": req.params["id"]})
+def get_user(req, user: dict | None) -> None:
+    print(user)
+
+# Multiple rows by SQL query
+@db.db_input("users", url="%DB_URL%",
+             query="SELECT * FROM users WHERE active = :active",
+             params={"active": True})
+def list_active(users: list[dict]) -> None:
+    for user in users:
+        print(user["email"])
+
+# Dynamic query params
+@db.db_input("users", url="%DB_URL%",
+             query="SELECT * FROM users WHERE org_id = :org_id",
+             params=lambda req: {"org_id": req.params["org_id"]})
+def list_org_users(req, users: list[dict]) -> None:
+    print(users)
 ```
 
-#### db_output (inject DbWriter)
+Parameters:
+- `pk`: `dict | Callable` — static or dynamic primary key (requires `table`)
+- `query`: `str` — SQL query with `:name` placeholders
+- `params`: `dict | Callable` — query parameters (only with `query`)
+- `on_not_found`: `"none"` (default) or `"raise"` — behavior when pk lookup returns no row
+
+#### db_output (auto-write)
+
+Writes the handler's return value to the database automatically.
 
 ```python
-from azure_functions_db import DbFunctionApp, DbWriter
+from azure_functions_db import DbFunctionApp
 
 db = DbFunctionApp()
 
-@db.db_output("writer", url="%DB_URL%", table="orders")
-def write_order(writer: DbWriter) -> None:
-    writer.insert(data={"id": 1, "status": "pending", "total": 99.99})
-    writer.upsert(data={"id": 1, "status": "shipped"}, conflict_columns=["id"])
+# Insert (default) — dict for single row, list[dict] for batch
+@db.db_output(url="%DB_URL%", table="orders")
+def create_order() -> dict:
+    return {"id": 1, "status": "pending", "total": 99.99}
+
+# Upsert — requires conflict_columns
+@db.db_output(url="%DB_URL%", table="orders",
+              action="upsert", conflict_columns=["id"])
+def upsert_order() -> dict:
+    return {"id": 1, "status": "shipped", "total": 99.99}
 ```
 
-Both decorators support sync and async handlers.  The injected instance is created
-fresh per invocation and closed automatically in a `finally` block.
+Return value contract:
+- `dict` → single-row write
+- `list[dict]` → batch write
+- `None` → no-op
+
+Parameters:
+- `action`: `"insert"` (default) or `"upsert"`
+- `conflict_columns`: required when `action="upsert"`
+
+#### db_reader / db_writer (client injection)
+
+Imperative escape hatches for complex operations. Inject `DbReader` / `DbWriter` instances.
+
+```python
+from azure_functions_db import DbFunctionApp, DbReader, DbWriter
+
+db = DbFunctionApp()
+
+@db.db_reader("reader", url="%DB_URL%", table="users")
+def complex_read(reader: DbReader) -> None:
+    user = reader.get(pk={"id": 42})
+    orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
+
+@db.db_writer("writer", url="%DB_URL%", table="orders")
+def complex_write(writer: DbWriter) -> None:
+    writer.insert(data={"id": 1, "status": "pending"})
+    writer.update(data={"status": "shipped"}, pk={"id": 1})
+```
+
+All decorators support sync and async handlers.  Instances are created fresh per
+invocation and closed automatically in a `finally` block.
 
 ## 11. Shared Core API
 

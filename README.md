@@ -30,8 +30,8 @@ Azure Functions Python v2 has no built-in database integration story:
 - **Pseudo DB trigger** — poll-based change detection with checkpoint, lease, and at-least-once delivery
 - **Multi-DB support** — PostgreSQL, MySQL, and SQL Server via SQLAlchemy dialects
 - **Single `pip install`** — one package with optional extras for each database driver
-- **DbReader** — input binding for reading rows
-- **DbWriter** — output binding for writing rows (insert, upsert, update, delete)
+- **Data injection** — `db_input` injects query results directly; `db_output` auto-writes return values
+- **Client injection** — `db_reader`/`db_writer` for imperative control when needed
 
 ## Shared Core
 
@@ -97,53 +97,82 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
 
 > See [Python API Spec](docs/04-python-api-spec.md) for the full API reference.
 
-### Input Binding (DbReader)
+### Input Binding (data injection)
+
+`db_input` injects the actual query result into your handler — no client needed.
 
 ```python
-from azure_functions_db import DbFunctionApp, DbReader
+from azure_functions_db import DbFunctionApp
 
 db = DbFunctionApp()
 
-@db.db_input("reader", url="%DB_URL%", table="users")
-def load_user(reader: DbReader) -> None:
-    user = reader.get(pk={"id": 42})
+# Single row by primary key (static)
+@db.db_input("user", url="%DB_URL%", table="users", pk={"id": 42})
+def load_user(user: dict | None) -> None:
     if user:
         print(user["name"])
 
-@db.db_input("reader", url="%DB_URL%")
-def list_active_users(reader: DbReader) -> None:
-    active_users = reader.query(
-        "SELECT * FROM users WHERE active = :active",
-        params={"active": True},
-    )
-    for user in active_users:
+# Single row by primary key (dynamic — resolved from handler kwargs)
+@db.db_input("user", url="%DB_URL%", table="users",
+             pk=lambda req: {"id": req.params["id"]})
+def get_user(req, user: dict | None) -> None:
+    print(user)
+
+# Multiple rows by SQL query
+@db.db_input("users", url="%DB_URL%",
+             query="SELECT * FROM users WHERE active = :active",
+             params={"active": True})
+def list_active_users(users: list[dict]) -> None:
+    for user in users:
         print(user["email"])
 ```
 
-### Output Binding (DbWriter)
+### Output Binding (auto-write)
+
+`db_output` writes the handler's return value to the database automatically.
 
 ```python
-from azure_functions_db import DbFunctionApp, DbWriter
+from azure_functions_db import DbFunctionApp
 
 db = DbFunctionApp()
 
-@db.db_output("writer", url="%DB_URL%", table="orders")
-def write_orders(writer: DbWriter) -> None:
-    writer.insert(data={"id": 1, "status": "pending", "total": 99.99})
-    writer.upsert(
-        data={"id": 1, "status": "shipped", "total": 99.99},
-        conflict_columns=["id"],
-    )
+# Insert — return a dict for single row, list[dict] for batch
+@db.db_output(url="%DB_URL%", table="orders")
+def create_order() -> dict:
+    return {"id": 1, "status": "pending", "total": 99.99}
 
-@db.db_output("writer", url="%DB_URL%", table="orders")
-def write_order_batch(writer: DbWriter) -> None:
-    writer.insert_many(rows=[
+# Upsert — set action and conflict_columns
+@db.db_output(url="%DB_URL%", table="orders",
+              action="upsert", conflict_columns=["id"])
+def upsert_orders() -> list[dict]:
+    return [
+        {"id": 1, "status": "shipped", "total": 99.99},
         {"id": 2, "status": "pending", "total": 49.99},
-        {"id": 3, "status": "pending", "total": 29.99},
-    ])
+    ]
 ```
 
 Supported upsert dialects: PostgreSQL, SQLite, MySQL.
+
+### Client Injection (imperative escape hatches)
+
+For complex operations (multiple queries, transactions, update/delete), use `db_reader`/`db_writer` to get a client instance:
+
+```python
+from azure_functions_db import DbFunctionApp, DbReader, DbWriter
+
+db = DbFunctionApp()
+
+@db.db_reader("reader", url="%DB_URL%", table="users")
+def complex_read(reader: DbReader) -> None:
+    user = reader.get(pk={"id": 42})
+    orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
+
+@db.db_writer("writer", url="%DB_URL%", table="orders")
+def complex_write(writer: DbWriter) -> None:
+    writer.insert(data={"id": 1, "status": "pending"})
+    writer.update(data={"status": "shipped"}, pk={"id": 1})
+    writer.delete(pk={"id": 1})
+```
 
 ### Combined: Trigger + Binding
 
@@ -156,7 +185,6 @@ from azure.storage.blob import ContainerClient
 from azure_functions_db import (
     BlobCheckpointStore,
     DbFunctionApp,
-    DbWriter,
     EngineProvider,
     RowChange,
     SqlAlchemySource,
@@ -187,22 +215,22 @@ checkpoint_store = BlobCheckpointStore(
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
 @db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 @db.db_output(
-    arg_name="writer",
     url="%DEST_DB_URL%",
     table="processed_orders",
+    action="upsert",
+    conflict_columns=["order_id"],
     engine_provider=engine_provider,
 )
-def orders_poll(timer: func.TimerRequest, events: list[RowChange], writer: DbWriter) -> None:
-    for event in events:
-        if event.after is not None:
-            writer.upsert(
-                data={
-                    "order_id": event.pk["id"],
-                    "customer": event.after["name"],
-                    "processed_at": str(event.cursor),
-                },
-                conflict_columns=["order_id"],
-            )
+def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> list[dict]:
+    return [
+        {
+            "order_id": event.pk["id"],
+            "customer": event.after["name"],
+            "processed_at": str(event.cursor),
+        }
+        for event in events
+        if event.after is not None
+    ]
 ```
 
 See [`examples/trigger_with_binding/`](examples/trigger_with_binding/) for a complete runnable sample.
