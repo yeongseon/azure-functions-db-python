@@ -9,7 +9,7 @@
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Database integration for **Azure Functions Python v2** — poll-based change detection trigger using SQLAlchemy. Input binding (DbReader) and output binding (DbWriter) are planned.
+Database integration for **Azure Functions Python v2** — poll-based change detection trigger and input/output bindings using SQLAlchemy.
 
 ---
 
@@ -30,7 +30,7 @@ Azure Functions Python v2 has no built-in database integration story:
 - **Pseudo DB trigger** — poll-based change detection with checkpoint, lease, and at-least-once delivery
 - **Multi-DB support** — PostgreSQL, MySQL, and SQL Server via SQLAlchemy dialects
 - **Single `pip install`** — one package with optional extras for each database driver
-- **DbReader** — input binding for reading rows *(planned)*
+- **DbReader** — input binding for reading rows
 - **DbWriter** — output binding for writing rows with automatic batching *(planned)*
 
 ## Shared Core
@@ -103,7 +103,31 @@ def orders_poll(timer: func.TimerRequest) -> None:
     trigger.run(timer=timer, handler=handle_orders)
 ```
 
-> **Coming soon**: Input binding (`DbReader`) and output binding (`DbWriter`) are planned for future releases. See the [roadmap](docs/21-dev-checklist.md) for details.
+> **Coming soon**: Output binding (`DbWriter`) is planned for a future release. See the [roadmap](docs/21-dev-checklist.md) for details.
+
+### Input Binding (DbReader)
+
+```python
+from azure_functions_db import DbReader
+
+# Look up a single row by primary key
+reader = DbReader(url="%DB_URL%", table="users")
+try:
+    user = reader.get(pk={"id": 42})
+    if user:
+        print(user["name"])
+finally:
+    reader.close()
+
+# Raw SQL queries
+with DbReader(url="%DB_URL%") as reader:
+    active_users = reader.query(
+        "SELECT * FROM users WHERE active = :active",
+        params={"active": True},
+    )
+    for u in active_users:
+        print(u["email"])
+```
 
 ## Supported Databases
 
@@ -119,7 +143,7 @@ def orders_poll(timer: func.TimerRequest) -> None:
 - Timer-triggered functions for poll-based change detection
 - SQLAlchemy 2.0+ for database abstraction
 - Checkpoint storage via Azure Blob Storage
-- Read/write bindings via HTTP/Queue/Event triggers *(planned)*
+- Read/write bindings via HTTP/Queue/Event triggers
 
 This package does **not** implement a native Azure Functions trigger extension. It uses a poll-based approach on top of the existing timer trigger.
 

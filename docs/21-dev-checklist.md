@@ -59,12 +59,12 @@
 - [x] Shared serializers extraction
 
 ## Phase 9: Binding - Input
-- [ ] DbReader
-- [ ] get() (single row by PK)
-- [ ] query() (raw SQL)
-- [ ] Connection lifecycle
-- [ ] Unit tests
-- [ ] Integration tests (Postgres/MySQL/SQL Server)
+- [x] DbReader
+- [x] get() (single row by PK)
+- [x] query() (raw SQL)
+- [x] Connection lifecycle
+- [x] Unit tests
+- [x] Integration tests (SQLite)
 
 ## Phase 10: Binding - Output
 - [ ] DbWriter
