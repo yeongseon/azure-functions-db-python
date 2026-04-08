@@ -14,37 +14,33 @@ theme:
 nav:
   - Home: index.md
   - Getting Started:
-      - Project Overview: 00-project-overview.md
-      - PRD: 01-PRD.md
-      - Architecture: 02-architecture.md
-      - Semantics: 03-semantics.md
+      - Installation: installation.md
+      - Quickstart: getting-started.md
   - User Guide:
-      - Python API Spec: 04-python-api-spec.md
-      - Adapter SDK: 05-adapter-sdk.md
-      - Checkpoint & Lease: 06-checkpoint-lease-spec.md
-      - Event Model: 07-event-model.md
+      - Architecture: 02-architecture.md
       - Binding Semantics: 22-binding-semantics.md
-  - Development:
-      - Repository Structure: 08-repo-structure.md
-      - Local Dev Guide: 09-local-dev-guide.md
-      - Test Strategy: 10-test-strategy.md
-      - Observability: 11-observability.md
-      - Security: 12-security.md
-      - Deployment Guide: 13-deployment-guide.md
-      - Dev Checklist: 21-dev-checklist.md
-      - Contributing: 15-CONTRIBUTING.md
+      - Python API Spec: 04-python-api-spec.md
+      - Local Development: 09-local-dev-guide.md
+  - Examples:
+      - Input Binding: examples/input_binding.md
+      - Output Binding: examples/output_binding.md
+      - Trigger: examples/trigger.md
+      - Trigger + Binding: examples/trigger_with_binding.md
+      - Client Injection: examples/client_injection.md
+  - API Reference: api.md
+  - Contributing:
+      - Guidelines: contributing.md
+      - Testing: testing.md
+  - Troubleshooting: troubleshooting.md
+  - FAQ: faq.md
+  - Security: security.md
   - Architecture Decision Records:
       - ADR-001 Pseudo Trigger: 16-ADR-001-pseudo-trigger-over-native.md
       - ADR-002 SQLAlchemy Adapter: 17-ADR-002-sqlalchemy-centric-adapter.md
       - ADR-003 Blob Checkpoint MVP: 18-ADR-003-blob-checkpoint-mvp.md
       - ADR-004 At-Least-Once Default: 19-ADR-004-at-least-once-default.md
       - ADR-005 Unified Package: 23-ADR-005-unified-package-design.md
-  - Reference:
-      - Roadmap: 14-roadmap.md
-      - Open Issues: 20-open-issues.md
-      - References: 99-references.md
-      - Release Process: release_process.md
-  - API Reference: api.md
+  - Changelog: changelog.md
 
 markdown_extensions:
   - admonition

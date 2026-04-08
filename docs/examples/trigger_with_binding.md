@@ -1,24 +1,14 @@
-"""Trigger + Binding integration example.
+# Trigger + Output Binding
 
-Demonstrates using DbBindings decorators to detect DB changes and write
-processed results to a destination table.
+Combine the trigger and output binding to process database changes and write
+results to another table. This pattern is common for ETL pipelines, event
+processing, and data synchronization.
 
-Shows two patterns:
-    1. ``output`` — DbOut.set() explicit write (declarative)
-    2. ``inject_writer`` — client injection (imperative, for complex operations)
+## Declarative Pattern (output + DbOut)
 
-Requirements:
-    pip install azure-functions-db[postgres]
-    # or: pip install azure-functions-db[all]
+Use `@db.output()` with `DbOut.set()` for straightforward writes:
 
-Environment variables:
-    SOURCE_DB_URL: Source database connection URL
-    DEST_DB_URL: Destination database connection URL
-    AzureWebJobsStorage: Azure Storage connection string (for checkpoint)
-"""
-
-from __future__ import annotations
-
+```python
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 
@@ -26,7 +16,6 @@ from azure_functions_db import (
     BlobCheckpointStore,
     DbBindings,
     DbOut,
-    DbWriter,
     EngineProvider,
     RowChange,
     SqlAlchemySource,
@@ -40,7 +29,6 @@ engine_provider = EngineProvider()
 source = SqlAlchemySource(
     url="%SOURCE_DB_URL%",
     table="orders",
-    schema="public",
     cursor_column="updated_at",
     pk_columns=["id"],
     engine_provider=engine_provider,
@@ -67,32 +55,32 @@ checkpoint_store = BlobCheckpointStore(
     engine_provider=engine_provider,
 )
 def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -> None:
-    del timer
     out.set([
         {
             "order_id": event.pk["id"],
-            "customer_name": event.after["name"],
-            "amount": event.after["amount"],
+            "customer": event.after["name"],
             "processed_at": str(event.cursor),
         }
         for event in events
         if event.after is not None
     ])
+```
+
+## Imperative Pattern (inject_writer)
+
+Use `@db.inject_writer()` for complex write logic (transactions, conditional
+updates, multiple operations):
+
+```python
+from azure_functions_db import DbBindings, DbWriter, RowChange
+
+db = DbBindings()
 
 
-@app.function_name(name="orders_poll_imperative")
-@app.schedule(schedule="0 */5 * * * *", arg_name="timer", use_monitor=True)
 @db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
-@db.inject_writer(
-    "writer",
-    url="%DEST_DB_URL%",
-    table="processed_orders",
-    engine_provider=engine_provider,
-)
-def orders_poll_imperative(
-    timer: func.TimerRequest, events: list[RowChange], writer: DbWriter
-) -> None:
-    del timer
+@db.inject_writer("writer", url="%DEST_DB_URL%", table="processed_orders",
+                  engine_provider=engine_provider)
+def orders_poll_imperative(events: list[RowChange], writer: DbWriter) -> None:
     for event in events:
         if event.after is not None:
             writer.upsert(
@@ -104,3 +92,33 @@ def orders_poll_imperative(
                 },
                 conflict_columns=["order_id"],
             )
+```
+
+!!! note "Choosing between output and inject_writer"
+    Use `output` for simple, bulk writes. Use `inject_writer` when you need
+    per-row logic, conditional writes, or multiple operations per event.
+
+## Shared Connection Pooling
+
+Both examples above use `EngineProvider` to share a SQLAlchemy engine between
+the trigger source and the output destination. This avoids creating redundant
+connection pools when both source and destination use the same database server.
+
+```python
+engine_provider = EngineProvider()
+
+# Pass to both source and output/writer
+source = SqlAlchemySource(..., engine_provider=engine_provider)
+
+@db.output("out", ..., engine_provider=engine_provider)
+# or
+@db.inject_writer("writer", ..., engine_provider=engine_provider)
+```
+
+If source and destination are on different servers, you can omit `engine_provider`
+or use separate instances.
+
+## Mutual Exclusivity
+
+`output` and `inject_writer` cannot be used on the same handler. They are
+mutually exclusive decorators. Choose one pattern per function.

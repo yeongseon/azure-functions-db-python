@@ -5,10 +5,11 @@ Unified DB integration (trigger + input/output binding) for Azure Functions Pyth
 ## Features
 
 - **DB Change Detection (Trigger)**: Poll-based pseudo trigger that detects new/changed rows via cursor tracking
-- **Input Binding (DbReader)**: Read rows from any SQLAlchemy-supported database
-- **Output Binding (DbWriter)**: Write, upsert, update, and delete rows
-- **SQLAlchemy-powered**: Works with PostgreSQL, MySQL, SQLite, and MSSQL
-- **Azure Functions v2 native**: Integrates with the Python v2 programming model
+- **Input Binding**: Read rows declaratively with `@db.input()` — data injected into your handler
+- **Output Binding**: Write rows declaratively with `@db.output()` and `DbOut.set()`
+- **Client Injection**: Full imperative control with `@db.inject_reader()` / `@db.inject_writer()`
+- **Multi-DB Support**: PostgreSQL, MySQL, SQL Server via SQLAlchemy
+- **Azure Functions v2 Native**: Integrates with the Python v2 programming model
 
 ## Quick Start
 
@@ -17,15 +18,15 @@ pip install azure-functions-db[postgres]
 ```
 
 ```python
-from azure_functions_db import DbBindings, PollTrigger, DbReader, DbWriter
-from azure_functions_db import DbConfig, SqlAlchemySource
+from azure_functions_db import DbBindings, DbOut, DbReader, DbWriter
+from azure_functions_db import SqlAlchemySource, BlobCheckpointStore, EngineProvider
 ```
-
-For detailed usage, see the [Python API Spec](04-python-api-spec.md).
 
 ## Documentation
 
-- [Project Overview](00-project-overview.md)
-- [Architecture](02-architecture.md)
-- [Binding Semantics](22-binding-semantics.md)
-- [API Reference](api.md)
+- [Installation](installation.md) — install and verify the package
+- [Getting Started](getting-started.md) — quickstart walkthrough
+- [Examples](examples/input_binding.md) — complete code examples
+- [API Reference](api.md) — auto-generated API docs
+- [Troubleshooting](troubleshooting.md) — common issues and solutions
+- [FAQ](faq.md) — frequently asked questions
