@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 import inspect
@@ -15,6 +16,8 @@ from azure_functions_db.trigger.errors import (
     HandlerError,
     LeaseAcquireError,
     LostLeaseError,
+    SerializationError,
+    SourceConfigurationError,
 )
 from azure_functions_db.trigger.events import RowChange
 from azure_functions_db.trigger.retry import RetryPolicy
@@ -57,9 +60,14 @@ def _detect_handler_arity(handler: Callable[..., Any]) -> int:
 
 def _extract_cursor(checkpoint: dict[str, object]) -> CursorValue | None:
     raw = checkpoint.get("cursor")
-    if raw is None or isinstance(raw, (str, int, float, bool, tuple)):
+    if raw is None or isinstance(raw, (str, int, float, bool)):
         return raw
-    return None
+    if isinstance(raw, tuple):
+        return raw
+    if isinstance(raw, list):
+        return tuple(raw)
+    msg = f"Unsupported cursor type in checkpoint: {type(raw).__name__}"
+    raise SerializationError(msg)
 
 
 class PollRunner:
@@ -76,6 +84,22 @@ class PollRunner:
         lease_ttl_seconds: int = 120,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
+        if asyncio.iscoroutinefunction(handler):
+            msg = (
+                "Async handlers are not supported. "
+                "Pass a synchronous function instead."
+            )
+            raise TypeError(msg)
+        if batch_size < 1:
+            msg = "batch_size must be >= 1"
+            raise ValueError(msg)
+        if max_batches_per_tick < 1:
+            msg = "max_batches_per_tick must be >= 1"
+            raise ValueError(msg)
+        if lease_ttl_seconds < 1:
+            msg = "lease_ttl_seconds must be >= 1"
+            raise ValueError(msg)
+
         self._name = name
         self._source = source
         self._state_store = state_store
@@ -106,7 +130,13 @@ class PollRunner:
 
         total_processed = 0
         try:
-            checkpoint = self._state_store.load_checkpoint(self._name)
+            try:
+                checkpoint = self._state_store.load_checkpoint(self._name)
+            except Exception as exc:
+                raise FetchError(
+                    f"Failed to load checkpoint for poller '{self._name}'"
+                ) from exc
+
             cursor = _extract_cursor(checkpoint)
 
             for batch_idx in range(self._max_batches_per_tick):
@@ -127,8 +157,22 @@ class PollRunner:
                     )
                     break
 
-                descriptor = self._source.source_descriptor
-                events = [self._normalizer(record, descriptor) for record in raw_records]
+                try:
+                    descriptor = self._source.source_descriptor
+                except Exception as exc:
+                    raise SourceConfigurationError(
+                        f"Failed to get source descriptor for poller '{self._name}'"
+                    ) from exc
+
+                try:
+                    events = [
+                        self._normalizer(record, descriptor)
+                        for record in raw_records
+                    ]
+                except Exception as exc:
+                    raise SerializationError(
+                        f"Failed to normalize records for poller '{self._name}'"
+                    ) from exc
 
                 last_event = events[-1]
                 new_checkpoint: dict[str, object] = {
@@ -165,7 +209,8 @@ class PollRunner:
                     raise
                 except Exception as exc:
                     raise CommitError(
-                        f"Checkpoint commit failed for poller '{self._name}' batch '{batch_id}'"
+                        f"Checkpoint commit failed for poller '{self._name}'"
+                        f" batch '{batch_id}'"
                     ) from exc
 
                 checkpoint = new_checkpoint

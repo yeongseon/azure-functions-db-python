@@ -9,7 +9,7 @@ CursorPart: TypeAlias = JsonScalar
 CursorValue: TypeAlias = CursorPart | tuple[CursorPart, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SourceDescriptor:
     name: str
     kind: str
