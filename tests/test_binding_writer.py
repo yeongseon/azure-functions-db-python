@@ -61,6 +61,22 @@ def _create_no_pk_db(db_path: Path) -> str:
     return url
 
 
+def _create_strict_users_db(db_path: Path) -> str:
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
+    metadata = MetaData()
+    Table(
+        "users",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("name", String(50), nullable=False),
+        Column("email", String(100), nullable=False),
+    )
+    metadata.create_all(engine)
+    engine.dispose()
+    return url
+
+
 def _read_all(url: str, table_name: str) -> list[dict[str, object]]:
     engine = create_engine(url)
     metadata = MetaData()
@@ -86,6 +102,11 @@ def orders_url(tmp_path: Path) -> str:
 @pytest.fixture()
 def no_pk_url(tmp_path: Path) -> str:
     return _create_no_pk_db(tmp_path / "no_pk.db")
+
+
+@pytest.fixture()
+def strict_users_url(tmp_path: Path) -> str:
+    return _create_strict_users_db(tmp_path / "strict_users.db")
 
 
 class TestDbWriterConstructor:
@@ -286,17 +307,22 @@ class TestDbWriterUpsertMany:
         rows = _read_all(users_url, "users")
         assert len(rows) == 0
 
-    def test_upsert_many_rollback_on_failure(self, users_url: str) -> None:
-        with DbWriter(url=users_url, table="users") as writer:
+    def test_upsert_many_rollback_on_failure(self, strict_users_url: str) -> None:
+        with DbWriter(url=strict_users_url, table="users") as writer:
             writer.insert(data={"id": 1, "name": "Keep", "email": "k@k.com"})
-            with pytest.raises(ConfigurationError, match="Unknown columns in data"):
+
+            with pytest.raises(WriteError, match="Failed to upsert rows"):
                 writer.upsert_many(
                     rows=[
                         {"id": 2, "name": "OK", "email": "ok@ok.com"},
-                        {"id": 3, "name": "Bad", "email": "b@b.com", "bogus": "x"},
+                        {"id": 3, "name": None, "email": "bad@b.com"},
                     ],
                     conflict_columns=["id"],
                 )
+
+        rows = _read_all(strict_users_url, "users")
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Keep"
 
 
 class TestDbWriterUpdate:
@@ -337,6 +363,12 @@ class TestDbWriterUpdate:
         rows = _read_all(orders_url, "orders")
         assert cast(int, rows[0]["qty"]) == 10
 
+    def test_update_partial_composite_pk_raises(self, orders_url: str) -> None:
+        with DbWriter(url=orders_url, table="orders") as writer:
+            writer.insert(data={"order_id": 1, "item_id": 1, "qty": 5})
+            with pytest.raises(ConfigurationError, match="Incomplete primary key"):
+                writer.update(data={"qty": 10}, pk={"order_id": 1})
+
 
 class TestDbWriterDelete:
     def test_delete_existing_row(self, users_url: str) -> None:
@@ -370,6 +402,12 @@ class TestDbWriterDelete:
         rows = _read_all(orders_url, "orders")
         assert len(rows) == 1
         assert cast(int, rows[0]["item_id"]) == 2
+
+    def test_delete_partial_composite_pk_raises(self, orders_url: str) -> None:
+        with DbWriter(url=orders_url, table="orders") as writer:
+            writer.insert(data={"order_id": 1, "item_id": 1, "qty": 5})
+            with pytest.raises(ConfigurationError, match="Incomplete primary key"):
+                writer.delete(pk={"order_id": 1})
 
     def test_delete_on_no_pk_table_raises(self, no_pk_url: str) -> None:
         with DbWriter(url=no_pk_url, table="events") as writer:

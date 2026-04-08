@@ -297,7 +297,7 @@ class DbWriter:
             raise ConfigurationError(msg)
 
     def _validate_pk_columns(self, pk: dict[str, object]) -> None:
-        """Validate that *pk* keys are actual primary key columns of the table."""
+        """Validate that *pk* keys exactly match the table's primary key columns."""
         assert self._table is not None  # noqa: S101  # nosec B101
 
         if not pk:
@@ -310,11 +310,21 @@ class DbWriter:
             msg = f"Table '{self._table_name}' has no primary key defined"
             raise ConfigurationError(msg)
 
-        invalid = set(pk.keys()) - pk_columns
+        provided = set(pk.keys())
+
+        invalid = provided - pk_columns
         if invalid:
             msg = (
                 f"Columns {sorted(invalid)} are not part of the primary key. "
                 f"Primary key columns: {sorted(pk_columns)}"
+            )
+            raise ConfigurationError(msg)
+
+        missing = pk_columns - provided
+        if missing:
+            msg = (
+                f"Incomplete primary key: missing columns {sorted(missing)}. "
+                f"All primary key columns required: {sorted(pk_columns)}"
             )
             raise ConfigurationError(msg)
 
@@ -422,5 +432,10 @@ class DbWriter:
         if update_columns:
             stmt = stmt.on_duplicate_key_update(
                 **{col: stmt.inserted[col] for col in update_columns}
+            )
+        else:
+            first_col = list(data.keys())[0]
+            stmt = stmt.on_duplicate_key_update(
+                **{first_col: stmt.inserted[first_col]}
             )
         return stmt

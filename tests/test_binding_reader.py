@@ -201,11 +201,10 @@ class TestDbReaderGet:
             reader.get(pk={"email": "alice@example.com"})
         reader.close()
 
-    def test_get_partial_composite_pk(self, composite_pk_url: str) -> None:
+    def test_get_partial_composite_pk_raises(self, composite_pk_url: str) -> None:
         reader = DbReader(url=composite_pk_url, table="order_items")
-        row = reader.get(pk={"order_id": 2})
-        assert row is not None
-        assert cast(int, row["qty"]) == 1
+        with pytest.raises(ConfigurationError, match="Incomplete primary key"):
+            reader.get(pk={"order_id": 2})
         reader.close()
 
     def test_get_empty_pk_raises(self, users_url: str) -> None:
@@ -223,7 +222,7 @@ class TestDbReaderGet:
 
     def test_get_on_table_without_pk_raises(self, duplicate_url: str) -> None:
         reader = DbReader(url=duplicate_url, table="events")
-        with pytest.raises(ConfigurationError, match="not part of the primary key"):
+        with pytest.raises(ConfigurationError, match="has no primary key"):
             reader.get(pk={"id": 1})
         reader.close()
 
@@ -231,7 +230,7 @@ class TestDbReaderGet:
         self, composite_pk_url: str
     ) -> None:
         reader = DbReader(url=composite_pk_url, table="order_items")
-        with pytest.raises(QueryError, match="expected at most 1 row"):
+        with pytest.raises(ConfigurationError, match="Incomplete primary key"):
             reader.get(pk={"order_id": 1})
         reader.close()
 
