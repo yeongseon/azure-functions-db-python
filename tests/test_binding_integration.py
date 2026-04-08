@@ -8,7 +8,6 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, 
 from azure_functions_db.adapter.sqlalchemy import SqlAlchemySource
 from azure_functions_db.binding.reader import DbReader
 from azure_functions_db.binding.writer import DbWriter
-from azure_functions_db.core.config import DbConfig
 from azure_functions_db.core.engine import EngineProvider
 from azure_functions_db.trigger.events import RowChange
 from azure_functions_db.trigger.poll import PollTrigger
