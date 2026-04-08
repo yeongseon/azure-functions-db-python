@@ -868,7 +868,7 @@ def test_db_output_rejects_invalid_list_elements(tmp_path: Path) -> None:
 
     @DbFunctionApp().db_output(url=url, table="processed_orders")
     def handler() -> list[object]:
-        return [{"id": 1, "status": "ok"}, "not_a_dict"]  # type: ignore[return-value]
+        return [{"id": 1, "status": "ok"}, "not_a_dict"]
 
     with pytest.raises(ConfigurationError, match="non-dict element at index 1"):
         handler()
