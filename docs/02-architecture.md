@@ -67,6 +67,43 @@ Azure Function Invocation
             -> close()
 ```
 
+## Async Support
+
+| Decorator | Async Handler | Mechanism |
+|-----------|--------------|-----------|
+| `trigger` | ❌ Not supported | `PollTrigger.run` is synchronous; async handlers are rejected at decoration time |
+| `input` | ✅ Supported | DB I/O runs via `asyncio.to_thread()` |
+| `output` | ✅ Supported | DB write runs via `asyncio.to_thread()` |
+| `inject_reader` | ✅ Supported | Returns `_AsyncDbReaderProxy` with async methods |
+| `inject_writer` | ✅ Supported | Returns `_AsyncDbWriterProxy` with async methods |
+
+When an async handler is used with `input`, `output`, `inject_reader`, or `inject_writer`, all blocking database operations are automatically executed in a worker thread via `asyncio.to_thread()`, keeping the event loop free.
+
+The `trigger` decorator explicitly rejects async handlers with a `ConfigurationError` because `PollTrigger.run()` is synchronous and calling an async handler without `await` would silently produce an unawaited coroutine.
+
+## Decorator Composition
+
+DbBindings decorators can be combined on a single handler. The following rules are enforced at decoration time:
+
+### Valid Combinations
+| Combination | Use Case |
+|------------|----------|
+| `trigger` + `output` | Process DB changes and write results |
+| `trigger` + `inject_writer` | Process DB changes with imperative writes |
+| `input` + `output` | Read data and write results |
+| `input` + `inject_writer` | Read data with imperative writes |
+| `inject_reader` + `inject_writer` | Full imperative control |
+| `inject_reader` + `output` | Imperative read + auto-write |
+
+### Invalid Combinations
+| Combination | Reason |
+|------------|--------|
+| `input` + `inject_reader` | Redundant — both read data, use one |
+| Any decorator applied twice | Not meaningful |
+
+### Ordering
+Azure Functions decorators (e.g., `@app.schedule`) must be outermost. DbBindings decorators should be closest to the function definition.
+
 ## 2. Execution Flow
 
 ```text

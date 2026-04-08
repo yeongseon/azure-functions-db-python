@@ -12,6 +12,7 @@ from azure_functions_db import ConfigurationError, DbBindings
 from azure_functions_db.binding.reader import DbReader
 from azure_functions_db.binding.writer import DbWriter
 from azure_functions_db.core.errors import NotFoundError
+from azure_functions_db.decorator import OutputResult
 from azure_functions_db.observability import NoOpCollector
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
@@ -981,6 +982,65 @@ def test_input_stacked_with_output(tmp_path: Path) -> None:
     assert _read_orders(url_write) == [{"id": 1, "status": "processed"}]
 
 
+def test_duplicate_trigger_raises() -> None:
+    db = DbBindings()
+    mock_source = FakeSourceAdapter(batches=[])
+    mock_store = FakeStateStore()
+
+    with pytest.raises(ConfigurationError, match="cannot be applied twice"):
+
+        @db.trigger(arg_name="e1", source=mock_source, checkpoint_store=mock_store)
+        @db.trigger(arg_name="e2", source=mock_source, checkpoint_store=mock_store)
+        def handler(e1: list[RowChange], e2: list[RowChange]) -> None:
+            del e1, e2
+
+
+def test_input_and_inject_reader_conflict() -> None:
+    db = DbBindings()
+
+    with pytest.raises(ConfigurationError, match="Cannot combine"):
+
+        @db.input("user", url="sqlite:///x.db", table="t", pk={"id": 1})
+        @db.inject_reader("reader", url="sqlite:///x.db", table="t")
+        def handler(user: dict[str, object] | None, reader: DbReader) -> None:
+            del user, reader
+
+
+def test_trigger_plus_output_allowed(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "composition-trigger-output.db")
+    db = DbBindings()
+
+    @db.trigger(
+        arg_name="events",
+        source=FakeSourceAdapter(batches=[]),
+        checkpoint_store=FakeStateStore(),
+    )
+    @db.output(url=url, table="processed_orders")
+    def handler(events: list[RowChange]) -> list[dict[str, object]]:
+        return [{"id": e.pk["id"], "status": "done"} for e in events]
+
+    assert callable(handler)
+
+
+def test_input_plus_output_allowed(tmp_path: Path) -> None:
+    url_read = _sqlite_url(tmp_path, "composition-input-read.db")
+    url_write = _sqlite_url(tmp_path, "composition-input-write.db")
+    _create_users_table(url_read)
+    _create_orders_table(url_write)
+
+    db = DbBindings()
+
+    @db.input("user", url=url_read, table="users", pk={"id": 1})
+    @db.output(url=url_write, table="processed_orders")
+    def handler(user: dict[str, object] | None) -> dict[str, object] | None:
+        if user is None:
+            return None
+        return {"id": user["id"], "status": "processed"}
+
+    assert handler() == {"id": 1, "status": "processed"}
+    assert _read_orders(url_write) == [{"id": 1, "status": "processed"}]
+
+
 # =====================================================================
 # Review feedback: validation, positional args, host param forwarding
 # =====================================================================
@@ -1184,3 +1244,159 @@ def test_inject_writer_async_injects_writer(tmp_path: Path) -> None:
     asyncio.run(handler())
 
     assert _read_orders(url) == [{"id": 1, "status": "async_written"}]
+
+
+# =====================================================================
+# OutputResult tests — separate return value from write payload
+# =====================================================================
+
+
+def test_output_result_dict_write(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-dict.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    def handler() -> OutputResult[str]:
+        return OutputResult(
+            return_value="Created",
+            write={"id": 1, "status": "done"},
+        )
+
+    result = handler()
+
+    assert result == "Created"
+    assert _read_orders(url) == [{"id": 1, "status": "done"}]
+
+
+def test_output_result_none_write_skips_db(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-none.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    def handler() -> OutputResult[str]:
+        return OutputResult(return_value="OK", write=None)
+
+    result = handler()
+
+    assert result == "OK"
+    assert _read_orders(url) == []
+
+
+def test_output_result_list_write(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-list.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    def handler() -> OutputResult[str]:
+        return OutputResult(
+            return_value="batch",
+            write=[{"id": 1, "status": "a"}, {"id": 2, "status": "b"}],
+        )
+
+    result = handler()
+
+    assert result == "batch"
+    assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
+
+
+def test_output_result_basemodel_write(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-model.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    def handler() -> OutputResult[str]:
+        return OutputResult(
+            return_value="model_written",
+            write=OrderModel(id=1, status="done"),
+        )
+
+    result = handler()
+
+    assert result == "model_written"
+    assert _read_orders(url) == [{"id": 1, "status": "done"}]
+
+
+def test_output_result_async_dict_write(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-async-dict.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    async def handler() -> OutputResult[str]:
+        return OutputResult(
+            return_value="async_created",
+            write={"id": 1, "status": "async_done"},
+        )
+
+    result = asyncio.run(handler())
+
+    assert result == "async_created"
+    assert _read_orders(url) == [{"id": 1, "status": "async_done"}]
+
+
+def test_output_result_async_none_write(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-async-none.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    async def handler() -> OutputResult[str]:
+        return OutputResult(return_value="async_ok", write=None)
+
+    result = asyncio.run(handler())
+
+    assert result == "async_ok"
+    assert _read_orders(url) == []
+
+
+def test_output_result_upsert(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-upsert.db")
+    _create_orders_table(url)
+
+    db = DbBindings()
+
+    @db.output(url=url, table="processed_orders", action="upsert", conflict_columns=["id"])
+    def handler() -> OutputResult[str]:
+        return OutputResult(
+            return_value="upserted",
+            write={"id": 1, "status": "first"},
+        )
+
+    result = handler()
+    assert result == "upserted"
+    assert _read_orders(url) == [{"id": 1, "status": "first"}]
+
+    @db.output(url=url, table="processed_orders", action="upsert", conflict_columns=["id"])
+    def handler2() -> OutputResult[str]:
+        return OutputResult(
+            return_value="updated",
+            write={"id": 1, "status": "second"},
+        )
+
+    result2 = handler2()
+    assert result2 == "updated"
+    assert _read_orders(url) == [{"id": 1, "status": "second"}]
+
+
+def test_output_plain_dict_unaffected_by_output_result(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-legacy-dict.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    def handler() -> dict[str, object]:
+        return {"id": 1, "status": "legacy"}
+
+    result = handler()
+
+    assert result == {"id": 1, "status": "legacy"}
+    assert _read_orders(url) == [{"id": 1, "status": "legacy"}]
+
+
+def test_output_plain_none_unaffected_by_output_result(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "or-legacy-none.db")
+    _create_orders_table(url)
+
+    @DbBindings().output(url=url, table="processed_orders")
+    def handler() -> None:
+        return None
+
+    handler()
+    assert _read_orders(url) == []

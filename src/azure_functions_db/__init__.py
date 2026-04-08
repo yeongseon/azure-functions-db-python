@@ -15,7 +15,7 @@ from .core.errors import (
     WriteError,
 )
 from .core.types import CursorPart, CursorValue
-from .decorator import DbBindings
+from .decorator import DbBindings, OutputResult
 from .observability import (
     MetricsCollector,
 )
@@ -52,6 +52,7 @@ __all__ = [
     "LostLeaseError",
     "MetricsCollector",
     "NotFoundError",
+    "OutputResult",
     "PollContext",
     "PollTrigger",
     "QueryError",

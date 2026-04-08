@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass
 import functools
 import inspect
 import logging
-from typing import Any, Literal
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 
@@ -19,10 +20,78 @@ from .trigger.poll import PollTrigger
 from .trigger.retry import RetryPolicy
 from .trigger.runner import SourceAdapter, StateStore
 
+T = TypeVar("T")
+
 logger = logging.getLogger(__name__)
 
 # Parameter names reserved by Azure Functions runtime.
 _RESERVED_ARGS = frozenset({"timer", "req", "context", "msg", "input", "output"})
+_DB_DECORATOR_ATTR = "_db_decorators"
+
+
+@dataclass(frozen=True, slots=True)
+class OutputResult(Generic[T]):
+    """Wrapper for returning a value to the caller while writing different data to the DB.
+
+    Use this when your handler needs to return something (e.g. an HTTP response)
+    that is *not* the database write payload.
+
+    Example::
+
+        @db.output(url="%DB_URL%", table="orders")
+        def create_order(req) -> OutputResult[func.HttpResponse]:
+            return OutputResult(
+                return_value=func.HttpResponse("Created", status_code=201),
+                write={"id": 1, "status": "pending"},
+            )
+
+    Without ``OutputResult``, the handler's return value is used as both
+    the DB write payload and the function return.  With ``OutputResult``,
+    ``write`` goes to the database and ``return_value`` is returned to
+    the Azure Functions runtime.
+
+    Set ``write=None`` to skip the database write entirely.
+    """
+
+    return_value: T
+    """The value returned to the Azure Functions runtime (e.g. ``HttpResponse``)."""
+
+    write: dict[str, object] | list[dict[str, object]] | BaseModel | list[BaseModel] | None = None
+    """The database write payload.  Accepts the same types as a plain return:
+    ``dict`` for single row, ``list[dict]`` for batch, or ``None`` for no-op.
+    ``BaseModel`` and ``list[BaseModel]`` are also accepted."""
+
+
+def _get_db_decorators(fn: Callable[..., Any]) -> frozenset[str]:
+    existing: object = getattr(fn, _DB_DECORATOR_ATTR, frozenset())
+    if not isinstance(existing, frozenset):
+        return frozenset()
+    return existing
+
+
+def _mark_decorator(fn: Callable[..., Any], name: str) -> None:
+    setattr(fn, _DB_DECORATOR_ATTR, _get_db_decorators(fn) | {name})
+
+
+def _check_composition(fn: Callable[..., Any], name: str) -> None:
+    existing = _get_db_decorators(fn)
+
+    if name in existing:
+        msg = f"Decorator '{name}' cannot be applied twice to the same handler"
+        raise ConfigurationError(msg)
+
+    if name == "input" and "inject_reader" in existing:
+        msg = (
+            "Cannot combine 'input' and 'inject_reader' on the same handler "
+            "— use one or the other"
+        )
+        raise ConfigurationError(msg)
+    if name == "inject_reader" and "input" in existing:
+        msg = (
+            "Cannot combine 'inject_reader' and 'input' on the same handler "
+            "— use one or the other"
+        )
+        raise ConfigurationError(msg)
 
 
 class _AsyncDbReaderProxy:
@@ -196,12 +265,24 @@ class DbBindings:
         imperative control.
 
     Decorator order contract:
-        Azure decorators outermost, db decorators closest to the function::
+        Decorator composition rules:
+            - Azure decorators outermost, db decorators closest to the function
+            - ``trigger`` + ``output`` can be combined (process events and write results)
+            - ``trigger`` + ``inject_writer`` can be combined (imperative write in trigger handler)
+            - ``input`` + ``output`` can be combined (read data, write results)
+            - ``input`` and ``inject_reader`` are mutually exclusive
+            - No decorator can be applied twice to the same handler
 
-            @app.function_name(name="my_func")
-            @app.schedule(...)          # Azure trigger (outermost)
-            @db.trigger(...)            # db decorator (closest to fn)
-            def my_func(events): ...
+        Valid combinations::
+
+            @app.schedule(...)
+            @db.trigger(...)        # Azure trigger outermost
+            @db.output(...)         # db output innermost
+            def handler(events) -> list[dict]: ...
+
+            @db.input("user", ...)
+            @db.output(...)
+            def handler(user) -> dict: ...
 
     Note: This is a pseudo-trigger implementation. ``trigger`` requires
     an actual Azure Functions trigger (e.g. ``@app.schedule``) to fire.
@@ -244,16 +325,25 @@ class DbBindings:
             State store for checkpointing (e.g. ``BlobCheckpointStore``).
         name:
             Trigger name for logging/metrics.  Defaults to the function name.
+
+        .. note::
+            Only synchronous handlers are supported. Async handlers will raise
+            ``ConfigurationError`` at decoration time. This is because
+            ``PollTrigger.run`` is synchronous.
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            _check_composition(fn, "trigger")
             _validate_arg_name(arg_name, fn, "trigger")
 
             # Reject async handlers: PollTrigger.run is synchronous and
             # calling an async function without await would silently return
             # an unawaited coroutine.
             if inspect.iscoroutinefunction(fn):
-                msg = "trigger does not support async handlers. Use a sync handler instead."
+                msg = (
+                    "trigger does not support async handlers because PollTrigger.run() "
+                    "is synchronous. Use a sync handler instead."
+                )
                 raise ConfigurationError(msg)
 
             trigger_name = name or fn.__name__
@@ -304,6 +394,7 @@ class DbBindings:
             # worker binding validation can find them.  Only hide the
             # db-injected params (events, context).
             setattr(wrapper, "__signature__", _build_host_signature(fn, db_injected))
+            _mark_decorator(wrapper, "trigger")
 
             return wrapper
 
@@ -373,6 +464,9 @@ class DbBindings:
             injects ``None``; ``"raise"`` raises ``NotFoundError``.
         engine_provider:
             Optional shared ``EngineProvider`` for connection pooling.
+
+        Supports both sync and async handlers. For async handlers, blocking
+        database I/O is automatically offloaded via ``asyncio.to_thread()``.
         """
         if on_not_found not in ("none", "raise"):
             msg = f"input on_not_found must be 'none' or 'raise', got '{on_not_found}'"
@@ -400,6 +494,7 @@ class DbBindings:
         params_static: dict[str, object] | None = None if callable(params) else params
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            _check_composition(fn, "input")
             _validate_arg_name(arg_name, fn, "input")
 
             pk_resolver_params: list[str] = []
@@ -477,6 +572,7 @@ class DbBindings:
                     return await fn(*args, **kwargs)
 
                 setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+                _mark_decorator(async_wrapper, "input")
                 return async_wrapper
 
             @functools.wraps(fn)
@@ -487,6 +583,7 @@ class DbBindings:
                 return fn(*args, **kwargs)
 
             setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+            _mark_decorator(wrapper, "input")
             return wrapper
 
         return decorator
@@ -509,7 +606,12 @@ class DbBindings:
         Return value contract:
             - ``dict`` -> single-row write
             - ``list[dict]`` -> batch write
+            - ``BaseModel`` / ``list[BaseModel]`` -> auto-dumped to dict
             - ``None`` -> no-op
+            - ``OutputResult`` -> ``write`` field goes to DB,
+              ``return_value`` is returned to the Azure Functions runtime.
+              Use this when the caller needs a different return (e.g.
+              ``HttpResponse``) than what is written to the database.
 
         Parameters
         ----------
@@ -526,6 +628,9 @@ class DbBindings:
             ``action="upsert"``.
         engine_provider:
             Optional shared ``EngineProvider`` for connection pooling.
+
+        Supports both sync and async handlers. For async handlers, blocking
+        database I/O is automatically offloaded via ``asyncio.to_thread()``.
         """
         if action not in ("insert", "upsert"):
             msg = f"output action must be 'insert' or 'upsert', got '{action}'"
@@ -535,10 +640,13 @@ class DbBindings:
             raise ConfigurationError(msg)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            _check_composition(fn, "output")
             is_async = inspect.iscoroutinefunction(fn)
 
             def _do_write(result: Any) -> None:
                 """Write the handler result to DB (runs in calling thread)."""
+                if isinstance(result, OutputResult):
+                    result = result.write
                 if result is None:
                     return
 
@@ -599,18 +707,24 @@ class DbBindings:
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                     result = await fn(*args, **kwargs)
                     await asyncio.to_thread(_do_write, result)
+                    if isinstance(result, OutputResult):
+                        return result.return_value
                     return result
 
                 setattr(async_wrapper, "__signature__", fn_sig)
+                _mark_decorator(async_wrapper, "output")
                 return async_wrapper
 
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 result = fn(*args, **kwargs)
                 _do_write(result)
+                if isinstance(result, OutputResult):
+                    return result.return_value
                 return result
 
             setattr(wrapper, "__signature__", fn_sig)
+            _mark_decorator(wrapper, "output")
             return wrapper
 
         return decorator
@@ -638,8 +752,6 @@ class DbBindings:
         ``DbReader`` instance.  The reader is created fresh per invocation and
         closed automatically after the handler returns.
 
-        Supports both sync and async handlers.
-
         Parameters
         ----------
         arg_name:
@@ -652,9 +764,13 @@ class DbBindings:
             Optional schema qualifier.
         engine_provider:
             Optional shared ``EngineProvider`` for connection pooling.
+
+        Supports both sync and async handlers. For async handlers, blocking
+        database I/O is automatically offloaded via ``asyncio.to_thread()``.
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            _check_composition(fn, "inject_reader")
             _validate_arg_name(arg_name, fn, "inject_reader")
             is_async = inspect.iscoroutinefunction(fn)
 
@@ -676,6 +792,7 @@ class DbBindings:
                         reader.close()
 
                 setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+                _mark_decorator(async_wrapper, "inject_reader")
                 return async_wrapper
 
             @functools.wraps(fn)
@@ -693,6 +810,7 @@ class DbBindings:
                     reader.close()
 
             setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+            _mark_decorator(wrapper, "inject_reader")
             return wrapper
 
         return decorator
@@ -716,8 +834,6 @@ class DbBindings:
         ``DbWriter`` instance.  The writer is created fresh per invocation and
         closed automatically after the handler returns.
 
-        Supports both sync and async handlers.
-
         Parameters
         ----------
         arg_name:
@@ -730,9 +846,13 @@ class DbBindings:
             Optional schema qualifier.
         engine_provider:
             Optional shared ``EngineProvider`` for connection pooling.
+
+        Supports both sync and async handlers. For async handlers, blocking
+        database I/O is automatically offloaded via ``asyncio.to_thread()``.
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            _check_composition(fn, "inject_writer")
             _validate_arg_name(arg_name, fn, "inject_writer")
             is_async = inspect.iscoroutinefunction(fn)
 
@@ -754,6 +874,7 @@ class DbBindings:
                         writer.close()
 
                 setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+                _mark_decorator(async_wrapper, "inject_writer")
                 return async_wrapper
 
             @functools.wraps(fn)
@@ -771,6 +892,7 @@ class DbBindings:
                     writer.close()
 
             setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+            _mark_decorator(wrapper, "inject_writer")
             return wrapper
 
         return decorator

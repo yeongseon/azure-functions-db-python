@@ -28,6 +28,7 @@ def test_public_api_exports() -> None:
         "LostLeaseError",
         "MetricsCollector",
         "NotFoundError",
+        "OutputResult",
         "PollContext",
         "PollTrigger",
         "QueryError",
@@ -59,6 +60,7 @@ def test_imports_resolve() -> None:
         LostLeaseError,
         MetricsCollector,
         NotFoundError,
+        OutputResult,
         PollContext,
         PollTrigger,
         QueryError,
@@ -86,6 +88,7 @@ def test_imports_resolve() -> None:
     assert LostLeaseError is not None
     assert MetricsCollector is not None
     assert NotFoundError is not None
+    assert OutputResult is not None
     assert PollContext is not None
     assert PollTrigger is not None
     assert QueryError is not None
