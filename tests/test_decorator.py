@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
+from pydantic import BaseModel
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -12,6 +14,16 @@ from azure_functions_db.core.errors import NotFoundError
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
 from tests.test_poll_trigger import FakeSourceAdapter, FakeStateStore
+
+
+class UserModel(BaseModel):
+    id: int
+    name: str
+
+
+class OrderModel(BaseModel):
+    id: int
+    status: str
 
 
 def _sqlite_url(tmp_path: Path, name: str) -> str:
@@ -374,6 +386,59 @@ def test_db_input_query_returns_empty_list(tmp_path: Path) -> None:
     assert handler() == []
 
 
+def test_db_input_pk_with_model(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-pk-model.db")
+    _create_users_table(url)
+
+    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1}, model=UserModel)
+    def handler(user: UserModel | None) -> UserModel | None:
+        return user
+
+    result = handler()
+
+    assert result == UserModel(id=1, name="Alice")
+
+
+def test_db_input_query_with_model(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-query-model.db")
+    _create_users_table_with_data(url)
+
+    @DbFunctionApp().db_input(
+        "users",
+        url=url,
+        query="SELECT id, name FROM users WHERE active = :active ORDER BY id",
+        params={"active": 1},
+        model=UserModel,
+    )
+    def handler(users: list[UserModel]) -> list[UserModel]:
+        return users
+
+    assert handler() == [UserModel(id=1, name="Alice"), UserModel(id=3, name="Carol")]
+
+
+def test_db_input_pk_with_model_not_found_returns_none(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-pk-model-none.db")
+    _create_users_table(url)
+
+    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 999}, model=UserModel)
+    def handler(user: UserModel | None) -> UserModel | None:
+        return user
+
+    assert handler() is None
+
+
+@pytest.mark.parametrize("model", [str, int])
+def test_db_input_invalid_model_raises(model: type[object]) -> None:
+    with pytest.raises(ConfigurationError, match="subclass of BaseModel"):
+        DbFunctionApp().db_input(
+            "user",
+            url="sqlite:///unused.db",
+            table="users",
+            pk={"id": 1},
+            model=model,
+        )
+
+
 def test_db_input_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     url = _sqlite_url(tmp_path, "input-close.db")
     _create_users_table(url)
@@ -528,6 +593,48 @@ def test_db_output_none_is_noop(tmp_path: Path) -> None:
     assert _read_orders(url) == []
 
 
+def test_db_output_accepts_basemodel_return(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "output-model.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    def handler() -> OrderModel:
+        return OrderModel(id=1, status="done")
+
+    result = handler()
+
+    assert result == OrderModel(id=1, status="done")
+    assert _read_orders(url) == [{"id": 1, "status": "done"}]
+
+
+def test_db_output_accepts_list_basemodel_return(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "output-model-list.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    def handler() -> list[OrderModel]:
+        return [OrderModel(id=1, status="a"), OrderModel(id=2, status="b")]
+
+    result = handler()
+
+    assert result == [OrderModel(id=1, status="a"), OrderModel(id=2, status="b")]
+    assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
+
+
+def test_db_output_accepts_mixed_list(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "output-model-mixed.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    def handler() -> list[dict[str, object] | OrderModel]:
+        return [{"id": 1, "status": "a"}, OrderModel(id=2, status="b")]
+
+    result = handler()
+
+    assert result == [{"id": 1, "status": "a"}, OrderModel(id=2, status="b")]
+    assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
+
+
 def test_db_output_upsert_dict(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-upsert-dict.db")
     _create_orders_table(url)
@@ -666,6 +773,31 @@ def test_db_reader_invalid_arg_name_raises() -> None:
             return None
 
 
+def test_db_reader_async_proxy_get(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "reader-async-get.db")
+    _create_users_table(url)
+
+    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    async def handler(reader: object) -> dict[str, object] | None:
+        return await reader.get(pk={"id": 1})
+
+    assert asyncio.run(handler()) == {"id": 1, "name": "Alice"}
+
+
+def test_db_reader_async_proxy_query(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "reader-async-query.db")
+    _create_users_table_with_data(url)
+
+    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    async def handler(reader: object) -> list[dict[str, object]]:
+        return await reader.query(
+            "SELECT id, name FROM users WHERE active = :active ORDER BY id",
+            params={"active": 1},
+        )
+
+    assert asyncio.run(handler()) == [{"id": 1, "name": "Alice"}, {"id": 3, "name": "Carol"}]
+
+
 # =====================================================================
 # db_writer tests — client injection (imperative escape hatch)
 # =====================================================================
@@ -711,6 +843,32 @@ def test_db_writer_invalid_arg_name_raises() -> None:
         @DbFunctionApp().db_writer("writer", url="sqlite:///unused.db", table="processed")
         def handler() -> None:
             return None
+
+
+def test_db_writer_async_proxy_insert(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-insert.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: object) -> None:
+        await writer.insert(data={"id": 1, "status": "processed"})
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [{"id": 1, "status": "processed"}]
+
+
+def test_db_writer_async_proxy_upsert(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-upsert.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: object) -> None:
+        await writer.upsert(data={"id": 1, "status": "processed"}, conflict_columns=["id"])
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [{"id": 1, "status": "processed"}]
 
 
 # =====================================================================

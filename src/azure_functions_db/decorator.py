@@ -7,6 +7,8 @@ import inspect
 import logging
 from typing import Any, Literal
 
+from pydantic import BaseModel
+
 from .binding.reader import DbReader
 from .binding.writer import DbWriter
 from .core.engine import EngineProvider
@@ -21,6 +23,86 @@ logger = logging.getLogger(__name__)
 
 # Parameter names reserved by Azure Functions runtime.
 _RESERVED_ARGS = frozenset({"timer", "req", "context", "msg", "input", "output"})
+
+
+class _AsyncDbReaderProxy:
+    def __init__(self, reader: DbReader) -> None:
+        self._reader: DbReader = reader
+        self._tasks: set[asyncio.Task[object]] = set()
+
+    def get(self, *, pk: dict[str, object]) -> asyncio.Task[dict[str, object] | None]:
+        task = asyncio.create_task(asyncio.to_thread(self._reader.get, pk=pk))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    def query(
+        self,
+        sql: str,
+        *,
+        params: dict[str, object] | None = None,
+    ) -> asyncio.Task[list[dict[str, object]]]:
+        task = asyncio.create_task(asyncio.to_thread(self._reader.query, sql, params=params))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    async def wait(self) -> None:
+        if self._tasks:
+            await asyncio.gather(*tuple(self._tasks))
+
+    def close(self) -> None:
+        self._reader.close()
+
+
+class _AsyncDbWriterProxy:
+    def __init__(self, writer: DbWriter) -> None:
+        self._writer: DbWriter = writer
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    def insert(self, *, data: dict[str, object]) -> asyncio.Task[None]:
+        task = asyncio.create_task(asyncio.to_thread(self._writer.insert, data=data))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    def insert_many(self, *, rows: list[dict[str, object]]) -> asyncio.Task[None]:
+        task = asyncio.create_task(asyncio.to_thread(self._writer.insert_many, rows=rows))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    def upsert(self, *, data: dict[str, object], conflict_columns: list[str]) -> asyncio.Task[None]:
+        task = asyncio.create_task(
+            asyncio.to_thread(self._writer.upsert, data=data, conflict_columns=conflict_columns)
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    def upsert_many(
+        self,
+        *,
+        rows: list[dict[str, object]],
+        conflict_columns: list[str],
+    ) -> asyncio.Task[None]:
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                self._writer.upsert_many,
+                rows=rows,
+                conflict_columns=conflict_columns,
+            )
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    async def wait(self) -> None:
+        if self._tasks:
+            await asyncio.gather(*tuple(self._tasks))
+
+    def close(self) -> None:
+        self._writer.close()
 
 
 def _validate_arg_name(arg_name: str, fn: Callable[..., Any], decorator_name: str) -> None:
@@ -104,6 +186,34 @@ def _resolve_callable(
     return resolver(**call_kwargs)
 
 
+def _validate_model_type(model: object | None) -> None:
+    if model is None:
+        return
+    if not isinstance(model, type) or not issubclass(model, BaseModel):
+        model_name = model.__name__ if isinstance(model, type) else type(model).__name__
+        msg = f"db_input model must be a subclass of BaseModel, got '{model_name}'"
+        raise ConfigurationError(msg)
+
+
+def _apply_input_model(
+    result: dict[str, object] | list[dict[str, object]] | None,
+    model: type[BaseModel] | None,
+) -> dict[str, object] | list[dict[str, object]] | BaseModel | list[BaseModel] | None:
+    if model is None:
+        return result
+    if result is None:
+        return None
+    if isinstance(result, list):
+        return [model.model_validate(row) for row in result]
+    return model.model_validate(result)
+
+
+def _normalize_output_row(row: dict[str, object] | BaseModel) -> dict[str, object]:
+    if isinstance(row, BaseModel):
+        return row.model_dump()
+    return row
+
+
 class DbFunctionApp:
     """Azure Functions-style decorator API for database integration.
 
@@ -176,7 +286,7 @@ class DbFunctionApp:
             # Reject async handlers: PollTrigger.run is synchronous and
             # calling an async function without await would silently return
             # an unawaited coroutine.
-            if asyncio.iscoroutinefunction(fn):
+            if inspect.iscoroutinefunction(fn):
                 msg = "db_trigger does not support async handlers. Use a sync handler instead."
                 raise ConfigurationError(msg)
 
@@ -227,7 +337,7 @@ class DbFunctionApp:
             # Keep host trigger params visible in __signature__ so Azure
             # worker binding validation can find them.  Only hide the
             # db-injected params (events, context).
-            wrapper.__signature__ = _build_host_signature(fn, db_injected)  # type: ignore[attr-defined]
+            setattr(wrapper, "__signature__", _build_host_signature(fn, db_injected))
 
             return wrapper
 
@@ -247,6 +357,7 @@ class DbFunctionApp:
         pk: dict[str, object] | Callable[..., dict[str, object]] | None = None,
         query: str | None = None,
         params: dict[str, object] | Callable[..., dict[str, object]] | None = None,
+        model: type[BaseModel] | None = None,
         on_not_found: Literal["none", "raise"] = "none",
         engine_provider: EngineProvider | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -312,6 +423,7 @@ class DbFunctionApp:
         if params is not None and query is None:
             msg = "db_input 'params' is only valid with 'query'"
             raise ConfigurationError(msg)
+        _validate_model_type(model)
 
         use_pk = pk is not None
         pk_callable: Callable[..., dict[str, object]] | None = pk if callable(pk) else None
@@ -335,7 +447,7 @@ class DbFunctionApp:
                     params_callable, fn, {arg_name}, "params", "db_input"
                 )
 
-            is_async = asyncio.iscoroutinefunction(fn)
+            is_async = inspect.iscoroutinefunction(fn)
 
             def _resolve_read_args(
                 all_kwargs: dict[str, Any],
@@ -399,23 +511,20 @@ class DbFunctionApp:
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                     r_pk, r_params = _resolve_read_args(kwargs)
                     data = await asyncio.to_thread(_execute_read, r_pk, r_params)
-                    kwargs[arg_name] = data
+                    kwargs[arg_name] = _apply_input_model(data, model)
                     return await fn(*args, **kwargs)
 
-                async_wrapper.__signature__ = _build_host_signature(  # type: ignore[attr-defined]
-                    fn,
-                    {arg_name},
-                )
+                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
                 return async_wrapper
 
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 r_pk, r_params = _resolve_read_args(kwargs)
                 data = _execute_read(r_pk, r_params)
-                kwargs[arg_name] = data
+                kwargs[arg_name] = _apply_input_model(data, model)
                 return fn(*args, **kwargs)
 
-            wrapper.__signature__ = _build_host_signature(fn, {arg_name})  # type: ignore[attr-defined]
+            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
             return wrapper
 
         return decorator
@@ -464,7 +573,7 @@ class DbFunctionApp:
             raise ConfigurationError(msg)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            is_async = asyncio.iscoroutinefunction(fn)
+            is_async = inspect.iscoroutinefunction(fn)
 
             def _do_write(result: Any) -> None:
                 """Write the handler result to DB (runs in calling thread)."""
@@ -478,37 +587,43 @@ class DbFunctionApp:
                     engine_provider=engine_provider,
                 )
                 try:
-                    if isinstance(result, dict):
+                    if isinstance(result, (dict, BaseModel)):
+                        row = _normalize_output_row(result)
                         if action == "upsert":
                             if conflict_columns is None:
                                 msg = "db_output: unreachable – upsert without conflict_columns"
                                 raise ConfigurationError(msg)
-                            writer.upsert(data=result, conflict_columns=conflict_columns)
+                            writer.upsert(data=row, conflict_columns=conflict_columns)
                         else:
-                            writer.insert(data=result)
+                            writer.insert(data=row)
                     elif isinstance(result, list):
                         bad = next(
-                            (i for i, row in enumerate(result) if not isinstance(row, dict)),
+                            (
+                                i
+                                for i, row in enumerate(result)
+                                if not isinstance(row, (dict, BaseModel))
+                            ),
                             None,
                         )
                         if bad is not None:
                             bad_type = type(result[bad]).__name__
                             msg = (
                                 f"db_output: handler returned list with non-dict element "
-                                f"at index {bad} ({bad_type}); expected list[dict]"
+                                f"at index {bad} ({bad_type}); expected list[dict | BaseModel]"
                             )
                             raise ConfigurationError(msg)
+                        rows = [_normalize_output_row(row) for row in result]
                         if action == "upsert":
                             if conflict_columns is None:
                                 msg = "db_output: unreachable – upsert without conflict_columns"
                                 raise ConfigurationError(msg)
-                            writer.upsert_many(rows=result, conflict_columns=conflict_columns)
+                            writer.upsert_many(rows=rows, conflict_columns=conflict_columns)
                         else:
-                            writer.insert_many(rows=result)
+                            writer.insert_many(rows=rows)
                     else:
                         msg = (
                             f"db_output: handler returned {type(result).__name__}, "
-                            f"expected dict, list[dict], or None"
+                            f"expected dict, list[dict], BaseModel, list[dict | BaseModel], or None"
                         )
                         raise ConfigurationError(msg)
                 finally:
@@ -524,7 +639,7 @@ class DbFunctionApp:
                     await asyncio.to_thread(_do_write, result)
                     return result
 
-                async_wrapper.__signature__ = fn_sig  # type: ignore[attr-defined]
+                setattr(async_wrapper, "__signature__", fn_sig)
                 return async_wrapper
 
             @functools.wraps(fn)
@@ -533,7 +648,7 @@ class DbFunctionApp:
                 _do_write(result)
                 return result
 
-            wrapper.__signature__ = fn_sig  # type: ignore[attr-defined]
+            setattr(wrapper, "__signature__", fn_sig)
             return wrapper
 
         return decorator
@@ -579,7 +694,7 @@ class DbFunctionApp:
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _validate_arg_name(arg_name, fn, "db_reader")
-            is_async = asyncio.iscoroutinefunction(fn)
+            is_async = inspect.iscoroutinefunction(fn)
 
             if is_async:
 
@@ -591,16 +706,18 @@ class DbFunctionApp:
                         schema=schema,
                         engine_provider=engine_provider,
                     )
+                    proxy = _AsyncDbReaderProxy(reader)
                     try:
-                        kwargs[arg_name] = reader
-                        return await fn(*args, **kwargs)
+                        kwargs[arg_name] = proxy
+                        result = await fn(*args, **kwargs)
+                        if inspect.isawaitable(result):
+                            result = await result
+                        await proxy.wait()
+                        return result
                     finally:
                         reader.close()
 
-                async_wrapper.__signature__ = _build_host_signature(  # type: ignore[attr-defined]
-                    fn,
-                    {arg_name},
-                )
+                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
                 return async_wrapper
 
             @functools.wraps(fn)
@@ -617,7 +734,7 @@ class DbFunctionApp:
                 finally:
                     reader.close()
 
-            wrapper.__signature__ = _build_host_signature(fn, {arg_name})  # type: ignore[attr-defined]
+            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
             return wrapper
 
         return decorator
@@ -659,7 +776,7 @@ class DbFunctionApp:
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _validate_arg_name(arg_name, fn, "db_writer")
-            is_async = asyncio.iscoroutinefunction(fn)
+            is_async = inspect.iscoroutinefunction(fn)
 
             if is_async:
 
@@ -671,16 +788,16 @@ class DbFunctionApp:
                         schema=schema,
                         engine_provider=engine_provider,
                     )
+                    proxy = _AsyncDbWriterProxy(writer)
                     try:
-                        kwargs[arg_name] = writer
-                        return await fn(*args, **kwargs)
+                        kwargs[arg_name] = proxy
+                        result = await fn(*args, **kwargs)
+                        await proxy.wait()
+                        return result
                     finally:
                         writer.close()
 
-                async_wrapper.__signature__ = _build_host_signature(  # type: ignore[attr-defined]
-                    fn,
-                    {arg_name},
-                )
+                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
                 return async_wrapper
 
             @functools.wraps(fn)
@@ -697,7 +814,7 @@ class DbFunctionApp:
                 finally:
                     writer.close()
 
-            wrapper.__signature__ = _build_host_signature(fn, {arg_name})  # type: ignore[attr-defined]
+            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
             return wrapper
 
         return decorator

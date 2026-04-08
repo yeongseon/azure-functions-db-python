@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, insert
+from sqlalchemy import Column, Index, Integer, MetaData, String, Table, create_engine, insert
 
 from azure_functions_db.adapter.sqlalchemy import SqlAlchemySource, _resolve_env_vars
 from azure_functions_db.core.types import SourceDescriptor
@@ -65,6 +66,24 @@ def _create_order_items_db(db_path: Path) -> str:
                 {"order_id": 3, "item_id": 1, "updated_at": 300, "qty": 4},
             ],
         )
+    engine.dispose()
+    return url
+
+
+def _create_orders_db_with_cursor_index(db_path: Path, *, indexed: bool) -> str:
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
+    metadata = MetaData()
+    orders = Table(
+        "orders",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("name", String(50)),
+        Column("updated_at", Integer),
+    )
+    if indexed:
+        Index("ix_orders_updated_at", orders.c.updated_at)
+    metadata.create_all(engine)
     engine.dispose()
     return url
 
@@ -380,6 +399,32 @@ class TestSqlAlchemySourceFetch:
         src = _make_source(url=orders_url, cursor_column="nonexistent")
         with pytest.raises(SourceConfigurationError, match="Columns not found"):
             src.fetch(cursor=None, batch_size=10)
+
+    def test_cursor_column_index_warning_when_no_index(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        url = _create_orders_db_with_cursor_index(tmp_path / "orders-no-index.db", indexed=False)
+        src = _make_source(url=url)
+
+        with caplog.at_level(logging.WARNING, logger="azure_functions_db.adapter.sqlalchemy"):
+            src.fetch(cursor=None, batch_size=10)
+
+        assert "cursor_column 'updated_at' on table 'orders' is not indexed" in caplog.text
+
+    def test_no_cursor_column_index_warning_when_indexed(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        url = _create_orders_db_with_cursor_index(tmp_path / "orders-indexed.db", indexed=True)
+        src = _make_source(url=url)
+
+        with caplog.at_level(logging.WARNING, logger="azure_functions_db.adapter.sqlalchemy"):
+            src.fetch(cursor=None, batch_size=10)
+
+        assert "cursor_column 'updated_at' on table 'orders' is not indexed" not in caplog.text
 
 
 class TestSqlAlchemySourceProtocol:

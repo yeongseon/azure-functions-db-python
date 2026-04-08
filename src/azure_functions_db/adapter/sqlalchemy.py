@@ -6,6 +6,7 @@ import json
 import logging
 from typing import Any
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.schema import MetaData, Table
@@ -221,6 +222,24 @@ class SqlAlchemySource:
         if missing:
             msg = f"Columns not found in table '{key}': {sorted(missing)}"
             raise SourceConfigurationError(msg)
+
+        insp = sa_inspect(self._engine)
+        indexes = insp.get_indexes(self._table_name, schema=self._schema)
+        cursor_indexed = any(
+            self._cursor_column in (idx.get("column_names") or []) for idx in indexes
+        )
+        if not cursor_indexed:
+            logger.warning(
+                "cursor_column '%s' on table '%s' is not indexed. "
+                "This may cause slow polling queries. "
+                "Consider adding an index: CREATE INDEX idx_%s_%s ON %s(%s)",
+                self._cursor_column,
+                self._table_name,
+                self._table_name,
+                self._cursor_column,
+                self._table_name,
+                self._cursor_column,
+            )
 
     def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]:
         """Fetch a batch of records newer than *cursor*.
