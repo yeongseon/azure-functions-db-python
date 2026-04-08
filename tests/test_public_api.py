@@ -19,6 +19,7 @@ def test_public_api_exports() -> None:
         "DbConfig",
         "DbConnectionError",
         "DbError",
+        "DbReader",
         "EngineProvider",
         "EventNormalizer",
         "FetchError",
@@ -77,6 +78,7 @@ def test_imports_resolve() -> None:
         ConfigurationError,
         CursorSerializationError,
         DbConfig,
+        DbReader,
         EngineProvider,
         MetricsCollector,
         NoOpCollector,
@@ -103,6 +105,7 @@ def test_imports_resolve() -> None:
     assert ConfigurationError is not None
     assert CursorSerializationError is not None
     assert DbConfig is not None
+    assert DbReader is not None
     assert EngineProvider is not None
     assert METRIC_BATCHES_TOTAL is not None
     assert MetricsCollector is not None

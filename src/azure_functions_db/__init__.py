@@ -3,6 +3,7 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 from .adapter import SqlAlchemySource
+from .binding import DbReader
 from .core.config import DbConfig, resolve_env_vars
 from .core.engine import EngineProvider
 from .core.errors import (
@@ -79,6 +80,7 @@ __all__ = [
     "DbConfig",
     "DbConnectionError",
     "DbError",
+    "DbReader",
     "EngineProvider",
     "EventNormalizer",
     "FetchError",
