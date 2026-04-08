@@ -262,6 +262,9 @@ def test_ambiguous_commit_resolved_by_next_tick_reload() -> None:
 
     assert "failed_poller" not in store_failed.checkpoints
 
+    # Clear the commit error so the retry runner can succeed
+    store_failed.commit_error = None
+
     reprocessed: list[list[str]] = []
     retry_runner = PollRunner(
         name="failed_poller",
