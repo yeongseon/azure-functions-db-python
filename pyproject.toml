@@ -1,7 +1,7 @@
 [project]
 name = "azure-functions-db"
-description = "SQLAlchemy-based database trigger integration for Azure Functions Python v2"
-keywords = ["azure-functions", "azure", "python", "v2", "database", "trigger", "polling", "sqlalchemy", "serverless"]
+description = "Database trigger and input/output bindings for Azure Functions Python v2, powered by SQLAlchemy"
+keywords = ["azure-functions", "azure", "python", "v2", "database", "trigger", "polling", "sqlalchemy", "serverless", "binding", "input-binding", "output-binding", "decorator"]
 authors = [{ name = "Yeongseon Choe", email = "yeongseon.choe@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
