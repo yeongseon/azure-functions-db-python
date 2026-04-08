@@ -5,6 +5,7 @@ import functools
 import logging
 from typing import Any
 
+from azure_functions_db.observability import MetricsCollector
 from azure_functions_db.trigger.normalizers import EventNormalizer
 from azure_functions_db.trigger.poll import PollTrigger
 from azure_functions_db.trigger.retry import RetryPolicy
@@ -25,6 +26,7 @@ class _DbNamespace:
         max_batches_per_tick: int = 1,
         lease_ttl_seconds: int = 120,
         retry_policy: RetryPolicy | None = None,
+        metrics: MetricsCollector | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., int]]:
         trigger = PollTrigger(
             name=name,
@@ -35,6 +37,7 @@ class _DbNamespace:
             max_batches_per_tick=max_batches_per_tick,
             lease_ttl_seconds=lease_ttl_seconds,
             retry_policy=retry_policy,
+            metrics=metrics,
         )
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., int]:
