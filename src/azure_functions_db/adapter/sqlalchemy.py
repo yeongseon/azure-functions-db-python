@@ -157,6 +157,14 @@ class SqlAlchemySource:
     def source_descriptor(self) -> SourceDescriptor:
         return self._descriptor
 
+    @property
+    def cursor_column(self) -> str:
+        return self._cursor_column
+
+    @property
+    def pk_columns(self) -> list[str]:
+        return list(self._pk_columns)
+
     def _ensure_initialized(self) -> None:
         """Create engine and reflect table metadata on first use."""
         if self._initialized:

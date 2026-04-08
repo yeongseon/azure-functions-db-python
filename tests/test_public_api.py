@@ -25,6 +25,7 @@ def test_public_api_exports() -> None:
         "LostLeaseError",
         "NotFoundError",
         "PollContext",
+        "PollTrigger",
         "PollRunner",
         "PollerError",
         "QueryError",
@@ -39,6 +40,9 @@ def test_public_api_exports() -> None:
         "StateStore",
         "StateStoreError",
         "WriteError",
+        "db",
+        "default_normalizer",
+        "make_normalizer",
     }
     assert set(__all__) == expected
 
@@ -48,18 +52,26 @@ def test_imports_resolve() -> None:
         BlobCheckpointStore,
         PollContext,
         PollRunner,
+        PollTrigger,
         RetryPolicy,
         RowChange,
         SourceDescriptor,
         SqlAlchemySource,
         StateStoreError,
+        db,
+        default_normalizer,
+        make_normalizer,
     )
 
     assert BlobCheckpointStore is not None
     assert PollContext is not None
+    assert PollTrigger is not None
     assert PollRunner is not None
     assert RetryPolicy is not None
     assert RowChange is not None
     assert SourceDescriptor is not None
     assert SqlAlchemySource is not None
     assert StateStoreError is not None
+    assert db is not None
+    assert default_normalizer is not None
+    assert make_normalizer is not None

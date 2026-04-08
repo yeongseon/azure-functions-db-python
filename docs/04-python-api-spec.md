@@ -47,7 +47,7 @@ def handle_orders(events, context):
 
 ```python
 import azure.functions as func
-from azure_functions_db import db
+from azure_functions_db import BlobCheckpointStore, SqlAlchemySource, db
 
 app = func.FunctionApp()
 
@@ -55,12 +55,17 @@ app = func.FunctionApp()
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
 @db.poll(
     name="orders",
-    url="%ORDERS_DB_URL%",
-    table="orders",
-    schema="public",
-    cursor_column="updated_at",
-    pk_columns=["id"],
-    checkpoint_store="blob://AzureWebJobsStorage/db-state",
+    source=SqlAlchemySource(
+        url="%ORDERS_DB_URL%",
+        table="orders",
+        schema="public",
+        cursor_column="updated_at",
+        pk_columns=["id"],
+    ),
+    checkpoint_store=BlobCheckpointStore(
+        connection="AzureWebJobsStorage",
+        container="db-state",
+    ),
     batch_size=100,
 )
 def handle_orders(events, context):
@@ -79,15 +84,14 @@ class PollTrigger:
         *,
         name: str,
         source: SourceAdapter,
-        checkpoint_store: CheckpointStore,
+        checkpoint_store: StateStore,
         batch_size: int = 100,
         max_batches_per_tick: int = 1,
         lease_ttl_seconds: int = 120,
-        heartbeat_interval_seconds: int = 20,
         retry_policy: RetryPolicy | None = None,
-        quarantine: QuarantineSink | None = None,
-        serializer: EventSerializer | None = None,
     ): ...
+
+    def run(self, *, timer: object, handler: Callable[..., Any]) -> int: ...
 ```
 
 ### 3.2 SqlAlchemySource
@@ -144,9 +148,10 @@ Supported signatures:
 ```python
 def handler(events): ...
 def handler(events, context): ...
-async def handler(events): ...
-async def handler(events, context): ...
 ```
+
+> **Note**: Async handlers are not supported and will raise `TypeError`.
+> Async support may be added in a future version.
 
 Rules:
 - `events` may be empty. Default behavior is **empty batch skip**.
@@ -177,7 +182,6 @@ Rules:
 - `batch_size=100`
 - `max_batches_per_tick=1`
 - `lease_ttl_seconds=120`
-- `heartbeat_interval_seconds=20`
 - `use_monitor=True`
 - `schedule=0 */1 * * * *` (every 1 minute)
 

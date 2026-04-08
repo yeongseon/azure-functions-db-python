@@ -184,6 +184,20 @@ class TestSqlAlchemySourceConstructor:
         assert desc.name == "orders"
         assert len(desc.fingerprint) == 64
 
+    def test_cursor_column_property(self) -> None:
+        src = _make_source(cursor_column="version")
+        assert src.cursor_column == "version"
+
+    def test_pk_columns_property(self) -> None:
+        src = _make_source(pk_columns=["id", "tenant_id"])
+        assert src.pk_columns == ["id", "tenant_id"]
+
+    def test_pk_columns_returns_copy(self) -> None:
+        src = _make_source(pk_columns=["id", "tenant_id"])
+        pk_columns = src.pk_columns
+        pk_columns.append("other")
+        assert src.pk_columns == ["id", "tenant_id"]
+
     def test_query_mode_name_uses_hash(self) -> None:
         src = _make_source(table=None, query="SELECT id, updated_at FROM orders")
         assert src.source_descriptor.name.startswith("query_")

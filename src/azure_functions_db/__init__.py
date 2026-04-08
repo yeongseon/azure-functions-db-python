@@ -15,6 +15,7 @@ from azure_functions_db.core.types import (
     JsonValue,
     SourceDescriptor,
 )
+from azure_functions_db.decorator import db
 from azure_functions_db.state import (
     BlobCheckpointStore,
     FingerprintMismatchError,
@@ -33,6 +34,8 @@ from azure_functions_db.trigger.errors import (
     SourceConfigurationError,
 )
 from azure_functions_db.trigger.events import RowChange
+from azure_functions_db.trigger.normalizers import default_normalizer, make_normalizer
+from azure_functions_db.trigger.poll import PollTrigger
 from azure_functions_db.trigger.retry import RetryPolicy
 from azure_functions_db.trigger.runner import (
     EventNormalizer,
@@ -61,6 +64,7 @@ __all__ = [
     "LostLeaseError",
     "NotFoundError",
     "PollContext",
+    "PollTrigger",
     "PollRunner",
     "PollerError",
     "QueryError",
@@ -75,4 +79,7 @@ __all__ = [
     "StateStore",
     "StateStoreError",
     "WriteError",
+    "db",
+    "default_normalizer",
+    "make_normalizer",
 ]

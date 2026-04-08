@@ -61,20 +61,42 @@ azure-functions-db[postgres]
 
 ```python
 import azure.functions as func
-from azure_functions_db import PollTrigger
+from azure.storage.blob import ContainerClient
+from azure_functions_db import BlobCheckpointStore, PollTrigger, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
-trigger = PollTrigger(
-    connection_string="postgresql+psycopg://user:pass@host/db",
+
+source = SqlAlchemySource(
+    url="%ORDERS_DB_URL%",
     table="orders",
-    tracking_column="updated_at",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+)
+
+trigger = PollTrigger(
+    name="orders",
+    source=source,
+    checkpoint_store=BlobCheckpointStore(
+        container_client=ContainerClient.from_connection_string(
+            conn_str="%AzureWebJobsStorage%",
+            container_name="db-state",
+        ),
+        source_fingerprint=source.source_descriptor.fingerprint,
+    ),
+    batch_size=100,
 )
 
 
-@app.timer_trigger(schedule="*/30 * * * * *", arg_name="timer")
-def detect_changes(timer: func.TimerRequest) -> None:
-    for change in trigger.poll():
-        process_order(change)
+def handle_orders(events: list[RowChange]) -> None:
+    for event in events:
+        print(f"Order {event.pk}: {event.op}")
+
+
+@app.function_name(name="orders_poll")
+@app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
+def orders_poll(timer: func.TimerRequest) -> None:
+    trigger.run(timer=timer, handler=handle_orders)
 ```
 
 ### Input Binding (DbReader)
