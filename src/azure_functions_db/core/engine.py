@@ -30,6 +30,7 @@ class EngineProvider:
         }
         if config.connect_args is not None:
             kwargs["connect_args"] = dict(config.connect_args)
+        kwargs.update(config.engine_kwargs)
         return create_engine(resolve_env_vars(config.connection_url), **kwargs)
 
     def dispose_all(self) -> None:
@@ -48,5 +49,6 @@ class EngineProvider:
             "pool_recycle": config.pool_recycle,
             "echo": config.echo,
             "connect_args": config.connect_args,
+            "engine_kwargs": config.engine_kwargs,
         }
         return json.dumps(normalized, sort_keys=True, default=str)

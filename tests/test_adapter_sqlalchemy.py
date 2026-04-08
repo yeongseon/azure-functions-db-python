@@ -239,11 +239,13 @@ class TestResolveEnvVars:
         with pytest.raises(SourceConfigurationError, match="not set"):
             _resolve_env_vars("%MISSING_VAR_XYZ%")
 
-    def test_partial_pattern_not_resolved(self) -> None:
-        assert _resolve_env_vars("prefix_%VAR%") == "prefix_%VAR%"
+    def test_partial_pattern_resolved(self) -> None:
+        with patch.dict(os.environ, {"VAR": "resolved"}):
+            assert _resolve_env_vars("prefix_%VAR%") == "prefix_resolved"
 
-    def test_embedded_pattern_not_resolved(self) -> None:
-        assert _resolve_env_vars("sqlite:///%DB%/extra") == "sqlite:///%DB%/extra"
+    def test_embedded_pattern_resolved(self) -> None:
+        with patch.dict(os.environ, {"DB": "mydb"}):
+            assert _resolve_env_vars("sqlite:///%DB%/extra") == "sqlite:///mydb/extra"
 
 
 class TestSqlAlchemySourceFetch:

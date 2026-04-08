@@ -15,7 +15,7 @@ from sqlalchemy.engine import Engine
 from azure_functions_db import SqlAlchemySource
 from azure_functions_db.core.config import DbConfig, resolve_env_vars
 from azure_functions_db.core.engine import EngineProvider
-from azure_functions_db.core.errors import CursorSerializationError, DbError
+from azure_functions_db.core.errors import ConfigurationError, CursorSerializationError, DbError
 from azure_functions_db.core.serializers import parse_checkpoint_cursor, serialize_cursor_part
 from azure_functions_db.core.types import RawRecord, Row, RowDict
 from azure_functions_db.state.errors import StateStoreError
@@ -66,11 +66,44 @@ class TestDbConfig:
         monkeypatch.setenv("PHASE8_DB_URL", "sqlite:///resolved.db")
         assert resolve_env_vars("%PHASE8_DB_URL%") == "sqlite:///resolved.db"
 
+    def test_env_var_partial_substitution(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DB_PASS", "s3cret")
+        assert (
+            resolve_env_vars("postgresql://user:%DB_PASS%@host/db")
+            == "postgresql://user:s3cret@host/db"
+        )
+
+    def test_env_var_multiple_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOST", "myhost")
+        monkeypatch.setenv("PORT", "5432")
+        assert resolve_env_vars("postgresql://%HOST%:%PORT%/db") == "postgresql://myhost:5432/db"
+
+    def test_env_var_literal_percent_escape(self) -> None:
+        assert resolve_env_vars("100%% done") == "100% done"
+
+    def test_env_var_missing_raises(self) -> None:
+        with pytest.raises(ConfigurationError, match="not set"):
+            resolve_env_vars("%NONEXISTENT_VAR_XYZ%")
+
+    def test_env_var_no_tokens_returns_unchanged(self) -> None:
+        assert resolve_env_vars("sqlite:///plain.db") == "sqlite:///plain.db"
+
     def test_frozen_immutable(self) -> None:
         config = DbConfig(connection_url="sqlite:///test.db")
 
         with pytest.raises(FrozenInstanceError):
             config.connection_url = "sqlite:///other.db"  # type: ignore[misc]
+
+    def test_engine_kwargs_default_empty(self) -> None:
+        config = DbConfig(connection_url="sqlite:///test.db")
+        assert config.engine_kwargs == {}
+
+    def test_engine_kwargs_passthrough(self) -> None:
+        config = DbConfig(
+            connection_url="sqlite:///test.db",
+            engine_kwargs={"pool_pre_ping": True, "max_overflow": 5},
+        )
+        assert config.engine_kwargs == {"pool_pre_ping": True, "max_overflow": 5}
 
 
 class TestEngineProvider:
@@ -131,6 +164,27 @@ class TestEngineProvider:
 
         assert len(engines) == 8
         assert len({id(engine) for engine in engines}) == 1
+        provider.dispose_all()
+
+    def test_engine_kwargs_forwarded(self, tmp_path: Path) -> None:
+        url = _create_orders_db(tmp_path / "kwargs.db")
+        provider = EngineProvider()
+        config = DbConfig(connection_url=url, engine_kwargs={"pool_pre_ping": True})
+
+        engine = provider.get_engine(config)
+        assert engine.pool._pre_ping is True
+        provider.dispose_all()
+
+    def test_different_engine_kwargs_create_separate_engines(self, tmp_path: Path) -> None:
+        url = _create_orders_db(tmp_path / "kwargs_diff.db")
+        provider = EngineProvider()
+        config_a = DbConfig(connection_url=url, engine_kwargs={"pool_pre_ping": True})
+        config_b = DbConfig(connection_url=url, engine_kwargs={"pool_pre_ping": False})
+
+        engine_a = provider.get_engine(config_a)
+        engine_b = provider.get_engine(config_b)
+
+        assert engine_a is not engine_b
         provider.dispose_all()
 
 
