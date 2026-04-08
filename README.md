@@ -160,24 +160,31 @@ Supported upsert dialects: PostgreSQL, SQLite, MySQL.
 Process database changes and write results to another table. Uses `EngineProvider` for shared connection pooling.
 
 ```python
+from azure.storage.blob import ContainerClient
+
 from azure_functions_db import (
-    DbWriter, EngineProvider, PollTrigger, SqlAlchemySource, BlobCheckpointStore,
+    BlobCheckpointStore, DbWriter, EngineProvider, PollTrigger, SqlAlchemySource,
 )
 
 engine_provider = EngineProvider()
 
+source = SqlAlchemySource(
+    url="%SOURCE_DB_URL%",
+    table="orders",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+    engine_provider=engine_provider,
+)
+
 trigger = PollTrigger(
     name="orders",
-    source=SqlAlchemySource(
-        url="%SOURCE_DB_URL%",
-        table="orders",
-        cursor_column="updated_at",
-        pk_columns=["id"],
-        engine_provider=engine_provider,
-    ),
+    source=source,
     checkpoint_store=BlobCheckpointStore(
-        connection="AzureWebJobsStorage",
-        container="db-state",
+        container_client=ContainerClient.from_connection_string(
+            conn_str="%AzureWebJobsStorage%",
+            container_name="db-state",
+        ),
+        source_fingerprint=source.source_descriptor.fingerprint,
     ),
 )
 
@@ -187,14 +194,15 @@ def process_orders(events):
         engine_provider=engine_provider,
     ) as writer:
         for event in events:
-            writer.upsert(
-                data={
-                    "order_id": event.pk["id"],
-                    "customer": event.after["name"],
-                    "processed_at": event.cursor,
-                },
-                conflict_columns=["order_id"],
-            )
+            if event.after is not None:
+                writer.upsert(
+                    data={
+                        "order_id": event.pk["id"],
+                        "customer": event.after["name"],
+                        "processed_at": str(event.cursor),
+                    },
+                    conflict_columns=["order_id"],
+                )
 
 # In your Azure Function:
 # trigger.run(timer=timer, handler=process_orders)

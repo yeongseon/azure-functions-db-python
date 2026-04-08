@@ -17,10 +17,10 @@ Environment variables:
 from __future__ import annotations
 
 import azure.functions as func
+from azure.storage.blob import ContainerClient
 
 from azure_functions_db import (
     BlobCheckpointStore,
-    DbReader,
     DbWriter,
     EngineProvider,
     PollTrigger,
@@ -32,19 +32,24 @@ app = func.FunctionApp()
 
 engine_provider = EngineProvider()
 
+source = SqlAlchemySource(
+    url="%SOURCE_DB_URL%",
+    table="orders",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+    engine_provider=engine_provider,
+)
+
 orders_trigger = PollTrigger(
     name="orders",
-    source=SqlAlchemySource(
-        url="%SOURCE_DB_URL%",
-        table="orders",
-        schema="public",
-        cursor_column="updated_at",
-        pk_columns=["id"],
-        engine_provider=engine_provider,
-    ),
+    source=source,
     checkpoint_store=BlobCheckpointStore(
-        connection="AzureWebJobsStorage",
-        container="db-state",
+        container_client=ContainerClient.from_connection_string(
+            conn_str="%AzureWebJobsStorage%",
+            container_name="db-state",
+        ),
+        source_fingerprint=source.source_descriptor.fingerprint,
     ),
     batch_size=100,
     max_batches_per_tick=1,
@@ -58,16 +63,16 @@ def process_orders(events: list[RowChange]) -> None:
         engine_provider=engine_provider,
     ) as writer:
         for event in events:
-            row = event.after
-            writer.upsert(
-                data={
-                    "order_id": event.pk["id"],
-                    "customer_name": row["name"],
-                    "amount": row["amount"],
-                    "processed_at": event.cursor,
-                },
-                conflict_columns=["order_id"],
-            )
+            if event.after is not None:
+                writer.upsert(
+                    data={
+                        "order_id": event.pk["id"],
+                        "customer_name": event.after["name"],
+                        "amount": event.after["amount"],
+                        "processed_at": str(event.cursor),
+                    },
+                    conflict_columns=["order_id"],
+                )
 
 
 @app.function_name(name="orders_poll")

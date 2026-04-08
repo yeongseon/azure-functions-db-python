@@ -76,6 +76,6 @@
 
 ## Phase 11: Binding Integration
 - [x] Trigger + output binding combined example
-- [x] Binding decorator sugar (optional)
+- [ ] Binding decorator sugar (future: API redesign)
 - [x] Docs update
 - [x] Sample function_app.py with binding

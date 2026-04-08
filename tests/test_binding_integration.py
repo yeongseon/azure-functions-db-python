@@ -80,7 +80,7 @@ def _create_dest_db(db_path: Path) -> str:
         metadata,
         Column("id", Integer, primary_key=True),
         Column("name", String(50)),
-        Column("cursor_val", Integer),
+        Column("cursor_val", String(100)),
     )
     metadata.create_all(engine)
     engine.dispose()
@@ -130,16 +130,19 @@ class TestTriggerWithWriter:
         def handler(events: list[RowChange]) -> None:
             with DbWriter(url=dest_url, table="processed") as writer:
                 for event in events:
-                    assert event.after is not None  # noqa: S101  # nosec B101
+                    assert event.after is not None
                     writer.insert(
                         data={
                             "id": event.pk["id"],
                             "name": event.after["name"],
-                            "cursor_val": event.cursor,
+                            "cursor_val": str(event.cursor),
                         }
                     )
 
-        count = trigger.run(timer=object(), handler=handler)
+        try:
+            count = trigger.run(timer=object(), handler=handler)
+        finally:
+            source.dispose()
 
         assert count == 3
         rows = _read_all(dest_url, "processed")
@@ -169,21 +172,24 @@ class TestTriggerWithWriter:
         def handler(events: list[RowChange]) -> None:
             with DbWriter(url=dest_url, table="processed") as writer:
                 for event in events:
-                    assert event.after is not None  # noqa: S101  # nosec B101
+                    assert event.after is not None
                     writer.upsert(
                         data={
                             "id": event.pk["id"],
                             "name": event.after["name"],
-                            "cursor_val": event.cursor,
+                            "cursor_val": str(event.cursor),
                         },
                         conflict_columns=["id"],
                     )
 
-        first_count = trigger.run(timer=object(), handler=handler)
-        assert first_count == 3
+        try:
+            first_count = trigger.run(timer=object(), handler=handler)
+            assert first_count == 3
 
-        second_count = trigger.run(timer=object(), handler=handler)
-        assert second_count == 0
+            second_count = trigger.run(timer=object(), handler=handler)
+            assert second_count == 0
+        finally:
+            source.dispose()
 
         rows = _read_all(dest_url, "processed")
         assert len(rows) == 3
@@ -218,14 +224,17 @@ class TestTriggerWithReaderAndWriter:
                             data={
                                 "id": row["id"],
                                 "name": row["name"],
-                                "cursor_val": event.cursor,
+                                "cursor_val": str(event.cursor),
                             }
                         )
             finally:
                 reader.close()
                 writer.close()
 
-        count = trigger.run(timer=object(), handler=handler)
+        try:
+            count = trigger.run(timer=object(), handler=handler)
+        finally:
+            source.dispose()
 
         assert count == 3
         rows = _read_all(dest_url, "processed")
@@ -260,12 +269,12 @@ class TestEngineProviderSharing:
                     url=dest_url, table="processed", engine_provider=provider
                 ) as writer:
                     for event in events:
-                        assert event.after is not None  # noqa: S101  # nosec B101
+                        assert event.after is not None
                         writer.upsert(
                             data={
                                 "id": event.pk["id"],
                                 "name": event.after["name"],
-                                "cursor_val": event.cursor,
+                                "cursor_val": str(event.cursor),
                             },
                             conflict_columns=["id"],
                         )
@@ -332,22 +341,96 @@ class TestCheckpointResumeAfterFailure:
             if call_count == 1:
                 with DbWriter(url=dest_url, table="processed") as writer:
                     for event in events:
-                        assert event.after is not None  # noqa: S101  # nosec B101
+                        assert event.after is not None
                         writer.insert(
                             data={
                                 "id": event.pk["id"],
                                 "name": event.after["name"],
-                                "cursor_val": event.cursor,
+                                "cursor_val": str(event.cursor),
                             }
                         )
                 raise RuntimeError("Simulated handler failure")
 
         from azure_functions_db.trigger.errors import HandlerError
 
-        with pytest.raises(HandlerError):
-            trigger.run(timer=object(), handler=handler)
+        try:
+            with pytest.raises(HandlerError):
+                trigger.run(timer=object(), handler=handler)
+        finally:
+            source.dispose()
 
         assert "fail_resume" not in state_store.checkpoints
+
+    def test_commit_failure_preserves_writes_and_allows_retry(
+        self, source_url: str, dest_url: str
+    ) -> None:
+        """Test at-least-once: writes succeed but checkpoint commit fails.
+
+        The handler writes via upsert, but checkpoint commit raises an error.
+        On retry (after clearing the error), the same rows are upserted again
+        idempotently, resulting in no duplicates.
+        """
+        source = SqlAlchemySource(
+            url=source_url,
+            table="orders",
+            cursor_column="updated_at",
+            pk_columns=["id"],
+        )
+        state_store = FakeStateStore()
+
+        def handler(events: list[RowChange]) -> None:
+            with DbWriter(url=dest_url, table="processed") as writer:
+                for event in events:
+                    assert event.after is not None
+                    writer.upsert(
+                        data={
+                            "id": event.pk["id"],
+                            "name": event.after["name"],
+                            "cursor_val": str(event.cursor),
+                        },
+                        conflict_columns=["id"],
+                    )
+
+        # First run: writes succeed but checkpoint commit fails
+        state_store.commit_error = RuntimeError("Checkpoint commit failure")
+        trigger1 = PollTrigger(
+            name="commit_fail",
+            source=source,
+            checkpoint_store=state_store,
+            batch_size=100,
+        )
+
+        try:
+            # The commit error should propagate (not silently swallowed)
+            with pytest.raises(Exception):  # noqa: B017, PT011
+                trigger1.run(timer=object(), handler=handler)
+
+            # Checkpoint was NOT persisted
+            assert "commit_fail" not in state_store.checkpoints
+
+            # But writes DID land in the destination
+            rows = _read_all(dest_url, "processed")
+            assert len(rows) == 3
+
+            # Retry: clear the error, run again — upsert is idempotent
+            state_store.commit_error = None
+            trigger2 = PollTrigger(
+                name="commit_fail",
+                source=source,
+                checkpoint_store=state_store,
+                batch_size=100,
+            )
+            count = trigger2.run(timer=object(), handler=handler)
+            assert count == 3
+
+            # Still exactly 3 rows (no duplicates)
+            rows = _read_all(dest_url, "processed")
+            assert len(rows) == 3
+
+            # Checkpoint is now persisted
+            assert "commit_fail" in state_store.checkpoints
+        finally:
+            source.dispose()
 
     def test_retry_with_upsert_is_idempotent(
         self, source_url: str, dest_url: str
@@ -363,12 +446,12 @@ class TestCheckpointResumeAfterFailure:
         def handler(events: list[RowChange]) -> None:
             with DbWriter(url=dest_url, table="processed") as writer:
                 for event in events:
-                    assert event.after is not None  # noqa: S101  # nosec B101
+                    assert event.after is not None
                     writer.upsert(
                         data={
                             "id": event.pk["id"],
                             "name": event.after["name"],
-                            "cursor_val": event.cursor,
+                            "cursor_val": str(event.cursor),
                         },
                         conflict_columns=["id"],
                     )
@@ -379,19 +462,23 @@ class TestCheckpointResumeAfterFailure:
             checkpoint_store=state_store,
             batch_size=100,
         )
-        count1 = trigger1.run(timer=object(), handler=handler)
-        assert count1 == 3
 
-        state_store.checkpoints.clear()
+        try:
+            count1 = trigger1.run(timer=object(), handler=handler)
+            assert count1 == 3
 
-        trigger2 = PollTrigger(
-            name="idempotent_test",
-            source=source,
-            checkpoint_store=state_store,
-            batch_size=100,
-        )
-        count2 = trigger2.run(timer=object(), handler=handler)
-        assert count2 == 3
+            state_store.checkpoints.clear()
+
+            trigger2 = PollTrigger(
+                name="idempotent_test",
+                source=source,
+                checkpoint_store=state_store,
+                batch_size=100,
+            )
+            count2 = trigger2.run(timer=object(), handler=handler)
+            assert count2 == 3
+        finally:
+            source.dispose()
 
         rows = _read_all(dest_url, "processed")
         assert len(rows) == 3
@@ -422,19 +509,22 @@ class TestUpsertManyBatchIntegration:
         def handler(events: list[RowChange]) -> None:
             rows: list[dict[str, object]] = []
             for event in events:
-                assert event.after is not None  # noqa: S101  # nosec B101
+                assert event.after is not None
                 rows.append(
                     {
                         "id": event.pk["id"],
                         "name": event.after["name"],
-                        "cursor_val": event.cursor,
+                        "cursor_val": str(event.cursor),
                     }
                 )
             if rows:
                 with DbWriter(url=dest_url, table="processed") as writer:
                     writer.upsert_many(rows=rows, conflict_columns=["id"])
 
-        count = trigger.run(timer=object(), handler=handler)
+        try:
+            count = trigger.run(timer=object(), handler=handler)
+        finally:
+            source.dispose()
 
         assert count == 3
         rows = _read_all(dest_url, "processed")
