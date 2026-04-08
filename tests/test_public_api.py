@@ -65,7 +65,7 @@ def test_public_api_exports() -> None:
         "StateStoreError",
         "WriteError",
         "build_log_fields",
-        "db",
+        "DbFunctionApp",
         "default_normalizer",
         "make_normalizer",
     }
@@ -79,6 +79,7 @@ def test_imports_resolve() -> None:
         ConfigurationError,
         CursorSerializationError,
         DbConfig,
+        DbFunctionApp,
         DbReader,
         DbWriter,
         EngineProvider,
@@ -95,7 +96,6 @@ def test_imports_resolve() -> None:
         SqlAlchemySource,
         StateStoreError,
         build_log_fields,
-        db,
         default_normalizer,
         make_normalizer,
         parse_checkpoint_cursor,
@@ -107,6 +107,7 @@ def test_imports_resolve() -> None:
     assert ConfigurationError is not None
     assert CursorSerializationError is not None
     assert DbConfig is not None
+    assert DbFunctionApp is not None
     assert DbReader is not None
     assert DbWriter is not None
     assert EngineProvider is not None
@@ -124,7 +125,6 @@ def test_imports_resolve() -> None:
     assert SqlAlchemySource is not None
     assert StateStoreError is not None
     assert build_log_fields is not None
-    assert db is not None
     assert default_normalizer is not None
     assert make_normalizer is not None
     assert parse_checkpoint_cursor is not None

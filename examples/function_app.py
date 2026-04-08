@@ -1,27 +1,33 @@
 import azure.functions as func
+from azure.storage.blob import ContainerClient
 
-from azure_functions_db import PollTrigger, SqlAlchemySource, BlobCheckpointStore
+from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
+db = DbFunctionApp()
 
-orders_trigger = PollTrigger(
-    name="orders",
-    source=SqlAlchemySource(
-        url="%ORDERS_DB_URL%",
-        table="orders",
-        schema="public",
-        cursor_column="updated_at",
-        pk_columns=["id"],
-    ),
-    checkpoint_store=BlobCheckpointStore(
-        connection="AzureWebJobsStorage",
-        container="db-state",
-    ),
-    batch_size=100,
-    max_batches_per_tick=1,
+source = SqlAlchemySource(
+    url="%ORDERS_DB_URL%",
+    table="orders",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
 )
 
-def handle_orders(events, context) -> None:
+checkpoint_store = BlobCheckpointStore(
+    container_client=ContainerClient.from_connection_string(
+        conn_str="%AzureWebJobsStorage%",
+        container_name="db-state",
+    ),
+    source_fingerprint=source.source_descriptor.fingerprint,
+)
+
+
+@app.function_name(name="orders_poll")
+@app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
+@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
+    del timer
     for event in events:
         print(
             {
@@ -31,8 +37,3 @@ def handle_orders(events, context) -> None:
                 "after": event.after,
             }
         )
-
-@app.function_name(name="orders_poll")
-@app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-def orders_poll(timer: func.TimerRequest) -> None:
-    orders_trigger.run(timer=timer, handler=handle_orders)

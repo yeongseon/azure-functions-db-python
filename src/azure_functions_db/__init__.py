@@ -26,7 +26,7 @@ from .core.types import (
     RowDict,
     SourceDescriptor,
 )
-from .decorator import db
+from .decorator import DbFunctionApp
 from .observability import (
     METRIC_BATCH_SIZE,
     METRIC_BATCHES_TOTAL,
@@ -126,7 +126,7 @@ __all__ = [
     "StateStoreError",
     "WriteError",
     "build_log_fields",
-    "db",
+    "DbFunctionApp",
     "default_normalizer",
     "make_normalizer",
 ]

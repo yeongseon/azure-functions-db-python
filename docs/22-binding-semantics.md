@@ -97,9 +97,11 @@ Unlike triggers, they do not manage state (checkpoint/lease) and operate on a pe
 
 ## 7. Future Extensions
 
-### 7.1 Decorator Sugar (Phase 11+)
-- @db.input(), @db.output() — thin wrappers over DbReader/DbWriter
-- To be added only after the imperative API has stabilized
+### 7.1 Decorator API (DbFunctionApp)
+- `@db.db_input()` and `@db.db_output()` — decorators that inject `DbReader` / `DbWriter` per invocation
+- `@db.db_trigger()` — decorator that wraps `PollTrigger` for change detection
+- Implemented via `DbFunctionApp` class with automatic lifecycle management (create/close per invocation)
+- See [Python API Spec](04-python-api-spec.md) for full usage
 
 ### 7.2 DbSession (if needed)
 - Explicit multi-write transaction context manager

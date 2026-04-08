@@ -127,9 +127,10 @@ class OrderChange(BaseModel):
     status: str
     updated_at: datetime
 
-@db.poll(..., model=OrderChange)
-def handle(events: list[OrderChange], context):
-    ...
+# Future: Pydantic model mapping for db_trigger events
+# @db.db_trigger(arg_name="events", source=source, checkpoint_store=store, model=OrderChange)
+# def handle(events: list[OrderChange], context):
+#     ...
 ```
 
 Note:
