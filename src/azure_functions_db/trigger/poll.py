@@ -5,6 +5,7 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
+from azure_functions_db.observability import MetricsCollector
 from azure_functions_db.trigger.errors import LeaseAcquireError
 from azure_functions_db.trigger.normalizers import EventNormalizer, make_normalizer
 from azure_functions_db.trigger.retry import RetryPolicy
@@ -25,6 +26,7 @@ class PollTrigger:
         max_batches_per_tick: int = 1,
         lease_ttl_seconds: int = 120,
         retry_policy: RetryPolicy | None = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         if batch_size < 1:
             msg = "batch_size must be >= 1"
@@ -43,6 +45,7 @@ class PollTrigger:
         self._max_batches_per_tick = max_batches_per_tick
         self._lease_ttl_seconds = lease_ttl_seconds
         self._retry_policy = retry_policy
+        self._metrics = metrics
 
         if normalizer is not None:
             self._normalizer = normalizer
@@ -87,6 +90,7 @@ class PollTrigger:
             max_batches_per_tick=self._max_batches_per_tick,
             lease_ttl_seconds=self._lease_ttl_seconds,
             retry_policy=self._retry_policy,
+            metrics=self._metrics,
         )
 
         try:

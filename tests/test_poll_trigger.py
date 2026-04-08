@@ -10,6 +10,7 @@ from azure_functions_db.trigger.events import RowChange
 from azure_functions_db.trigger.normalizers import default_normalizer
 from azure_functions_db.trigger.poll import PollTrigger
 from azure_functions_db.trigger.runner import RawRecord
+from tests.test_trigger_runner import RecordingMetricsCollector
 
 
 class FakeStateStore:
@@ -282,6 +283,30 @@ def test_async_handler_callable_object() -> None:
 
     with pytest.raises(TypeError, match="Async handlers are not supported"):
         trigger.run(timer=object(), handler=AsyncCallableHandler())
+
+
+def test_metrics_forwarded() -> None:
+    metrics = RecordingMetricsCollector()
+    trigger = PollTrigger(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+        metrics=metrics,
+    )
+
+    trigger.run(timer=object(), handler=lambda events: None)
+
+    assert metrics.increments  # noqa: S101
+
+
+def test_default_metrics_works() -> None:
+    trigger = PollTrigger(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+    )
+
+    assert trigger.run(timer=object(), handler=lambda events: None) == 1  # noqa: S101
 
 
 def test_batch_size_validation() -> None:

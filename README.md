@@ -152,6 +152,41 @@ def create_order(req: func.HttpRequest) -> func.HttpResponse:
 
 This package does **not** implement a native Azure Functions trigger extension. It uses a poll-based approach on top of the existing timer trigger.
 
+## Observability
+
+`azure-functions-db` exposes structured log helpers plus a lightweight `MetricsCollector` protocol so you can connect your own metrics backend without adding hard dependencies.
+
+```python
+from collections.abc import Mapping
+
+from azure_functions_db import MetricsCollector, PollTrigger
+
+
+class PrintMetricsCollector:
+    def increment(
+        self, name: str, value: float = 1, *, labels: Mapping[str, str] | None = None
+    ) -> None:
+        print("increment", name, value, labels)
+
+    def observe(
+        self, name: str, value: float, *, labels: Mapping[str, str] | None = None
+    ) -> None:
+        print("observe", name, value, labels)
+
+    def set_gauge(
+        self, name: str, value: float, *, labels: Mapping[str, str] | None = None
+    ) -> None:
+        print("gauge", name, value, labels)
+
+
+trigger = PollTrigger(
+    name="orders",
+    source=source,
+    checkpoint_store=checkpoint_store,
+    metrics=PrintMetricsCollector(),
+)
+```
+
 ## Key Design Decisions
 
 - **Pseudo trigger** — timer-based polling instead of native C# extension ([ADR-001](docs/16-ADR-001-pseudo-trigger-over-native.md))

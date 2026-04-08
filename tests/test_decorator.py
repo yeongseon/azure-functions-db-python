@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from azure_functions_db import NoOpCollector
 from azure_functions_db.decorator import db
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
@@ -153,3 +154,14 @@ def test_decorator_preserves_wrapped() -> None:
         del events
 
     assert getattr(handler, "__wrapped__", None) is not None  # noqa: S101
+
+
+def test_db_poll_accepts_metrics() -> None:
+    decorated = db.poll(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+        metrics=NoOpCollector(),
+    )(lambda events: None)
+
+    assert decorated(object()) == 1  # noqa: S101
