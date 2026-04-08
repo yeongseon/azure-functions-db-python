@@ -6,6 +6,7 @@ import logging
 
 import pytest
 
+from azure_functions_db.core.errors import CursorSerializationError
 from azure_functions_db.core.types import CursorValue, RawRecord, SourceDescriptor
 from azure_functions_db.observability import (
     METRIC_BATCHES_TOTAL,
@@ -982,5 +983,5 @@ class TestPollRunner:
             handler=lambda events: None,
         )
 
-        with pytest.raises(SerializationError, match="Unsupported cursor type"):
+        with pytest.raises(CursorSerializationError, match="Unsupported cursor type"):
             runner.tick()

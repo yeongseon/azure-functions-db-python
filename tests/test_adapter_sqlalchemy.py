@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, insert
 
 from azure_functions_db.adapter.sqlalchemy import SqlAlchemySource, _resolve_env_vars
+from azure_functions_db.core.errors import ConfigurationError
 from azure_functions_db.core.types import SourceDescriptor
 from azure_functions_db.trigger.errors import FetchError, SourceConfigurationError
 from azure_functions_db.trigger.runner import SourceAdapter
@@ -154,7 +155,7 @@ class TestSqlAlchemySourceConstructor:
             assert src.source_descriptor.kind == "sqlalchemy"
 
     def test_env_var_missing_raises(self) -> None:
-        with pytest.raises(SourceConfigurationError, match="not set"):
+        with pytest.raises(ConfigurationError, match="not set"):
             _make_source(url="%NONEXISTENT_VAR_12345%")
 
     def test_env_var_partial_pattern_not_resolved(self) -> None:
@@ -217,7 +218,7 @@ class TestResolveEnvVars:
             assert _resolve_env_vars("%MY_URL%") == "postgres://host/db"
 
     def test_missing_env_var_raises(self) -> None:
-        with pytest.raises(SourceConfigurationError, match="not set"):
+        with pytest.raises(ConfigurationError, match="not set"):
             _resolve_env_vars("%MISSING_VAR_XYZ%")
 
     def test_partial_pattern_not_resolved(self) -> None:
