@@ -7,6 +7,7 @@ import pytest
 from azure_functions_db.core.types import CursorValue, SourceDescriptor
 from azure_functions_db.trigger.errors import FetchError, HandlerError
 from azure_functions_db.trigger.events import RowChange
+from azure_functions_db.trigger.normalizers import default_normalizer
 from azure_functions_db.trigger.poll import PollTrigger
 from azure_functions_db.trigger.runner import RawRecord
 
@@ -238,22 +239,49 @@ def test_run_uses_make_normalizer_when_source_has_cursor_pk() -> None:
     assert handled[0][0].pk == {"id": 1}  # noqa: S101
 
 
-def test_run_uses_default_normalizer_when_source_lacks_cursor_pk() -> None:
+def test_source_without_metadata_raises_valueerror() -> None:
+    with pytest.raises(ValueError, match="Cannot auto-detect normalizer"):
+        PollTrigger(
+            name="test_poller",
+            source=FakeSourceAdapterNoCursorPk(batches=[]),
+            checkpoint_store=FakeStateStore(),
+        )
+
+
+def test_explicit_normalizer_used() -> None:
+    calls: list[tuple[RawRecord, SourceDescriptor]] = []
+
+    def explicit_normalizer(record: RawRecord, descriptor: SourceDescriptor) -> RowChange:
+        calls.append((record, descriptor))
+        return default_normalizer(record, descriptor)
+
     trigger = PollTrigger(
         name="test_poller",
         source=FakeSourceAdapterNoCursorPk(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
+        normalizer=explicit_normalizer,
     )
-    handled: list[list[RowChange]] = []
 
-    def handler(events: list[RowChange]) -> None:
-        handled.append(events)
-
-    count = trigger.run(timer=object(), handler=handler)
+    count = trigger.run(timer=object(), handler=lambda events: None)
 
     assert count == 1  # noqa: S101
-    assert handled[0][0].cursor is None  # noqa: S101
-    assert handled[0][0].pk == {}  # noqa: S101
+    assert len(calls) == 1  # noqa: S101
+    assert calls[0][0] == {"id": 1, "updated_at": 100}  # noqa: S101
+
+
+def test_async_handler_callable_object() -> None:
+    trigger = PollTrigger(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[]),
+        checkpoint_store=FakeStateStore(),
+    )
+
+    class AsyncCallableHandler:
+        async def __call__(self, events: list[RowChange]) -> None:
+            del events
+
+    with pytest.raises(TypeError, match="Async handlers are not supported"):
+        trigger.run(timer=object(), handler=AsyncCallableHandler())
 
 
 def test_batch_size_validation() -> None:

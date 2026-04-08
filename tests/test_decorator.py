@@ -5,6 +5,7 @@ import pytest
 from azure_functions_db.decorator import db
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
+from azure_functions_db.trigger.normalizers import default_normalizer
 from tests.test_poll_trigger import FakeSourceAdapter, FakeStateStore
 
 
@@ -109,3 +110,46 @@ def test_db_poll_propagates_other_errors() -> None:
 
     with pytest.raises(FetchError, match="Failed to fetch"):
         decorated(object())
+
+
+def test_db_poll_accepts_explicit_normalizer() -> None:
+    handled: list[list[RowChange]] = []
+
+    def handler(events: list[RowChange]) -> None:
+        handled.append(events)
+
+    decorated = db.poll(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+        normalizer=default_normalizer,
+    )(handler)
+
+    decorated(object())
+
+    assert handled[0][0].cursor is None  # noqa: S101
+    assert handled[0][0].pk == {}  # noqa: S101
+
+
+def test_decorator_preserves_function_name() -> None:
+    @db.poll(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[]),
+        checkpoint_store=FakeStateStore(),
+    )
+    def handler(events: list[RowChange]) -> None:
+        del events
+
+    assert handler.__name__ == "handler"  # noqa: S101
+
+
+def test_decorator_preserves_wrapped() -> None:
+    @db.poll(
+        name="test_poller",
+        source=FakeSourceAdapter(batches=[]),
+        checkpoint_store=FakeStateStore(),
+    )
+    def handler(events: list[RowChange]) -> None:
+        del events
+
+    assert getattr(handler, "__wrapped__", None) is not None  # noqa: S101

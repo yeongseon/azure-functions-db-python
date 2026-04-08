@@ -47,7 +47,7 @@ def handle_orders(events, context):
 
 ```python
 import azure.functions as func
-from azure_functions_db import db
+from azure_functions_db import BlobCheckpointStore, SqlAlchemySource, db
 
 app = func.FunctionApp()
 
@@ -55,12 +55,17 @@ app = func.FunctionApp()
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
 @db.poll(
     name="orders",
-    url="%ORDERS_DB_URL%",
-    table="orders",
-    schema="public",
-    cursor_column="updated_at",
-    pk_columns=["id"],
-    checkpoint_store="blob://AzureWebJobsStorage/db-state",
+    source=SqlAlchemySource(
+        url="%ORDERS_DB_URL%",
+        table="orders",
+        schema="public",
+        cursor_column="updated_at",
+        pk_columns=["id"],
+    ),
+    checkpoint_store=BlobCheckpointStore(
+        connection="AzureWebJobsStorage",
+        container="db-state",
+    ),
     batch_size=100,
 )
 def handle_orders(events, context):

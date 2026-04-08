@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from azure_functions_db.trigger.errors import LeaseAcquireError
-from azure_functions_db.trigger.normalizers import default_normalizer, make_normalizer
+from azure_functions_db.trigger.normalizers import EventNormalizer, make_normalizer
 from azure_functions_db.trigger.retry import RetryPolicy
 from azure_functions_db.trigger.runner import PollRunner, SourceAdapter, StateStore
 
@@ -20,6 +20,7 @@ class PollTrigger:
         name: str,
         source: SourceAdapter,
         checkpoint_store: StateStore,
+        normalizer: EventNormalizer | None = None,
         batch_size: int = 100,
         max_batches_per_tick: int = 1,
         lease_ttl_seconds: int = 120,
@@ -43,15 +44,24 @@ class PollTrigger:
         self._lease_ttl_seconds = lease_ttl_seconds
         self._retry_policy = retry_policy
 
-        cursor_column = getattr(source, "cursor_column", None)
-        pk_columns = getattr(source, "pk_columns", None)
-        if isinstance(cursor_column, str) and isinstance(pk_columns, list):
-            self._normalizer = make_normalizer(
-                cursor_column=cursor_column,
-                pk_columns=pk_columns,
-            )
+        if normalizer is not None:
+            self._normalizer = normalizer
         else:
-            self._normalizer = default_normalizer
+            cursor_column = getattr(source, "cursor_column", None)
+            pk_columns = getattr(source, "pk_columns", None)
+            if isinstance(cursor_column, str) and isinstance(pk_columns, list):
+                self._normalizer = make_normalizer(
+                    cursor_column=cursor_column,
+                    pk_columns=pk_columns,
+                )
+            else:
+                msg = (
+                    "Source does not expose 'cursor_column' and 'pk_columns' "
+                    "attributes. Cannot auto-detect normalizer. Use a source that "
+                    "exposes cursor metadata (e.g., SqlAlchemySource) or pass an "
+                    "explicit normalizer."
+                )
+                raise ValueError(msg)
 
     @property
     def name(self) -> str:
@@ -60,7 +70,10 @@ class PollTrigger:
     def run(self, *, timer: object, handler: Callable[..., Any]) -> int:
         del timer
 
-        if asyncio.iscoroutinefunction(handler):
+        handler_call = getattr(handler, "__call__", None)
+        if asyncio.iscoroutinefunction(handler) or asyncio.iscoroutinefunction(
+            handler_call
+        ):
             msg = "Async handlers are not supported. Pass a synchronous function instead."
             raise TypeError(msg)
 
