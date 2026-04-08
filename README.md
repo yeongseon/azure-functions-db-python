@@ -9,7 +9,7 @@
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Unified database integration for **Azure Functions Python v2** — change detection (trigger via polling), input binding (DbReader), and output binding (DbWriter) in a single package using SQLAlchemy.
+Database integration for **Azure Functions Python v2** — poll-based change detection trigger using SQLAlchemy. Input binding (DbReader) and output binding (DbWriter) are planned.
 
 ---
 
@@ -28,10 +28,10 @@ Azure Functions Python v2 has no built-in database integration story:
 ## What it does
 
 - **Pseudo DB trigger** — poll-based change detection with checkpoint, lease, and at-least-once delivery
-- **DbReader** — input binding for reading rows from any supported database
-- **DbWriter** — output binding for writing rows with automatic batching
 - **Multi-DB support** — PostgreSQL, MySQL, and SQL Server via SQLAlchemy dialects
 - **Single `pip install`** — one package with optional extras for each database driver
+- **DbReader** — input binding for reading rows *(planned)*
+- **DbWriter** — output binding for writing rows with automatic batching *(planned)*
 
 ## Installation
 
@@ -99,40 +99,7 @@ def orders_poll(timer: func.TimerRequest) -> None:
     trigger.run(timer=timer, handler=handle_orders)
 ```
 
-### Input Binding (DbReader)
-
-```python
-from azure_functions_db import DbReader
-
-reader = DbReader(
-    connection_string="postgresql+psycopg://user:pass@host/db",
-    table="products",
-)
-
-
-@app.route(route="products/{id}", methods=["GET"])
-def get_product(req: func.HttpRequest) -> func.HttpResponse:
-    product = reader.read(id=req.route_params["id"])
-    return func.HttpResponse(json.dumps(product), mimetype="application/json")
-```
-
-### Output Binding (DbWriter)
-
-```python
-from azure_functions_db import DbWriter
-
-writer = DbWriter(
-    connection_string="postgresql+psycopg://user:pass@host/db",
-    table="audit_logs",
-)
-
-
-@app.route(route="orders", methods=["POST"])
-def create_order(req: func.HttpRequest) -> func.HttpResponse:
-    order = req.get_json()
-    writer.write({"action": "order_created", "payload": order})
-    return func.HttpResponse(status_code=201)
-```
+> **Coming soon**: Input binding (`DbReader`) and output binding (`DbWriter`) are planned for future releases. See the [roadmap](docs/21-dev-checklist.md) for details.
 
 ## Supported Databases
 
@@ -145,10 +112,10 @@ def create_order(req: func.HttpRequest) -> func.HttpResponse:
 ## Scope
 
 - Azure Functions Python **v2 programming model**
-- Timer-triggered functions for change detection
-- HTTP/Queue/Event-triggered functions for read/write bindings
+- Timer-triggered functions for poll-based change detection
 - SQLAlchemy 2.0+ for database abstraction
 - Checkpoint storage via Azure Blob Storage
+- Read/write bindings via HTTP/Queue/Event triggers *(planned)*
 
 This package does **not** implement a native Azure Functions trigger extension. It uses a poll-based approach on top of the existing timer trigger.
 
@@ -212,7 +179,7 @@ Part of the **Azure Functions Python DX Toolkit**:
 |---------|------|
 | [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI spec and Swagger UI |
 | [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | Request and response validation |
-| **azure-functions-db** | Database trigger and bindings |
+| **azure-functions-db** | Database trigger (bindings planned) |
 | [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | Structured logging and observability |
 | [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | Pre-deploy diagnostic CLI |
 | [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | Project scaffolding |

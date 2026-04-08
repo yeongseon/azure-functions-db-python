@@ -1,6 +1,6 @@
 [project]
 name = "azure-functions-db"
-description = "Pseudo DB trigger framework for Azure Functions Python"
+description = "SQLAlchemy-based database trigger integration for Azure Functions Python v2"
 keywords = ["azure-functions", "azure", "python", "v2", "database", "trigger", "polling", "sqlalchemy", "serverless"]
 authors = [{ name = "Yeongseon Choe", email = "yeongseon.choe@gmail.com" }]
 license = { text = "MIT" }
