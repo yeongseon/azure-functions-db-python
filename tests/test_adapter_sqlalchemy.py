@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 import os
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -14,9 +14,9 @@ from azure_functions_db.trigger.errors import FetchError, SourceConfigurationErr
 from azure_functions_db.trigger.runner import SourceAdapter
 
 
-@pytest.fixture()
-def orders_engine() -> Generator[Any, None, None]:
-    engine = create_engine("sqlite:///:memory:")
+def _create_orders_db(db_path: Path) -> str:
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
     metadata = MetaData()
     Table(
         "orders",
@@ -37,13 +37,13 @@ def orders_engine() -> Generator[Any, None, None]:
                 {"id": 5, "name": "Eve", "updated_at": 300},
             ],
         )
-    yield engine
     engine.dispose()
+    return url
 
 
-@pytest.fixture()
-def composite_pk_engine() -> Generator[Any, None, None]:
-    engine = create_engine("sqlite:///:memory:")
+def _create_order_items_db(db_path: Path) -> str:
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
     metadata = MetaData()
     Table(
         "order_items",
@@ -65,8 +65,18 @@ def composite_pk_engine() -> Generator[Any, None, None]:
                 {"order_id": 3, "item_id": 1, "updated_at": 300, "qty": 4},
             ],
         )
-    yield engine
     engine.dispose()
+    return url
+
+
+@pytest.fixture()
+def orders_url(tmp_path: Path) -> str:
+    return _create_orders_db(tmp_path / "orders.db")
+
+
+@pytest.fixture()
+def composite_pk_url(tmp_path: Path) -> str:
+    return _create_order_items_db(tmp_path / "order_items.db")
 
 
 def _make_source(
@@ -83,7 +93,7 @@ def _make_source(
         table=table,
         query=query,
         cursor_column=cursor_column,
-        pk_columns=pk_columns or ["id"],
+        pk_columns=["id"] if pk_columns is None else pk_columns,
         **kwargs,
     )
 
@@ -129,7 +139,7 @@ class TestSqlAlchemySourceConstructor:
 
     def test_kw_only(self) -> None:
         with pytest.raises(TypeError):
-            SqlAlchemySource(  # type: ignore[misc]
+            SqlAlchemySource(
                 "sqlite:///:memory:",
                 "orders",
                 None,
@@ -200,52 +210,45 @@ class TestResolveEnvVars:
 
 
 class TestSqlAlchemySourceFetch:
-    def test_fetch_all_no_cursor(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_all_no_cursor(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=None, batch_size=10)
         assert len(rows) == 5
         assert rows[0]["name"] == "Alice"
         assert rows[-1]["name"] == "Eve"
 
-    def test_fetch_with_batch_size(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_with_batch_size(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=None, batch_size=3)
         assert len(rows) == 3
 
-    def test_fetch_with_cursor_single_pk(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_with_cursor_single_pk(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=(100, 2), batch_size=10)
         assert len(rows) == 3
         assert rows[0]["name"] == "Charlie"
 
-    def test_fetch_returns_ordered_by_cursor_then_pk(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_returns_ordered_by_cursor_then_pk(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=None, batch_size=10)
         updated_ats = [(r["updated_at"], r["id"]) for r in rows]
         assert updated_ats == sorted(updated_ats)
 
-    def test_fetch_empty_when_past_end(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_empty_when_past_end(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=(300, 5), batch_size=10)
         assert len(rows) == 0
 
-    def test_fetch_cursor_skips_equal_rows(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_cursor_skips_equal_rows(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=(100, 1), batch_size=10)
         ids = [r["id"] for r in rows]
         assert 1 not in ids
         assert 2 in ids
 
-    def test_fetch_composite_pk_no_cursor(self, composite_pk_engine: Any) -> None:
-        url = str(composite_pk_engine.url)
+    def test_fetch_composite_pk_no_cursor(self, composite_pk_url: str) -> None:
         src = SqlAlchemySource(
-            url=url,
+            url=composite_pk_url,
             table="order_items",
             cursor_column="updated_at",
             pk_columns=["order_id", "item_id"],
@@ -253,10 +256,9 @@ class TestSqlAlchemySourceFetch:
         rows = src.fetch(cursor=None, batch_size=10)
         assert len(rows) == 5
 
-    def test_fetch_composite_pk_with_cursor(self, composite_pk_engine: Any) -> None:
-        url = str(composite_pk_engine.url)
+    def test_fetch_composite_pk_with_cursor(self, composite_pk_url: str) -> None:
         src = SqlAlchemySource(
-            url=url,
+            url=composite_pk_url,
             table="order_items",
             cursor_column="updated_at",
             pk_columns=["order_id", "item_id"],
@@ -267,24 +269,21 @@ class TestSqlAlchemySourceFetch:
         assert first["order_id"] == 1
         assert first["item_id"] == 2
 
-    def test_fetch_cursor_wrong_length_raises(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_cursor_wrong_length_raises(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         with pytest.raises(FetchError, match="expected 2"):
             src.fetch(cursor=(1, 2, 3), batch_size=10)
 
-    def test_fetch_with_where_clause(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url, where="name != 'Eve'")
+    def test_fetch_with_where_clause(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url, where="name != 'Eve'")
         rows = src.fetch(cursor=None, batch_size=10)
         names = [r["name"] for r in rows]
         assert "Eve" not in names
         assert len(rows) == 4
 
-    def test_fetch_query_mode(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
+    def test_fetch_query_mode(self, orders_url: str) -> None:
         src = SqlAlchemySource(
-            url=url,
+            url=orders_url,
             table=None,
             query="SELECT id, name, updated_at FROM orders",
             cursor_column="updated_at",
@@ -293,10 +292,9 @@ class TestSqlAlchemySourceFetch:
         rows = src.fetch(cursor=None, batch_size=10)
         assert len(rows) == 5
 
-    def test_fetch_query_mode_with_cursor(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
+    def test_fetch_query_mode_with_cursor(self, orders_url: str) -> None:
         src = SqlAlchemySource(
-            url=url,
+            url=orders_url,
             table=None,
             query="SELECT id, name, updated_at FROM orders",
             cursor_column="updated_at",
@@ -310,22 +308,19 @@ class TestSqlAlchemySourceFetch:
         src = _make_source()
         assert not src._initialized
 
-    def test_fetch_triggers_initialization(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_triggers_initialization(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         assert not src._initialized
         src.fetch(cursor=None, batch_size=1)
         assert src._initialized
 
-    def test_fetch_scalar_cursor_single_pk(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_fetch_scalar_cursor_single_pk(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         rows = src.fetch(cursor=(200, 3), batch_size=10)
         assert len(rows) == 2
 
-    def test_fetch_missing_column_raises(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url, cursor_column="nonexistent")
+    def test_fetch_missing_column_raises(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url, cursor_column="nonexistent")
         with pytest.raises(SourceConfigurationError, match="Columns not found"):
             src.fetch(cursor=None, batch_size=10)
 
@@ -344,9 +339,8 @@ class TestSqlAlchemySourceProtocol:
 
 
 class TestSqlAlchemySourceDispose:
-    def test_dispose_resets_state(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_dispose_resets_state(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         src.fetch(cursor=None, batch_size=1)
         assert src._initialized
         src.dispose()
@@ -359,9 +353,8 @@ class TestSqlAlchemySourceDispose:
         src.dispose()
         assert not src._initialized
 
-    def test_can_fetch_after_dispose(self, orders_engine: Any) -> None:
-        url = str(orders_engine.url)
-        src = _make_source(url=url)
+    def test_can_fetch_after_dispose(self, orders_url: str) -> None:
+        src = _make_source(url=orders_url)
         src.fetch(cursor=None, batch_size=1)
         src.dispose()
         rows = src.fetch(cursor=None, batch_size=10)
