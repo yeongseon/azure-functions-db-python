@@ -63,8 +63,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install hatch
-          make install
-          pip install sqlalchemy
+          pip install -e ".[all]"
 
       - name: Run catch-up benchmark
         run: python benchmarks/bench_catchup.py
