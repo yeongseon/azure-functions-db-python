@@ -19,7 +19,6 @@ Required fields:
 - invocation_id
 - batch_id
 - source
-- schedule_time
 - fetched_count
 - batch_size
 - committed
@@ -33,6 +32,9 @@ Required fields:
 - lag_seconds
 - error_type
 - result
+
+Optional / reserved fields:
+- schedule_time — reserved for future use and not populated in the current implementation
 
 Stable event names:
 - `tick_start`

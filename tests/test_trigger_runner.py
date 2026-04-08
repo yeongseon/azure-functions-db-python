@@ -14,6 +14,7 @@ from azure_functions_db.observability import (
     METRIC_FAILURES_TOTAL,
     METRIC_FETCH_DURATION_MS,
     METRIC_HANDLER_DURATION_MS,
+    METRIC_LAG_SECONDS,
     METRIC_LAST_SUCCESS_TIMESTAMP,
     NoOpCollector,
 )
@@ -115,6 +116,22 @@ class RecordingMetricsCollector:
         self, name: str, value: float, *, labels: Mapping[str, str] | None = None
     ) -> None:
         self.gauges.append((name, value, labels))
+
+
+class IncrementFailingCollector(RecordingMetricsCollector):
+    def increment(
+        self, name: str, value: float = 1, *, labels: Mapping[str, str] | None = None
+    ) -> None:
+        msg = "increment failed"
+        raise RuntimeError(msg)
+
+
+class GaugeFailingCollector(RecordingMetricsCollector):
+    def set_gauge(
+        self, name: str, value: float, *, labels: Mapping[str, str] | None = None
+    ) -> None:
+        msg = "gauge failed"
+        raise RuntimeError(msg)
 
 
 def _default_normalizer(record: RawRecord, source: SourceDescriptor) -> RowChange:
@@ -312,12 +329,20 @@ class TestPollRunner:
         assert (
             METRIC_FAILURES_TOTAL,
             1,
-            {"poller_name": "test_poller", "error_type": "ValueError"},
+            {
+                "poller_name": "test_poller",
+                "error_type": "ValueError",
+                "source": "test_table",
+            },
         ) in metrics.increments  # noqa: S101
         assert (
             METRIC_BATCHES_TOTAL,
             1,
-            {"poller_name": "test_poller", "result": "failure"},
+            {
+                "poller_name": "test_poller",
+                "result": "failure",
+                "source": "test_table",
+            },
         ) in metrics.increments  # noqa: S101
 
     def test_fetch_failure_emits_failure_counter(self) -> None:
@@ -340,8 +365,122 @@ class TestPollRunner:
         assert (
             METRIC_FAILURES_TOTAL,
             1,
-            {"poller_name": "test_poller", "error_type": "RuntimeError"},
+            {
+                "poller_name": "test_poller",
+                "error_type": "RuntimeError",
+                "source": "test_table",
+            },
         ) in metrics.increments  # noqa: S101
+
+    def test_collector_exception_does_not_break_tick(self) -> None:
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=FakeStateStore(),
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+            metrics=IncrementFailingCollector(),
+        )
+
+        assert runner.tick() == 1
+
+    def test_batch_complete_log_checkpoint_before_is_old(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        store = FakeStateStore()
+        store.checkpoints["test_poller"] = {
+            "cursor": 50,
+            "batch_id": "prior-batch",
+        }
+        caplog.set_level(logging.INFO)
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+        )
+
+        runner.tick()
+
+        batch_complete = next(
+            record
+            for record in caplog.records
+            if getattr(record, "event", None) == "batch_complete"
+        )
+        batch_id = getattr(batch_complete, "batch_id")
+        checkpoint_before = getattr(batch_complete, "checkpoint_before")
+        checkpoint_after = getattr(batch_complete, "checkpoint_after")
+
+        assert checkpoint_before == {
+            "cursor": 50,
+            "batch_id": "prior-batch",
+        }
+        assert checkpoint_after == {
+            "cursor": 100,
+            "batch_id": batch_id,
+        }
+
+    def test_lag_negative_clamped_to_zero(self) -> None:
+        future_cursor = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+        records: list[RawRecord] = [{"id": 1, "updated_at": future_cursor}]
+        metrics = RecordingMetricsCollector()
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=FakeStateStore(),
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+            metrics=metrics,
+        )
+
+        runner.tick()
+
+        lag_gauges = [
+            gauge for gauge in metrics.gauges if gauge[0] == METRIC_LAG_SECONDS
+        ]
+        assert len(lag_gauges) == 1  # noqa: S101
+        assert lag_gauges[0][1] == 0.0  # noqa: S101
+
+    def test_lag_naive_datetime_cursor_skipped(self) -> None:
+        naive_cursor = datetime.now().replace(microsecond=0).isoformat()
+        records: list[RawRecord] = [{"id": 1, "updated_at": naive_cursor}]
+        metrics = RecordingMetricsCollector()
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=FakeStateStore(),
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+            metrics=metrics,
+        )
+
+        runner.tick()
+
+        assert all(
+            name != METRIC_LAG_SECONDS for name, _, _ in metrics.gauges
+        )  # noqa: S101
+
+    def test_collector_exception_on_gauge_does_not_break_tick(self) -> None:
+        lagging_cursor = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
+        records: list[RawRecord] = [{"id": 1, "updated_at": lagging_cursor}]
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=FakeStateStore(),
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+            metrics=GaugeFailingCollector(),
+        )
+
+        assert runner.tick() == 1
 
     def test_empty_batch_no_batch_metrics(self) -> None:
         metrics = RecordingMetricsCollector()

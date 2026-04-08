@@ -128,6 +128,16 @@ class PollRunner:
         self._metrics = metrics or NoOpCollector()
         self._handler_arity = _detect_handler_arity(handler)
 
+    def _safe_emit(self, fn: Callable[[], None]) -> None:
+        try:
+            fn()
+        except Exception:
+            logger.debug(
+                "Metrics emission failed for poller '%s'",
+                self._name,
+                exc_info=True,
+            )
+
     @property
     def name(self) -> str:
         return self._name
@@ -137,14 +147,39 @@ class PollRunner:
         tick_started_at = datetime.now(UTC)
         tick_started_monotonic = time.monotonic()
 
-        def emit_failure_metrics(exc: Exception) -> None:
-            self._metrics.increment(
-                METRIC_FAILURES_TOTAL,
-                labels={"poller_name": self._name, "error_type": type(exc).__name__},
+        def emit_failure_metrics(exc: Exception, *, source: str | None = None) -> None:
+            labels: dict[str, str] = {
+                "poller_name": self._name,
+                "error_type": type(exc).__name__,
+            }
+            if source is not None:
+                labels["source"] = source
+            self._safe_emit(
+                lambda: self._metrics.increment(
+                    METRIC_FAILURES_TOTAL,
+                    labels=labels,
+                )
             )
-            self._metrics.increment(
-                METRIC_BATCHES_TOTAL,
-                labels={"poller_name": self._name, "result": "failure"},
+            failure_labels: dict[str, str] = {
+                "poller_name": self._name,
+                "result": "failure",
+            }
+            if source is not None:
+                failure_labels["source"] = source
+            self._safe_emit(
+                lambda: self._metrics.increment(
+                    METRIC_BATCHES_TOTAL,
+                    labels=failure_labels,
+                )
+            )
+
+        def emit_lag_metric(value: float) -> None:
+            self._safe_emit(
+                lambda: self._metrics.set_gauge(
+                    METRIC_LAG_SECONDS,
+                    value,
+                    labels=base_labels,
+                )
             )
 
         try:
@@ -252,7 +287,7 @@ class PollRunner:
                             result="failure",
                         ),
                     )
-                    emit_failure_metrics(exc)
+                    emit_failure_metrics(exc, source=descriptor.name)
                     raise FetchError(
                         f"Failed to fetch from source for poller '{self._name}'"
                     ) from exc
@@ -297,7 +332,7 @@ class PollRunner:
                             result="failure",
                         ),
                     )
-                    emit_failure_metrics(exc)
+                    emit_failure_metrics(exc, source=descriptor.name)
                     raise SerializationError(
                         f"Failed to normalize records for poller '{self._name}'"
                     ) from exc
@@ -350,7 +385,7 @@ class PollRunner:
                             result="failure",
                         ),
                     )
-                    emit_failure_metrics(exc)
+                    emit_failure_metrics(exc, source=descriptor.name)
                     raise HandlerError(
                         f"Handler failed for poller '{self._name}' batch '{batch_id}'"
                     ) from exc
@@ -386,7 +421,10 @@ class PollRunner:
                             result="failure",
                         ),
                     )
-                    emit_failure_metrics(LostLeaseError("Lost lease during commit"))
+                    emit_failure_metrics(
+                        LostLeaseError("Lost lease during commit"),
+                        source=descriptor.name,
+                    )
                     raise
                 except Exception as exc:
                     logger.exception(
@@ -411,40 +449,52 @@ class PollRunner:
                             result="failure",
                         ),
                     )
-                    emit_failure_metrics(exc)
+                    emit_failure_metrics(exc, source=descriptor.name)
                     raise CommitError(
                         f"Checkpoint commit failed for poller '{self._name}'"
                         f" batch '{batch_id}'"
                     ) from exc
 
-                self._metrics.increment(
-                    METRIC_BATCHES_TOTAL,
-                    labels={**base_labels, "result": "success"},
+                self._safe_emit(
+                    lambda: self._metrics.increment(
+                        METRIC_BATCHES_TOTAL,
+                        labels={**base_labels, "result": "success"},
+                    )
                 )
-                self._metrics.increment(
-                    METRIC_EVENTS_TOTAL,
-                    value=float(len(events)),
-                    labels=base_labels,
+                self._safe_emit(
+                    lambda: self._metrics.increment(
+                        METRIC_EVENTS_TOTAL,
+                        value=float(len(events)),
+                        labels=base_labels,
+                    )
                 )
-                self._metrics.observe(
-                    METRIC_BATCH_SIZE,
-                    float(len(events)),
-                    labels=base_labels,
+                self._safe_emit(
+                    lambda: self._metrics.observe(
+                        METRIC_BATCH_SIZE,
+                        float(len(events)),
+                        labels=base_labels,
+                    )
                 )
-                self._metrics.observe(
-                    METRIC_FETCH_DURATION_MS,
-                    fetch_duration_ms,
-                    labels=base_labels,
+                self._safe_emit(
+                    lambda: self._metrics.observe(
+                        METRIC_FETCH_DURATION_MS,
+                        fetch_duration_ms,
+                        labels=base_labels,
+                    )
                 )
-                self._metrics.observe(
-                    METRIC_HANDLER_DURATION_MS,
-                    handler_duration_ms,
-                    labels=base_labels,
+                self._safe_emit(
+                    lambda: self._metrics.observe(
+                        METRIC_HANDLER_DURATION_MS,
+                        handler_duration_ms,
+                        labels=base_labels,
+                    )
                 )
-                self._metrics.observe(
-                    METRIC_COMMIT_DURATION_MS,
-                    commit_duration_ms,
-                    labels=base_labels,
+                self._safe_emit(
+                    lambda: self._metrics.observe(
+                        METRIC_COMMIT_DURATION_MS,
+                        commit_duration_ms,
+                        labels=base_labels,
+                    )
                 )
 
                 lag_seconds: float | None = None
@@ -453,14 +503,11 @@ class PollRunner:
                     try:
                         cursor_dt = datetime.fromisoformat(cursor_for_lag)
                         if cursor_dt.tzinfo is not None:
-                            lag_seconds = (
-                                datetime.now(UTC) - cursor_dt
-                            ).total_seconds()
-                            self._metrics.set_gauge(
-                                METRIC_LAG_SECONDS,
-                                lag_seconds,
-                                labels=base_labels,
+                            lag_seconds = max(
+                                0.0,
+                                (datetime.now(UTC) - cursor_dt).total_seconds(),
                             )
+                            emit_lag_metric(lag_seconds)
                     except (ValueError, TypeError):
                         pass
                 elif isinstance(cursor_for_lag, tuple) and cursor_for_lag:
@@ -469,17 +516,15 @@ class PollRunner:
                         try:
                             cursor_dt = datetime.fromisoformat(first_part)
                             if cursor_dt.tzinfo is not None:
-                                lag_seconds = (
-                                    datetime.now(UTC) - cursor_dt
-                                ).total_seconds()
-                                self._metrics.set_gauge(
-                                    METRIC_LAG_SECONDS,
-                                    lag_seconds,
-                                    labels=base_labels,
+                                lag_seconds = max(
+                                    0.0,
+                                    (datetime.now(UTC) - cursor_dt).total_seconds(),
                                 )
+                                emit_lag_metric(lag_seconds)
                         except (ValueError, TypeError):
                             pass
 
+                old_checkpoint = checkpoint
                 checkpoint = new_checkpoint
                 cursor = last_event.cursor
                 total_processed += len(events)
@@ -497,7 +542,7 @@ class PollRunner:
                         source=descriptor.name,
                         fetched_count=len(events),
                         committed=True,
-                        checkpoint_before=checkpoint,
+                        checkpoint_before=old_checkpoint,
                         checkpoint_after=new_checkpoint,
                         lease_owner=lease_id,
                         fetch_duration_ms=fetch_duration_ms,
@@ -511,10 +556,12 @@ class PollRunner:
             tick_duration_ms = round(
                 (time.monotonic() - tick_started_monotonic) * 1000, 2
             )
-            self._metrics.set_gauge(
-                METRIC_LAST_SUCCESS_TIMESTAMP,
-                datetime.now(UTC).timestamp(),
-                labels={"poller_name": self._name},
+            self._safe_emit(
+                lambda: self._metrics.set_gauge(
+                    METRIC_LAST_SUCCESS_TIMESTAMP,
+                    datetime.now(UTC).timestamp(),
+                    labels={"poller_name": self._name},
+                )
             )
             logger.info(
                 "Tick completed for poller '%s': %d events total",
