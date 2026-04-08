@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 import functools
 import inspect
 import logging
@@ -67,7 +67,9 @@ class DbOut:
 
     def set(
         self,
-        data: dict[str, object] | list[dict[str, object]] | BaseModel | list[BaseModel] | None,
+        data: (
+            dict[str, object] | Sequence[dict[str, object]] | BaseModel | Sequence[BaseModel] | None
+        ),
     ) -> None:
         """Write *data* to the configured table.
 
@@ -139,7 +141,9 @@ class _AsyncDbOutProxy:
 
     async def set(
         self,
-        data: dict[str, object] | list[dict[str, object]] | BaseModel | list[BaseModel] | None,
+        data: (
+            dict[str, object] | Sequence[dict[str, object]] | BaseModel | Sequence[BaseModel] | None
+        ),
     ) -> None:
         """Async version of :meth:`DbOut.set`."""
         await asyncio.to_thread(self._out.set, data)

@@ -650,7 +650,7 @@ def test_output_accepts_mixed_list(tmp_path: Path) -> None:
 
     @DbBindings().output("out", url=url, table="processed_orders")
     def handler(out: DbOut) -> str:
-        out.set([{"id": 1, "status": "a"}, OrderModel(id=2, status="b")])
+        out.set([{"id": 1, "status": "a"}, OrderModel(id=2, status="b")])  # type: ignore[arg-type]
         return "mixed"
 
     result = handler()
@@ -788,7 +788,7 @@ def test_output_rejects_invalid_list_elements(tmp_path: Path) -> None:
 
     @DbBindings().output("out", url=url, table="processed_orders")
     def handler(out: DbOut) -> None:
-        out.set([{"id": 1, "status": "ok"}, "not_a_dict"])  # type: ignore[list-item]
+        out.set([{"id": 1, "status": "ok"}, "not_a_dict"])  # type: ignore[arg-type]
 
     with pytest.raises(ConfigurationError, match="non-dict element at index 1"):
         handler()
