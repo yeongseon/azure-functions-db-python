@@ -19,7 +19,8 @@
     - per-invocation session/connection lifecycle management
 4. **decorator**
     - `DbFunctionApp` class providing Azure Functions-style decorators
-    - `db_trigger` wraps `PollTrigger`, `db_input` injects `DbReader`, `db_output` injects `DbWriter`
+    - `db_trigger` wraps `PollTrigger`, `db_input` injects query results, `db_output` auto-writes return values
+    - `db_reader` / `db_writer` provide imperative `DbReader` / `DbWriter` injection
     - consumes both `trigger` and `binding` modules
 
 ### 1.1 Core Layer

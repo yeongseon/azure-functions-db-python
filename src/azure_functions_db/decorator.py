@@ -73,6 +73,12 @@ def _validate_resolver(
         ):
             msg = f"{decorator_name} {param_label} callable must not use *args or **kwargs"
             raise ConfigurationError(msg)
+        if p.kind == inspect.Parameter.POSITIONAL_ONLY:
+            msg = (
+                f"{decorator_name} {param_label} callable must not use positional-only "
+                f"parameters ('{p.name}'). Use keyword-compatible parameters instead."
+            )
+            raise ConfigurationError(msg)
 
     handler_sig = inspect.signature(fn, follow_wrapped=False)
     handler_params = {name for name in handler_sig.parameters if name not in injected_args}
@@ -190,28 +196,32 @@ class DbFunctionApp:
             fn_sig = inspect.signature(fn, follow_wrapped=False)
             has_context = "context" in fn_sig.parameters
 
-            # Identify which params are injected by db decorators vs host
-            # trigger params that must be forwarded to inner wrappers.
             db_injected = {arg_name}
             if has_context:
                 db_injected.add("context")
             host_params = [p_name for p_name in fn_sig.parameters if p_name not in db_injected]
 
-            def invoke_handler(events: Any, context: Any | None = None) -> Any:
-                kwargs: dict[str, Any] = {arg_name: events}
-                if has_context and context is not None:
-                    kwargs["context"] = context
-                return fn(**kwargs)
-
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> int:
-                # Extract the host trigger argument (e.g. timer) to pass
-                # to PollTrigger.run.  Support both positional and keyword.
                 timer: Any = None
                 if args:
                     timer = args[0]
                 elif host_params:
                     timer = kwargs.get(host_params[0])
+
+                bound_args = dict(kwargs)
+                if args and host_params:
+                    for i, val in enumerate(args):
+                        if i < len(host_params):
+                            bound_args[host_params[i]] = val
+
+                def invoke_handler(events: Any, context: Any | None = None) -> Any:
+                    call_kwargs: dict[str, Any] = dict(bound_args)
+                    call_kwargs[arg_name] = events
+                    if has_context and context is not None:
+                        call_kwargs["context"] = context
+                    return fn(**call_kwargs)
+
                 return trigger.run(timer=timer, handler=invoke_handler)
 
             # Keep host trigger params visible in __signature__ so Azure
@@ -287,7 +297,9 @@ class DbFunctionApp:
         engine_provider:
             Optional shared ``EngineProvider`` for connection pooling.
         """
-        # Validate mutual exclusion at call time (before decoration).
+        if on_not_found not in ("none", "raise"):
+            msg = f"db_input on_not_found must be 'none' or 'raise', got '{on_not_found}'"
+            raise ConfigurationError(msg)
         if pk is not None and query is not None:
             msg = "db_input requires exactly one of 'pk' or 'query', not both"
             raise ConfigurationError(msg)
@@ -325,8 +337,36 @@ class DbFunctionApp:
 
             is_async = asyncio.iscoroutinefunction(fn)
 
-            def _do_read(all_kwargs: dict[str, Any]) -> Any:
-                """Execute the DB read (runs in calling thread)."""
+            def _resolve_read_args(
+                all_kwargs: dict[str, Any],
+            ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+                """Resolve pk/params from handler kwargs (safe to call on any thread)."""
+                resolved_pk: dict[str, object] | None = None
+                resolved_params: dict[str, object] | None = None
+                if use_pk:
+                    if pk_callable is not None:
+                        resolved_pk = _resolve_callable(
+                            pk_callable, pk_resolver_params, all_kwargs
+                        )
+                    elif pk_static is not None:
+                        resolved_pk = pk_static
+                    else:
+                        msg = "db_input: unreachable – neither pk callable nor pk static"
+                        raise ConfigurationError(msg)
+                else:
+                    if params_callable is not None:
+                        resolved_params = _resolve_callable(
+                            params_callable, params_resolver_params, all_kwargs
+                        )
+                    elif params_static is not None:
+                        resolved_params = params_static
+                return resolved_pk, resolved_params
+
+            def _execute_read(
+                resolved_pk: dict[str, object] | None,
+                resolved_params: dict[str, object] | None,
+            ) -> Any:
+                """Execute DB I/O (blocking — run in worker thread for async)."""
                 reader = DbReader(
                     url=url,
                     table=table,
@@ -335,15 +375,8 @@ class DbFunctionApp:
                 )
                 try:
                     if use_pk:
-                        resolved_pk: dict[str, object]
-                        if pk_callable is not None:
-                            resolved_pk = _resolve_callable(
-                                pk_callable, pk_resolver_params, all_kwargs
-                            )
-                        elif pk_static is not None:
-                            resolved_pk = pk_static
-                        else:
-                            msg = "db_input: unreachable – neither pk callable nor pk static"
+                        if resolved_pk is None:
+                            msg = "db_input: unreachable – pk mode but resolved_pk is None"
                             raise ConfigurationError(msg)
                         result = reader.get(pk=resolved_pk)
                         if result is None and on_not_found == "raise":
@@ -353,13 +386,6 @@ class DbFunctionApp:
                             raise NotFoundError(msg)
                         return result
                     else:
-                        resolved_params: dict[str, object] | None = None
-                        if params_callable is not None:
-                            resolved_params = _resolve_callable(
-                                params_callable, params_resolver_params, all_kwargs
-                            )
-                        elif params_static is not None:
-                            resolved_params = params_static
                         if query is None:
                             msg = "db_input: unreachable – query mode but query is None"
                             raise ConfigurationError(msg)
@@ -371,7 +397,8 @@ class DbFunctionApp:
 
                 @functools.wraps(fn)
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    data = await asyncio.to_thread(_do_read, kwargs)
+                    r_pk, r_params = _resolve_read_args(kwargs)
+                    data = await asyncio.to_thread(_execute_read, r_pk, r_params)
                     kwargs[arg_name] = data
                     return await fn(*args, **kwargs)
 
@@ -383,7 +410,8 @@ class DbFunctionApp:
 
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                data = _do_read(kwargs)
+                r_pk, r_params = _resolve_read_args(kwargs)
+                data = _execute_read(r_pk, r_params)
                 kwargs[arg_name] = data
                 return fn(*args, **kwargs)
 
@@ -428,6 +456,9 @@ class DbFunctionApp:
         engine_provider:
             Optional shared ``EngineProvider`` for connection pooling.
         """
+        if action not in ("insert", "upsert"):
+            msg = f"db_output action must be 'insert' or 'upsert', got '{action}'"
+            raise ConfigurationError(msg)
         if action == "upsert" and not conflict_columns:
             msg = "db_output with action='upsert' requires 'conflict_columns'"
             raise ConfigurationError(msg)
@@ -456,6 +487,17 @@ class DbFunctionApp:
                         else:
                             writer.insert(data=result)
                     elif isinstance(result, list):
+                        bad = next(
+                            (i for i, row in enumerate(result) if not isinstance(row, dict)),
+                            None,
+                        )
+                        if bad is not None:
+                            bad_type = type(result[bad]).__name__
+                            msg = (
+                                f"db_output: handler returned list with non-dict element "
+                                f"at index {bad} ({bad_type}); expected list[dict]"
+                            )
+                            raise ConfigurationError(msg)
                         if action == "upsert":
                             if conflict_columns is None:
                                 msg = "db_output: unreachable – upsert without conflict_columns"

@@ -819,3 +819,208 @@ def test_db_input_stacked_with_db_output(tmp_path: Path) -> None:
 
     assert result == {"id": 1, "status": "processed"}
     assert _read_orders(url_write) == [{"id": 1, "status": "processed"}]
+
+
+# =====================================================================
+# Review feedback: validation, positional args, host param forwarding
+# =====================================================================
+
+
+def test_db_input_resolver_rejects_positional_only_params() -> None:
+    def resolver(x: int, /) -> dict[str, object]:
+        return {"id": x}
+
+    with pytest.raises(ConfigurationError, match="positional-only"):
+
+        @DbFunctionApp().db_input(
+            "user",
+            url="sqlite:///unused.db",
+            table="users",
+            pk=resolver,
+        )
+        def handler(x: int, user: object) -> None:
+            pass
+
+
+def test_db_input_invalid_on_not_found_raises() -> None:
+    with pytest.raises(ConfigurationError, match="on_not_found must be"):
+        DbFunctionApp().db_input(
+            "user",
+            url="sqlite:///unused.db",
+            table="users",
+            pk={"id": 1},
+            on_not_found="bogus",  # type: ignore[arg-type]
+        )
+
+
+def test_db_output_invalid_action_raises() -> None:
+    with pytest.raises(ConfigurationError, match="action must be"):
+        DbFunctionApp().db_output(
+            url="sqlite:///unused.db",
+            table="t",
+            action="bogus",  # type: ignore[arg-type]
+        )
+
+
+def test_db_output_rejects_invalid_list_elements(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "output-bad-list.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    def handler() -> list[object]:
+        return [{"id": 1, "status": "ok"}, "not_a_dict"]  # type: ignore[return-value]
+
+    with pytest.raises(ConfigurationError, match="non-dict element at index 1"):
+        handler()
+
+
+def test_db_trigger_forwards_host_params_at_runtime() -> None:
+    received: dict[str, object] = {}
+    host_timer = object()
+
+    @DbFunctionApp().db_trigger(
+        arg_name="events",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+    )
+    def handler(timer: object, events: list[RowChange]) -> None:
+        received["timer"] = timer
+        received["events_count"] = len(events)
+
+    handler(host_timer)
+
+    assert received["timer"] is host_timer
+    assert received["events_count"] == 1
+
+
+def test_db_trigger_forwards_host_params_with_db_output(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "trigger-host-output.db")
+    _create_orders_table(url)
+    received: dict[str, object] = {}
+    host_timer = object()
+
+    db = DbFunctionApp()
+
+    @db.db_trigger(
+        arg_name="events",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+    )
+    @db.db_output(url=url, table="processed_orders")
+    def handler(timer: object, events: list[RowChange]) -> list[dict[str, object]]:
+        received["timer"] = timer
+        return [{"id": e.pk["id"], "status": "done"} for e in events]
+
+    result = handler(host_timer)
+
+    assert result == 1
+    assert received["timer"] is host_timer
+    assert _read_orders(url) == [{"id": 1, "status": "done"}]
+
+
+# =====================================================================
+# Async decorator tests
+# =====================================================================
+
+
+def test_db_input_async_pk_static(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-input-pk.db")
+    _create_users_table(url)
+
+    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1})
+    async def handler(user: dict[str, object] | None) -> dict[str, object] | None:
+        return user
+
+    assert asyncio.run(handler()) == {"id": 1, "name": "Alice"}
+
+
+def test_db_input_async_query(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-input-query.db")
+    _create_users_table(url)
+
+    @DbFunctionApp().db_input("users", url=url, query="SELECT id, name FROM users ORDER BY id")
+    async def handler(users: list[dict[str, object]]) -> list[dict[str, object]]:
+        return users
+
+    assert asyncio.run(handler()) == [{"id": 1, "name": "Alice"}]
+
+
+def test_db_input_async_pk_callable(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-input-pk-callable.db")
+    _create_users_table(url)
+
+    class FakeReq:
+        def __init__(self, user_id: int) -> None:
+            self.user_id = user_id
+
+    @DbFunctionApp().db_input("user", url=url, table="users", pk=lambda req: {"id": req.user_id})
+    async def handler(req: FakeReq, user: dict[str, object] | None) -> dict[str, object] | None:
+        return user
+
+    assert asyncio.run(handler(req=FakeReq(1))) == {"id": 1, "name": "Alice"}
+    assert asyncio.run(handler(req=FakeReq(999))) is None
+
+
+def test_db_output_async_insert(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-output-insert.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    async def handler() -> dict[str, object]:
+        return {"id": 1, "status": "async_done"}
+
+    result = asyncio.run(handler())
+
+    assert result == {"id": 1, "status": "async_done"}
+    assert _read_orders(url) == [{"id": 1, "status": "async_done"}]
+
+
+def test_db_output_async_none_is_noop(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-output-none.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    async def handler() -> None:
+        return None
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == []
+
+
+def test_db_reader_async_injects_reader(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-reader.db")
+    _create_users_table(url)
+
+    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    async def handler(reader: DbReader) -> dict[str, object] | None:
+        return reader.get(pk={"id": 1})
+
+    assert asyncio.run(handler()) == {"id": 1, "name": "Alice"}
+
+
+def test_db_writer_async_injects_writer(tmp_path: Path) -> None:
+    import asyncio
+
+    url = _sqlite_url(tmp_path, "async-writer.db")
+    _create_orders_table(url)
+
+    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: DbWriter) -> None:
+        writer.insert(data={"id": 1, "status": "async_written"})
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [{"id": 1, "status": "async_written"}]
