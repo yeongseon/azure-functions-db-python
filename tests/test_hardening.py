@@ -96,9 +96,13 @@ class FakeSourceAdapter:
         result: list[RawRecord] = []
         for record in self._records:
             record_cursor = record.get("updated_at")
-            if cursor_value is not None and isinstance(record_cursor, (int, float, str, bool)):
-                if record_cursor <= cursor_value:
-                    continue
+            if (
+                cursor_value is not None
+                and isinstance(record_cursor, int)
+                and isinstance(cursor_value, int)
+                and record_cursor <= cursor_value
+            ):
+                continue
             result.append(record)
             if len(result) >= batch_size:
                 break
