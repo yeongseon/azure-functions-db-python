@@ -139,7 +139,7 @@ class TestSqlAlchemySourceConstructor:
 
     def test_kw_only(self) -> None:
         with pytest.raises(TypeError):
-            SqlAlchemySource(
+            SqlAlchemySource(  # type: ignore[misc]
                 "sqlite:///:memory:",
                 "orders",
                 None,
