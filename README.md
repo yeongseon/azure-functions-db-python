@@ -61,6 +61,114 @@ azure-functions-db[postgres]
 
 ## Quick Start
 
+### Which decorator to use?
+
+| Need | Decorator | Mode |
+|------|-----------|------|
+| Read data into handler | `input` | Declarative (data injection) |
+| Auto-write return value | `output` | Declarative (data injection) |
+| Complex reads (multiple queries) | `inject_reader` | Imperative (client injection) |
+| Complex writes (transactions) | `inject_writer` | Imperative (client injection) |
+| React to DB changes | `trigger` | Event-driven (pseudo-trigger) |
+
+### Input Binding (data injection)
+
+`input` injects the actual query result into your handler — no client needed.
+
+**Row lookup mode** — fetch a single row by primary key:
+
+```python
+from azure_functions_db import DbBindings
+
+db = DbBindings()
+
+# Static primary key
+@db.input("user", url="%DB_URL%", table="users", pk={"id": 42})
+def load_user(user: dict | None) -> None:
+    if user:
+        print(user["name"])
+
+# Dynamic primary key — resolved from handler kwargs
+@db.input("user", url="%DB_URL%", table="users",
+             pk=lambda req: {"id": req.params["id"]})
+def get_user(req, user: dict | None) -> None:
+    print(user)
+```
+
+**Query mode** — fetch multiple rows with SQL:
+
+```python
+# Multiple rows by SQL query
+@db.input("users", url="%DB_URL%",
+             query="SELECT * FROM users WHERE active = :active",
+             params={"active": True})
+def list_active_users(users: list[dict]) -> None:
+    for user in users:
+        print(user["email"])
+```
+
+### Output Binding (auto-write)
+
+`output` writes the handler's return value to the database automatically.
+
+```python
+from azure_functions_db import DbBindings
+
+db = DbBindings()
+
+# Insert — return a dict for single row, list[dict] for batch
+@db.output(url="%DB_URL%", table="orders")
+def create_order() -> dict:
+    return {"id": 1, "status": "pending", "total": 99.99}
+
+# Upsert — set action and conflict_columns
+@db.output(url="%DB_URL%", table="orders",
+              action="upsert", conflict_columns=["id"])
+def upsert_orders() -> list[dict]:
+    return [
+        {"id": 1, "status": "shipped", "total": 99.99},
+        {"id": 2, "status": "pending", "total": 49.99},
+    ]
+```
+
+When the return value and DB write payload differ (e.g. returning an HTTP response), use `OutputResult`:
+
+```python
+from azure_functions_db import DbBindings, OutputResult
+
+db = DbBindings()
+
+@db.output(url="%DB_URL%", table="orders")
+def create_order(req) -> OutputResult:
+    return OutputResult(
+        return_value=func.HttpResponse("Created", status_code=201),
+        write={"id": 1, "status": "pending"},
+    )
+```
+
+Supported upsert dialects: PostgreSQL, SQLite, MySQL.
+
+### Client Injection (imperative escape hatches)
+
+For complex operations (multiple queries, transactions, update/delete), use `inject_reader`/`inject_writer` to get a client instance:
+
+```python
+from azure_functions_db import DbBindings, DbReader, DbWriter
+
+db = DbBindings()
+
+@db.inject_reader("reader", url="%DB_URL%", table="users")
+def complex_read(reader: DbReader) -> None:
+    user = reader.get(pk={"id": 42})
+    orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
+
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
+def complex_write(writer: DbWriter) -> None:
+    writer.insert(data={"id": 1, "status": "pending"})
+    writer.update(data={"status": "shipped"}, pk={"id": 1})
+    writer.delete(pk={"id": 1})
+```
+
 ### Trigger (change detection)
 
 ```python
@@ -95,84 +203,9 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
         print(f"Order {event.pk}: {event.op}")
 ```
 
+> This is a **pseudo-trigger** — it requires an actual Azure Functions trigger (e.g. timer) to fire.
+
 > See [Python API Spec](docs/04-python-api-spec.md) for the full API reference.
-
-### Input Binding (data injection)
-
-`input` injects the actual query result into your handler — no client needed.
-
-```python
-from azure_functions_db import DbBindings
-
-db = DbBindings()
-
-# Single row by primary key (static)
-@db.input("user", url="%DB_URL%", table="users", pk={"id": 42})
-def load_user(user: dict | None) -> None:
-    if user:
-        print(user["name"])
-
-# Single row by primary key (dynamic — resolved from handler kwargs)
-@db.input("user", url="%DB_URL%", table="users",
-             pk=lambda req: {"id": req.params["id"]})
-def get_user(req, user: dict | None) -> None:
-    print(user)
-
-# Multiple rows by SQL query
-@db.input("users", url="%DB_URL%",
-             query="SELECT * FROM users WHERE active = :active",
-             params={"active": True})
-def list_active_users(users: list[dict]) -> None:
-    for user in users:
-        print(user["email"])
-```
-
-### Output Binding (auto-write)
-
-`output` writes the handler's return value to the database automatically.
-
-```python
-from azure_functions_db import DbBindings
-
-db = DbBindings()
-
-# Insert — return a dict for single row, list[dict] for batch
-@db.output(url="%DB_URL%", table="orders")
-def create_order() -> dict:
-    return {"id": 1, "status": "pending", "total": 99.99}
-
-# Upsert — set action and conflict_columns
-@db.output(url="%DB_URL%", table="orders",
-              action="upsert", conflict_columns=["id"])
-def upsert_orders() -> list[dict]:
-    return [
-        {"id": 1, "status": "shipped", "total": 99.99},
-        {"id": 2, "status": "pending", "total": 49.99},
-    ]
-```
-
-Supported upsert dialects: PostgreSQL, SQLite, MySQL.
-
-### Client Injection (imperative escape hatches)
-
-For complex operations (multiple queries, transactions, update/delete), use `inject_reader`/`inject_writer` to get a client instance:
-
-```python
-from azure_functions_db import DbBindings, DbReader, DbWriter
-
-db = DbBindings()
-
-@db.inject_reader("reader", url="%DB_URL%", table="users")
-def complex_read(reader: DbReader) -> None:
-    user = reader.get(pk={"id": 42})
-    orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
-
-@db.inject_writer("writer", url="%DB_URL%", table="orders")
-def complex_write(writer: DbWriter) -> None:
-    writer.insert(data={"id": 1, "status": "pending"})
-    writer.update(data={"status": "shipped"}, pk={"id": 1})
-    writer.delete(pk={"id": 1})
-```
 
 ### Combined: Trigger + Binding
 

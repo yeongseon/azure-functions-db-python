@@ -81,6 +81,17 @@ When an async handler is used with `input`, `output`, `inject_reader`, or `injec
 
 The `trigger` decorator explicitly rejects async handlers with a `ConfigurationError` because `PollTrigger.run()` is synchronous and calling an async handler without `await` would silently produce an unawaited coroutine.
 
+## Input Binding Modes
+
+The `input` decorator operates in two mutually exclusive modes. Exactly one of `pk` or `query` must be provided.
+
+| Mode | Parameter | Returns | Use When |
+|------|-----------|---------|----------|
+| **Row lookup** | `pk=` | `dict \| None` | You need a single row by primary key |
+| **SQL query** | `query=` | `list[dict]` | You need multiple rows or custom SQL |
+
+Both `pk` and `params` accept either a static dict or a callable that resolves values from other handler parameters at invocation time.
+
 ## Decorator Composition
 
 DbBindings decorators can be combined on a single handler. The following rules are enforced at decoration time:
@@ -103,6 +114,47 @@ DbBindings decorators can be combined on a single handler. The following rules a
 
 ### Ordering
 Azure Functions decorators (e.g., `@app.schedule`) must be outermost. DbBindings decorators should be closest to the function definition.
+
+## Concurrency and Thread Safety
+
+Azure Functions reuses workers and may invoke functions concurrently. This section documents the lifecycle and thread-safety guarantees of each component.
+
+### Component Lifecycle
+
+| Component | Scope | Lifecycle | Thread-Safe |
+|-----------|-------|-----------|-------------|
+| `EngineProvider` | Module-level (shared) | Long-lived, reused across invocations | ✅ Yes — `threading.Lock` guards cache |
+| `SqlAlchemySource` | Module-level (shared) | Long-lived, reused across invocations | ✅ Yes — read-only after construction |
+| `BlobCheckpointStore` | Module-level (shared) | Long-lived, reused across invocations | ✅ Yes — ETag-based CAS for all mutations |
+| `DbReader` | Per-invocation | Created and closed within a single function call | N/A — not shared |
+| `DbWriter` | Per-invocation | Created and closed within a single function call | N/A — not shared |
+
+### EngineProvider
+
+`EngineProvider` caches SQLAlchemy `Engine` instances keyed by connection configuration. The internal cache is protected by a `threading.Lock`, making concurrent `get_engine()` calls safe. SQLAlchemy's `Engine` itself manages its own connection pool with thread-safe checkout/return.
+
+Module-level usage pattern (recommended):
+```python
+engine_provider = EngineProvider()  # shared across all invocations
+
+@db.input("user", url="%DB_URL%", table="users", pk={"id": 1},
+          engine_provider=engine_provider)
+def handler(user): ...
+```
+
+### DbReader / DbWriter
+
+These are created per invocation by the decorator layer (or manually by the user). Each instance opens its own SQLAlchemy session and closes it when `close()` is called. Decorators manage this lifecycle automatically — users never need to call `close()` when using `input`, `output`, `inject_reader`, or `inject_writer`.
+
+### BlobCheckpointStore
+
+Uses Azure Blob Storage ETag-based CAS (Compare-And-Swap) for all state mutations. Concurrent timer triggers racing to acquire the lease are safely resolved — only one wins, others skip the tick. This is the mechanism that prevents duplicate processing during scale-out.
+
+### Reflected Metadata
+
+SQLAlchemy caches reflected table metadata on the `Engine`'s `MetaData` object. If a schema migration occurs while the Function App is running, the cached metadata may become stale. Mitigation options:
+- Restart the Function App after schema migrations
+- Use explicit `Table` definitions instead of reflection (future: see #38)
 
 ## 2. Execution Flow
 
