@@ -120,7 +120,8 @@ def _seed_blob(
 def _read_blob_state(container: _FakeContainerClient, poller_name: str) -> dict[str, Any]:
     blob = container.get_blob_client(f"state/{poller_name}.json")
     assert blob.content is not None
-    return json.loads(blob.content)
+    result: dict[str, Any] = json.loads(blob.content)
+    return result
 
 
 def _make_state(

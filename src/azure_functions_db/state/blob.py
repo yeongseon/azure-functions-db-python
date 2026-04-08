@@ -95,7 +95,7 @@ class BlobCheckpointStore:
         try:
             downloader = blob_client.download_blob()
             raw = downloader.readall()
-            etag: str = downloader.properties.etag  # type: ignore[union-attr]
+            etag: str = downloader.properties.etag
         except ResourceNotFoundError:
             return None
         except (ClientAuthenticationError, ServiceRequestError) as exc:
