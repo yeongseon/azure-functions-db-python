@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, insert
@@ -189,6 +189,10 @@ class TestSqlAlchemySourceConstructor:
         assert src.source_descriptor.name.startswith("query_")
         assert len(src.source_descriptor.name) == len("query_") + 12
 
+    def test_invalid_url_raises_source_config_error(self) -> None:
+        with pytest.raises(SourceConfigurationError, match="Invalid database URL"):
+            _make_source(url="not-a-valid-url-at-all")
+
 
 class TestResolveEnvVars:
     def test_no_pattern_returns_value(self) -> None:
@@ -281,6 +285,17 @@ class TestSqlAlchemySourceFetch:
         assert "Eve" not in names
         assert len(rows) == 4
 
+    def test_fetch_with_parameterized_where(self, orders_url: str) -> None:
+        src = _make_source(
+            url=orders_url,
+            where="name != :excluded_name",
+            parameters={"excluded_name": "Eve"},
+        )
+        rows = src.fetch(cursor=None, batch_size=10)
+        names = [r["name"] for r in rows]
+        assert "Eve" not in names
+        assert len(rows) == 4
+
     def test_fetch_query_mode(self, orders_url: str) -> None:
         src = SqlAlchemySource(
             url=orders_url,
@@ -291,6 +306,20 @@ class TestSqlAlchemySourceFetch:
         )
         rows = src.fetch(cursor=None, batch_size=10)
         assert len(rows) == 5
+
+    def test_fetch_query_mode_preserves_all_columns(self, orders_url: str) -> None:
+        src = SqlAlchemySource(
+            url=orders_url,
+            table=None,
+            query="SELECT id, name, updated_at FROM orders",
+            cursor_column="updated_at",
+            pk_columns=["id"],
+        )
+        rows = src.fetch(cursor=None, batch_size=10)
+        assert "name" in rows[0]
+        assert "id" in rows[0]
+        assert "updated_at" in rows[0]
+        assert rows[0]["name"] == "Alice"
 
     def test_fetch_query_mode_with_cursor(self, orders_url: str) -> None:
         src = SqlAlchemySource(
@@ -303,6 +332,20 @@ class TestSqlAlchemySourceFetch:
         rows = src.fetch(cursor=(200, 3), batch_size=10)
         assert len(rows) == 2
         assert rows[0]["id"] == 4
+
+    def test_fetch_query_mode_with_parameters(self, orders_url: str) -> None:
+        src = SqlAlchemySource(
+            url=orders_url,
+            table=None,
+            query="SELECT id, name, updated_at FROM orders WHERE name != :excluded",
+            cursor_column="updated_at",
+            pk_columns=["id"],
+            parameters={"excluded": "Eve"},
+        )
+        rows = src.fetch(cursor=None, batch_size=10)
+        assert len(rows) == 4
+        names = [r["name"] for r in rows]
+        assert "Eve" not in names
 
     def test_fetch_lazy_initialization(self) -> None:
         src = _make_source()
@@ -359,3 +402,31 @@ class TestSqlAlchemySourceDispose:
         src.dispose()
         rows = src.fetch(cursor=None, batch_size=10)
         assert len(rows) == 5
+
+    def test_ensure_initialized_disposes_engine_after_reflect_failure(self) -> None:
+        src = _make_source(url="sqlite:///tmp/test.db")
+        engine_first = Mock()
+        engine_second = Mock()
+
+        with (
+            patch(
+                "azure_functions_db.adapter.sqlalchemy.create_engine",
+                side_effect=[engine_first, engine_second],
+            ),
+            patch.object(
+                SqlAlchemySource,
+                "_reflect_table",
+                side_effect=[SourceConfigurationError("boom"), None],
+            ),
+        ):
+            with pytest.raises(SourceConfigurationError, match="boom"):
+                src._ensure_initialized()
+
+            engine_first.dispose.assert_called_once_with()
+            assert src._engine is None
+            assert not src._initialized
+
+            src._ensure_initialized()
+
+        assert src._engine is engine_second
+        assert src._initialized

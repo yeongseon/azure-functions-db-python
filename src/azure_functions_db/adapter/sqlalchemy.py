@@ -8,12 +8,14 @@ import os
 import re
 from typing import Any
 
-from sqlalchemy import MetaData, Table, and_, column, create_engine, or_, select, text
+from sqlalchemy import MetaData, Table, and_, create_engine, literal_column, or_, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
 
 from azure_functions_db.core.types import CursorValue, SourceDescriptor
 from azure_functions_db.trigger.errors import FetchError, SourceConfigurationError
+
+RawRecord = dict[str, object]
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +132,12 @@ class SqlAlchemySource:
         return f"query_{query_hash}"
 
     def _compute_fingerprint(self) -> str:
-        parsed = make_url(self._url)
-        safe_url = str(parsed.set(password=None))
+        try:
+            parsed = make_url(self._url)
+            safe_url = str(parsed.set(password=None))
+        except Exception as exc:
+            msg = "Invalid database URL"
+            raise SourceConfigurationError(msg) from exc
         config: dict[str, object] = {
             "url": safe_url,
             "schema": self._schema,
@@ -159,11 +165,17 @@ class SqlAlchemySource:
         try:
             self._engine = create_engine(self._url)
         except Exception as exc:
-            msg = f"Failed to create engine for URL: {self._url}"
+            msg = f"Failed to create engine for source '{self._compute_name()}'"
             raise SourceConfigurationError(msg) from exc
 
-        if self._table_name:
-            self._reflect_table()
+        try:
+            if self._table_name:
+                self._reflect_table()
+        except Exception:
+            self._engine.dispose()
+            self._engine = None
+            self._table = None
+            raise
 
         self._initialized = True
 
@@ -197,7 +209,7 @@ class SqlAlchemySource:
             msg = f"Columns not found in table '{key}': {sorted(missing)}"
             raise SourceConfigurationError(msg)
 
-    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[dict[str, Any]]:
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]:
         """Fetch a batch of records newer than *cursor*.
 
         Returns an empty sequence when no new records are available.
@@ -208,7 +220,7 @@ class SqlAlchemySource:
         try:
             stmt = self._build_query(cursor, batch_size)
             with self._engine.connect() as conn:
-                result = conn.execute(stmt)
+                result = conn.execute(stmt, self._parameters)
                 return [dict(row._mapping) for row in result]
         except (SourceConfigurationError, FetchError):
             raise
@@ -248,15 +260,13 @@ class SqlAlchemySource:
     def _build_raw_query(self, cursor: CursorValue | None, batch_size: int) -> Any:
         assert self._query is not None  # noqa: S101  # nosec B101
 
-        all_cols = [self._cursor_column, *self._pk_columns]
-        col_objs: list[Any] = [column(c) for c in all_cols]
-        subq = text(self._query).columns(*col_objs).subquery("source")
+        subq = text(self._query).columns().subquery("source")
 
-        stmt = select(subq)
+        stmt = select(literal_column("*")).select_from(subq)
 
         conditions = []
         if cursor is not None:
-            cursor_filter = self._build_cursor_filter_subquery(cursor, subq)
+            cursor_filter = self._build_cursor_filter_subquery(cursor)
             conditions.append(cursor_filter)
 
         if self._where:
@@ -265,7 +275,9 @@ class SqlAlchemySource:
         if conditions:
             stmt = stmt.where(and_(*conditions))
 
-        order_cols = [subq.c[self._cursor_column]] + [subq.c[pk] for pk in self._pk_columns]
+        order_cols = [literal_column(f"source.{self._cursor_column}")] + [
+            literal_column(f"source.{pk}") for pk in self._pk_columns
+        ]
         stmt = stmt.order_by(*order_cols)
         stmt = stmt.limit(batch_size)
         return stmt
@@ -279,18 +291,17 @@ class SqlAlchemySource:
         vals = [val for _, val in cols_values]
         return self._build_or_and_expansion(col_exprs, vals)
 
-    def _build_cursor_filter_subquery(self, cursor: CursorValue, subq: Any) -> Any:
+    def _build_cursor_filter_subquery(self, cursor: CursorValue) -> Any:
         """Build lexicographic cursor predicate for raw-query mode."""
         cols_values = self._cursor_cols_values(cursor)
-        col_exprs = [subq.c[name] for name, _ in cols_values]
+        col_exprs = [literal_column(f"source.{name}") for name, _ in cols_values]
         vals = [val for _, val in cols_values]
         return self._build_or_and_expansion(col_exprs, vals)
 
     def _cursor_cols_values(self, cursor: CursorValue) -> list[tuple[str, object]]:
         """Map cursor value(s) to (column_name, value) pairs.
 
-        Checkpoint contract: cursor = ``(cursor_value, *pk_values)`` tuple,
-        or a single scalar when there is exactly one PK column.
+        Checkpoint contract: cursor = ``(cursor_value, *pk_values)`` tuple.
         """
         if isinstance(cursor, tuple):
             values = list(cursor)
