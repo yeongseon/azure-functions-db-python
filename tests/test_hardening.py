@@ -5,16 +5,20 @@ from collections.abc import Sequence
 import pytest
 
 from azure_functions_db.core.types import CursorValue, SourceDescriptor
+from azure_functions_db.state.errors import LeaseConflictError
 from azure_functions_db.trigger.errors import CommitError, HandlerError, LostLeaseError
 from azure_functions_db.trigger.events import RowChange
 from azure_functions_db.trigger.runner import PollRunner, RawRecord
 
 
 class SimulatedCrash(BaseException):
-    """Sentinel to simulate process crash at specific boundaries.
+    """Sentinel to simulate an uncaught exception escaping PollRunner.
 
     Inherits from BaseException (not Exception) because PollRunner
-    catches Exception internally. This lets us crash past those handlers.
+    catches Exception internally. This bypasses those handlers to verify
+    checkpoint safety. Note: unlike a real process crash, PollRunner's
+    finally clause still runs (releasing the lease). Retry assertions
+    model post-recovery reacquisition, not immediate same-tick retry.
     """
 
 
@@ -33,6 +37,8 @@ class FakeStateStore:
         del ttl_seconds
         if self.acquire_error:
             raise self.acquire_error
+        if poller_name in self.leases:
+            raise LeaseConflictError(f"lease already held for '{poller_name}'")
         self.lease_counter += 1
         lease_id = f"lease-{self.lease_counter}"
         self.leases[poller_name] = lease_id
@@ -131,25 +137,35 @@ def test_crash_after_fetch_before_handler_does_not_advance_checkpoint() -> None:
     records: list[RawRecord] = [{"id": 1, "updated_at": 100}, {"id": 2, "updated_at": 200}]
     store = FakeStateStore()
     source = FakeSourceAdapter(records)
+    handler_called = False
 
-    def crash_before_work(events: list[RowChange]) -> None:
-        assert [event.event_id for event in events] == ["evt-1", "evt-2"]
-        raise SimulatedCrash("crash before handler work")
+    def should_not_be_called(events: list[RowChange]) -> None:
+        nonlocal handler_called
+        handler_called = True
+
+    crash_count = 0
+
+    def crashing_normalizer(record: RawRecord, src: SourceDescriptor) -> RowChange:
+        nonlocal crash_count
+        crash_count += 1
+        raise SimulatedCrash("crash during normalization after fetch")
 
     runner = PollRunner(
         name="test_poller",
         source=source,
         state_store=store,
-        normalizer=_default_normalizer,
-        handler=crash_before_work,
+        normalizer=crashing_normalizer,
+        handler=should_not_be_called,
         batch_size=10,
     )
 
-    with pytest.raises(SimulatedCrash, match="crash before handler work"):
+    with pytest.raises(SimulatedCrash, match="crash during normalization after fetch"):
         runner.tick()
 
+    assert not handler_called
     assert "test_poller" not in store.checkpoints
     assert store.commit_calls == 0
+    assert crash_count == 1
 
     reprocessed: list[list[str]] = []
     retry_runner = PollRunner(
@@ -287,9 +303,12 @@ def test_stale_runner_commit_rejected_winner_advances() -> None:
     source_b = FakeSourceAdapter(records)
     runner_b_handled: list[list[str]] = []
 
+    stolen_lease_id: str = ""
+
     def stale_handler(events: list[RowChange]) -> None:
+        nonlocal stolen_lease_id
         assert [event.event_id for event in events] == ["evt-1", "evt-2"]
-        _ = store.steal_lease("shared_poller")
+        stolen_lease_id = store.steal_lease("shared_poller")
 
     runner_a = PollRunner(
         name="shared_poller",
@@ -299,6 +318,14 @@ def test_stale_runner_commit_rejected_winner_advances() -> None:
         handler=stale_handler,
         batch_size=10,
     )
+
+    with pytest.raises(LostLeaseError, match="lease stolen"):
+        runner_a.tick()
+
+    assert "shared_poller" not in store.checkpoints
+
+    store.release_lease("shared_poller", stolen_lease_id)
+
     runner_b = PollRunner(
         name="shared_poller",
         source=source_b,
@@ -309,11 +336,6 @@ def test_stale_runner_commit_rejected_winner_advances() -> None:
         ),
         batch_size=10,
     )
-
-    with pytest.raises(LostLeaseError, match="lease stolen"):
-        runner_a.tick()
-
-    assert "shared_poller" not in store.checkpoints
 
     assert runner_b.tick() == 2
     assert runner_b_handled == [["evt-1", "evt-2"]]

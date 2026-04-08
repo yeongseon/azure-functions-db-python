@@ -113,5 +113,5 @@ MVP baseline:
 | E | Crash after fetch before handler | test_hardening.py (test_crash_after_fetch_*) |
 | F | Crash after partial handler | test_hardening.py (test_crash_after_partial_*) |
 | G | Commit response timeout | test_hardening.py (test_ambiguous_commit_*) |
-| H | Lease lost due to heartbeat | test_hardening.py (test_stale_runner_*) + test_state_blob.py |
+| H | Lease lost before commit | test_hardening.py (test_stale_runner_*) + test_state_blob.py (store-level lease expiry) |
 | I | Permanently failing batch | test_hardening.py (test_permanent_handler_failure_*) |
