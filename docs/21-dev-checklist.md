@@ -67,12 +67,12 @@
 - [x] Integration tests (SQLite)
 
 ## Phase 10: Binding - Output
-- [ ] DbWriter
-- [ ] insert / upsert / update / delete
-- [ ] insert_many / upsert_many (batch)
-- [ ] Transaction management
-- [ ] Unit tests
-- [ ] Integration tests (Postgres/MySQL/SQL Server)
+- [x] DbWriter
+- [x] insert / upsert / update / delete
+- [x] insert_many / upsert_many (batch)
+- [x] Transaction management
+- [x] Unit tests
+- [x] Integration tests (SQLite)
 
 ## Phase 11: Binding Integration
 - [ ] Trigger + output binding combined example

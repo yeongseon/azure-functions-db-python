@@ -31,7 +31,7 @@ Azure Functions Python v2 has no built-in database integration story:
 - **Multi-DB support** — PostgreSQL, MySQL, and SQL Server via SQLAlchemy dialects
 - **Single `pip install`** — one package with optional extras for each database driver
 - **DbReader** — input binding for reading rows
-- **DbWriter** — output binding for writing rows with automatic batching *(planned)*
+- **DbWriter** — output binding for writing rows (insert, upsert, update, delete)
 
 ## Shared Core
 
@@ -103,7 +103,7 @@ def orders_poll(timer: func.TimerRequest) -> None:
     trigger.run(timer=timer, handler=handle_orders)
 ```
 
-> **Coming soon**: Output binding (`DbWriter`) is planned for a future release. See the [roadmap](docs/21-dev-checklist.md) for details.
+> See [Python API Spec](docs/04-python-api-spec.md) for the full API reference.
 
 ### Input Binding (DbReader)
 
@@ -128,6 +128,32 @@ with DbReader(url="%DB_URL%") as reader:
     for u in active_users:
         print(u["email"])
 ```
+
+### Output Binding (DbWriter)
+
+```python
+from azure_functions_db import DbWriter
+
+# Insert a single row
+with DbWriter(url="%DB_URL%", table="orders") as writer:
+    writer.insert(data={"id": 1, "status": "pending", "total": 99.99})
+
+# Upsert (insert or update on conflict)
+with DbWriter(url="%DB_URL%", table="orders") as writer:
+    writer.upsert(
+        data={"id": 1, "status": "shipped", "total": 99.99},
+        conflict_columns=["id"],
+    )
+
+# Batch operations (all-or-nothing transaction)
+with DbWriter(url="%DB_URL%", table="orders") as writer:
+    writer.insert_many(rows=[
+        {"id": 2, "status": "pending", "total": 49.99},
+        {"id": 3, "status": "pending", "total": 29.99},
+    ])
+```
+
+Supported upsert dialects: PostgreSQL, SQLite, MySQL.
 
 ## Supported Databases
 
@@ -211,7 +237,7 @@ Part of the **Azure Functions Python DX Toolkit**:
 |---------|------|
 | [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI spec and Swagger UI |
 | [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | Request and response validation |
-| **azure-functions-db** | Database trigger (bindings planned) |
+| **azure-functions-db** | Database trigger and bindings |
 | [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | Structured logging and observability |
 | [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | Pre-deploy diagnostic CLI |
 | [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | Project scaffolding |
