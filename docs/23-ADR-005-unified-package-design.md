@@ -26,7 +26,7 @@ trigger (change detection) and binding (read/write) in a single package.
 
 ### API Strategy
 - Imperative API (DbReader, DbWriter) is primary
-- Decorator API (`DbFunctionApp` with `db_trigger`, `db_input`, `db_output`) provides Azure Functions-native DX
+- Decorator API (`DbBindings` with `trigger`, `input`, `output`) provides Azure Functions-native DX
 - Packages are unified; programming models are not
 
 ## Alternatives Considered

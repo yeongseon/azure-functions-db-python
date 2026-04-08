@@ -43,15 +43,15 @@ def handle_orders(events, context):
         print(event.pk, event.after)
 ```
 
-### 2.2 Decorator API (DbFunctionApp)
+### 2.2 Decorator API (DbBindings)
 
 ```python
 import azure.functions as func
 from azure.storage.blob import ContainerClient
-from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
+from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
-db = DbFunctionApp()
+db = DbBindings()
 
 source = SqlAlchemySource(
     url="%ORDERS_DB_URL%",
@@ -71,18 +71,18 @@ checkpoint_store = BlobCheckpointStore(
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
     for event in events:
         print(event.pk, event.after)
 ```
 
-The `DbFunctionApp` class provides Azure Functions-style decorators:
+The `DbBindings` class provides Azure Functions-style decorators:
 
-- **`db_trigger`** — pseudo-trigger wrapping `PollTrigger` for change detection
-- **`db_input`** — data injection (injects query results directly)
-- **`db_output`** — auto-write (writes handler return value to DB)
-- **`db_reader`** / **`db_writer`** — client injection (imperative escape hatches)
+- **`trigger`** — pseudo-trigger wrapping `PollTrigger` for change detection
+- **`input`** — data injection (injects query results directly)
+- **`output`** — auto-write (writes handler return value to DB)
+- **`inject_reader`** / **`inject_writer`** — client injection (imperative escape hatches)
 
 Internally, decorators manage `__signature__` to hide injected parameters from the Azure runtime. Decorator order contract: Azure decorators outermost, db decorators closest to the function.
 
@@ -215,7 +215,7 @@ class SerializationError(PollerError): ...
 - Outbox strategy support
 - Backfill mode
 - Service Bus / Event Hub relay integration
-- Pydantic model mapping for `db_trigger` events
+- Pydantic model mapping for `trigger` events
 - Partitioned polling
 
 ## 9. API Stability Policy
@@ -234,7 +234,7 @@ class SerializationError(PollerError): ...
 - BlobCheckpointStore
 - RowChange
 - PollContext
-- DbFunctionApp (db_trigger, db_input, db_output, db_reader, db_writer)
+- DbBindings (trigger, input, output, inject_reader, inject_writer)
 - DbReader
 - DbWriter
 
@@ -264,7 +264,7 @@ writer.upsert_many(rows=[...], conflict_columns=["id"])
 
 ### 10.3 Combined Trigger + Binding Example
 
-Using the decorator API with `DbFunctionApp` (data injection):
+Using the decorator API with `DbBindings` (data injection):
 
 ```python
 import azure.functions as func
@@ -272,14 +272,14 @@ from azure.storage.blob import ContainerClient
 
 from azure_functions_db import (
     BlobCheckpointStore,
-    DbFunctionApp,
+    DbBindings,
     EngineProvider,
     RowChange,
     SqlAlchemySource,
 )
 
 app = func.FunctionApp()
-db = DbFunctionApp()
+db = DbBindings()
 
 engine_provider = EngineProvider()
 
@@ -302,8 +302,8 @@ checkpoint_store = BlobCheckpointStore(
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
-@db.db_output(
+@db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.output(
     url="%DEST_DB_URL%",
     table="processed_orders",
     action="upsert",
@@ -407,33 +407,33 @@ class QueryError(DbError): ...
 class WriteError(DbError): ...
 ```
 
-### 10.7 Decorator API for Bindings (DbFunctionApp)
+### 10.7 Decorator API for Bindings (DbBindings)
 
-The `DbFunctionApp` class provides two styles of binding decorators:
+The `DbBindings` class provides two styles of binding decorators:
 
-#### db_input (data injection)
+#### input (data injection)
 
 Injects actual query results into the handler parameter. Exactly one of `pk` or `query` must be provided.
 
 ```python
-from azure_functions_db import DbFunctionApp
+from azure_functions_db import DbBindings
 
-db = DbFunctionApp()
+db = DbBindings()
 
 # Single row by primary key (static)
-@db.db_input("user", url="%DB_URL%", table="users", pk={"id": 42})
+@db.input("user", url="%DB_URL%", table="users", pk={"id": 42})
 def load_user(user: dict | None) -> None:
     if user:
         print(user["name"])
 
 # Single row by primary key (dynamic — resolved from handler kwargs)
-@db.db_input("user", url="%DB_URL%", table="users",
+@db.input("user", url="%DB_URL%", table="users",
              pk=lambda req: {"id": req.params["id"]})
 def get_user(req, user: dict | None) -> None:
     print(user)
 
 # Multiple rows by SQL query
-@db.db_input("users", url="%DB_URL%",
+@db.input("users", url="%DB_URL%",
              query="SELECT * FROM users WHERE active = :active",
              params={"active": True})
 def list_active(users: list[dict]) -> None:
@@ -441,7 +441,7 @@ def list_active(users: list[dict]) -> None:
         print(user["email"])
 
 # Dynamic query params
-@db.db_input("users", url="%DB_URL%",
+@db.input("users", url="%DB_URL%",
              query="SELECT * FROM users WHERE org_id = :org_id",
              params=lambda req: {"org_id": req.params["org_id"]})
 def list_org_users(req, users: list[dict]) -> None:
@@ -454,22 +454,22 @@ Parameters:
 - `params`: `dict | Callable` — query parameters (only with `query`)
 - `on_not_found`: `"none"` (default) or `"raise"` — behavior when pk lookup returns no row
 
-#### db_output (auto-write)
+#### output (auto-write)
 
 Writes the handler's return value to the database automatically.
 
 ```python
-from azure_functions_db import DbFunctionApp
+from azure_functions_db import DbBindings
 
-db = DbFunctionApp()
+db = DbBindings()
 
 # Insert (default) — dict for single row, list[dict] for batch
-@db.db_output(url="%DB_URL%", table="orders")
+@db.output(url="%DB_URL%", table="orders")
 def create_order() -> dict:
     return {"id": 1, "status": "pending", "total": 99.99}
 
 # Upsert — requires conflict_columns
-@db.db_output(url="%DB_URL%", table="orders",
+@db.output(url="%DB_URL%", table="orders",
               action="upsert", conflict_columns=["id"])
 def upsert_order() -> dict:
     return {"id": 1, "status": "shipped", "total": 99.99}
@@ -484,21 +484,21 @@ Parameters:
 - `action`: `"insert"` (default) or `"upsert"`
 - `conflict_columns`: required when `action="upsert"`
 
-#### db_reader / db_writer (client injection)
+#### inject_reader / inject_writer (client injection)
 
 Imperative escape hatches for complex operations. Inject `DbReader` / `DbWriter` instances.
 
 ```python
-from azure_functions_db import DbFunctionApp, DbReader, DbWriter
+from azure_functions_db import DbBindings, DbReader, DbWriter
 
-db = DbFunctionApp()
+db = DbBindings()
 
-@db.db_reader("reader", url="%DB_URL%", table="users")
+@db.inject_reader("reader", url="%DB_URL%", table="users")
 def complex_read(reader: DbReader) -> None:
     user = reader.get(pk={"id": 42})
     orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
 
-@db.db_writer("writer", url="%DB_URL%", table="orders")
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
 def complex_write(writer: DbWriter) -> None:
     writer.insert(data={"id": 1, "status": "pending"})
     writer.update(data={"status": "shipped"}, pk={"id": 1})

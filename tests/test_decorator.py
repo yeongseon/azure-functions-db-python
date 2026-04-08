@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 import pytest
 from sqlalchemy import create_engine, text
 
-from azure_functions_db import ConfigurationError, DbFunctionApp, NoOpCollector
+from azure_functions_db import ConfigurationError, DbBindings
 from azure_functions_db.binding.reader import DbReader
 from azure_functions_db.binding.writer import DbWriter
 from azure_functions_db.core.errors import NotFoundError
+from azure_functions_db.observability import NoOpCollector
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
 from tests.test_poll_trigger import FakeSourceAdapter, FakeStateStore
@@ -88,12 +89,12 @@ def _read_orders(url: str) -> list[dict[str, object]]:
 
 
 # =====================================================================
-# db_trigger tests (unchanged from previous version)
+# trigger tests (unchanged from previous version)
 # =====================================================================
 
 
-def test_db_trigger_returns_callable() -> None:
-    decorator = DbFunctionApp().db_trigger(
+def test_trigger_returns_callable() -> None:
+    decorator = DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[]),
         checkpoint_store=FakeStateStore(),
@@ -102,10 +103,10 @@ def test_db_trigger_returns_callable() -> None:
     assert callable(decorator)
 
 
-def test_db_trigger_calls_handler_with_events() -> None:
+def test_trigger_calls_handler_with_events() -> None:
     handled: list[list[RowChange]] = []
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="changes",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
@@ -120,8 +121,8 @@ def test_db_trigger_calls_handler_with_events() -> None:
     assert handled[0][0].pk == {"id": 1}
 
 
-def test_db_trigger_returns_processed_count() -> None:
-    @DbFunctionApp().db_trigger(
+def test_trigger_returns_processed_count() -> None:
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
@@ -135,23 +136,23 @@ def test_db_trigger_returns_processed_count() -> None:
     assert result == 1
 
 
-def test_db_trigger_async_handler_rejected() -> None:
+def test_trigger_async_handler_rejected() -> None:
     async def handler(events: list[RowChange]) -> None:
         del events
 
     with pytest.raises(ConfigurationError, match="does not support async"):
-        DbFunctionApp().db_trigger(
+        DbBindings().trigger(
             arg_name="events",
             source=FakeSourceAdapter(batches=[]),
             checkpoint_store=FakeStateStore(),
         )(handler)
 
 
-def test_db_trigger_swallows_lease_error() -> None:
+def test_trigger_swallows_lease_error() -> None:
     store = FakeStateStore()
     store.acquire_error = RuntimeError("lease conflict")
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[]),
         checkpoint_store=store,
@@ -162,11 +163,11 @@ def test_db_trigger_swallows_lease_error() -> None:
     assert handler(object()) == 0
 
 
-def test_db_trigger_propagates_other_errors() -> None:
+def test_trigger_propagates_other_errors() -> None:
     source = FakeSourceAdapter(batches=[])
     source.fetch_error = RuntimeError("db unavailable")
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="events",
         source=source,
         checkpoint_store=FakeStateStore(),
@@ -178,8 +179,8 @@ def test_db_trigger_propagates_other_errors() -> None:
         handler(object())
 
 
-def test_db_trigger_preserves_function_name() -> None:
-    @DbFunctionApp().db_trigger(
+def test_trigger_preserves_function_name() -> None:
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[]),
         checkpoint_store=FakeStateStore(),
@@ -190,10 +191,10 @@ def test_db_trigger_preserves_function_name() -> None:
     assert handler.__name__ == "handler"
 
 
-def test_db_trigger_default_name_from_function() -> None:
+def test_trigger_default_name_from_function() -> None:
     store = FakeStateStore()
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=store,
@@ -206,10 +207,10 @@ def test_db_trigger_default_name_from_function() -> None:
     assert "orders_poll" in store.checkpoints
 
 
-def test_db_trigger_explicit_name() -> None:
+def test_trigger_explicit_name() -> None:
     store = FakeStateStore()
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="events",
         name="custom_poller",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
@@ -223,8 +224,8 @@ def test_db_trigger_explicit_name() -> None:
     assert "custom_poller" in store.checkpoints
 
 
-def test_db_trigger_accepts_metrics() -> None:
-    @DbFunctionApp().db_trigger(
+def test_trigger_accepts_metrics() -> None:
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
@@ -236,10 +237,10 @@ def test_db_trigger_accepts_metrics() -> None:
     assert handler(object()) == 1
 
 
-def test_db_trigger_signature_preserves_host_params() -> None:
+def test_trigger_signature_preserves_host_params() -> None:
     import inspect
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[]),
         checkpoint_store=FakeStateStore(),
@@ -252,10 +253,10 @@ def test_db_trigger_signature_preserves_host_params() -> None:
     assert "events" not in sig.parameters
 
 
-def test_db_trigger_reserved_arg_name_raises() -> None:
+def test_trigger_reserved_arg_name_raises() -> None:
     with pytest.raises(ConfigurationError, match="conflicts with Azure Functions"):
 
-        @DbFunctionApp().db_trigger(
+        @DbBindings().trigger(
             arg_name="timer",
             source=FakeSourceAdapter(batches=[]),
             checkpoint_store=FakeStateStore(),
@@ -265,33 +266,33 @@ def test_db_trigger_reserved_arg_name_raises() -> None:
 
 
 # =====================================================================
-# db_input tests — data injection
+# input tests — data injection
 # =====================================================================
 
 
-def test_db_input_pk_static_returns_row(tmp_path: Path) -> None:
+def test_input_pk_static_returns_row(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-pk-static.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1})
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
     def handler(user: dict[str, object] | None) -> dict[str, object] | None:
         return user
 
     assert handler() == {"id": 1, "name": "Alice"}
 
 
-def test_db_input_pk_static_returns_none_when_not_found(tmp_path: Path) -> None:
+def test_input_pk_static_returns_none_when_not_found(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-pk-none.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 999})
+    @DbBindings().input("user", url=url, table="users", pk={"id": 999})
     def handler(user: dict[str, object] | None) -> dict[str, object] | None:
         return user
 
     assert handler() is None
 
 
-def test_db_input_pk_callable_resolves_from_kwargs(tmp_path: Path) -> None:
+def test_input_pk_callable_resolves_from_kwargs(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-pk-callable.db")
     _create_users_table(url)
 
@@ -299,7 +300,7 @@ def test_db_input_pk_callable_resolves_from_kwargs(tmp_path: Path) -> None:
         def __init__(self, user_id: int) -> None:
             self.user_id = user_id
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk=lambda req: {"id": req.user_id})
+    @DbBindings().input("user", url=url, table="users", pk=lambda req: {"id": req.user_id})
     def handler(req: FakeReq, user: dict[str, object] | None) -> dict[str, object] | None:
         return user
 
@@ -307,11 +308,11 @@ def test_db_input_pk_callable_resolves_from_kwargs(tmp_path: Path) -> None:
     assert handler(req=FakeReq(999)) is None
 
 
-def test_db_input_on_not_found_raise(tmp_path: Path) -> None:
+def test_input_on_not_found_raise(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-not-found-raise.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 999}, on_not_found="raise")
+    @DbBindings().input("user", url=url, table="users", pk={"id": 999}, on_not_found="raise")
     def handler(user: dict[str, object]) -> dict[str, object]:
         return user
 
@@ -319,22 +320,22 @@ def test_db_input_on_not_found_raise(tmp_path: Path) -> None:
         handler()
 
 
-def test_db_input_query_static_returns_rows(tmp_path: Path) -> None:
+def test_input_query_static_returns_rows(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-static.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("users", url=url, query="SELECT id, name FROM users ORDER BY id")
+    @DbBindings().input("users", url=url, query="SELECT id, name FROM users ORDER BY id")
     def handler(users: list[dict[str, object]]) -> list[dict[str, object]]:
         return users
 
     assert handler() == [{"id": 1, "name": "Alice"}]
 
 
-def test_db_input_query_with_static_params(tmp_path: Path) -> None:
+def test_input_query_with_static_params(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-params.db")
     _create_users_table_with_data(url)
 
-    @DbFunctionApp().db_input(
+    @DbBindings().input(
         "users",
         url=url,
         query="SELECT id, name FROM users WHERE active = :active ORDER BY id",
@@ -349,7 +350,7 @@ def test_db_input_query_with_static_params(tmp_path: Path) -> None:
     assert result[1]["name"] == "Carol"
 
 
-def test_db_input_query_with_callable_params(tmp_path: Path) -> None:
+def test_input_query_with_callable_params(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-callable-params.db")
     _create_users_table_with_data(url)
 
@@ -357,7 +358,7 @@ def test_db_input_query_with_callable_params(tmp_path: Path) -> None:
         def __init__(self, active: int) -> None:
             self.active = active
 
-    @DbFunctionApp().db_input(
+    @DbBindings().input(
         "users",
         url=url,
         query="SELECT id, name FROM users WHERE active = :active ORDER BY id",
@@ -371,11 +372,11 @@ def test_db_input_query_with_callable_params(tmp_path: Path) -> None:
     assert result[0]["name"] == "Bob"
 
 
-def test_db_input_query_returns_empty_list(tmp_path: Path) -> None:
+def test_input_query_returns_empty_list(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-empty.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input(
+    @DbBindings().input(
         "users",
         url=url,
         query="SELECT id, name FROM users WHERE id = :id",
@@ -387,11 +388,11 @@ def test_db_input_query_returns_empty_list(tmp_path: Path) -> None:
     assert handler() == []
 
 
-def test_db_input_pk_with_model(tmp_path: Path) -> None:
+def test_input_pk_with_model(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-pk-model.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1}, model=UserModel)
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1}, model=UserModel)
     def handler(user: UserModel | None) -> UserModel | None:
         return user
 
@@ -400,11 +401,11 @@ def test_db_input_pk_with_model(tmp_path: Path) -> None:
     assert result == UserModel(id=1, name="Alice")
 
 
-def test_db_input_query_with_model(tmp_path: Path) -> None:
+def test_input_query_with_model(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-model.db")
     _create_users_table_with_data(url)
 
-    @DbFunctionApp().db_input(
+    @DbBindings().input(
         "users",
         url=url,
         query="SELECT id, name FROM users WHERE active = :active ORDER BY id",
@@ -417,11 +418,11 @@ def test_db_input_query_with_model(tmp_path: Path) -> None:
     assert handler() == [UserModel(id=1, name="Alice"), UserModel(id=3, name="Carol")]
 
 
-def test_db_input_pk_with_model_not_found_returns_none(tmp_path: Path) -> None:
+def test_input_pk_with_model_not_found_returns_none(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-pk-model-none.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 999}, model=UserModel)
+    @DbBindings().input("user", url=url, table="users", pk={"id": 999}, model=UserModel)
     def handler(user: UserModel | None) -> UserModel | None:
         return user
 
@@ -429,18 +430,18 @@ def test_db_input_pk_with_model_not_found_returns_none(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("model", [str, int])
-def test_db_input_invalid_model_raises(model: type[object]) -> None:
+def test_input_invalid_model_raises(model: type[object]) -> None:
     with pytest.raises(ConfigurationError, match="subclass of BaseModel"):
-        DbFunctionApp().db_input(
+        DbBindings().input(
             "user",
             url="sqlite:///unused.db",
             table="users",
             pk={"id": 1},
-            model=model,  # type: ignore[arg-type]
+            model=cast(type[BaseModel], model),
         )
 
 
-def test_db_input_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_input_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     url = _sqlite_url(tmp_path, "input-close.db")
     _create_users_table(url)
     closed: list[DbReader] = []
@@ -452,7 +453,7 @@ def test_db_input_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(DbReader, "close", tracking_close)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1})
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
     def handler(user: dict[str, object] | None) -> None:
         pass
 
@@ -461,42 +462,42 @@ def test_db_input_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert len(closed) == 1
 
 
-def test_db_input_invalid_arg_name_raises() -> None:
-    with pytest.raises(ConfigurationError, match="db_input arg_name='user' not found"):
+def test_input_invalid_arg_name_raises() -> None:
+    with pytest.raises(ConfigurationError, match="input arg_name='user' not found"):
 
-        @DbFunctionApp().db_input("user", url="sqlite:///unused.db", table="users", pk={"id": 1})
+        @DbBindings().input("user", url="sqlite:///unused.db", table="users", pk={"id": 1})
         def handler() -> None:
             return None
 
 
-def test_db_input_requires_pk_or_query() -> None:
+def test_input_requires_pk_or_query() -> None:
     with pytest.raises(ConfigurationError, match="exactly one of 'pk' or 'query'"):
-        DbFunctionApp().db_input("data", url="sqlite:///unused.db")
+        DbBindings().input("data", url="sqlite:///unused.db")
 
 
-def test_db_input_rejects_both_pk_and_query() -> None:
+def test_input_rejects_both_pk_and_query() -> None:
     with pytest.raises(ConfigurationError, match="not both"):
-        DbFunctionApp().db_input(
+        DbBindings().input(
             "data", url="sqlite:///unused.db", table="t", pk={"id": 1}, query="SELECT 1"
         )
 
 
-def test_db_input_pk_requires_table() -> None:
+def test_input_pk_requires_table() -> None:
     with pytest.raises(ConfigurationError, match="requires 'table'"):
-        DbFunctionApp().db_input("data", url="sqlite:///unused.db", pk={"id": 1})
+        DbBindings().input("data", url="sqlite:///unused.db", pk={"id": 1})
 
 
-def test_db_input_params_requires_query() -> None:
+def test_input_params_requires_query() -> None:
     with pytest.raises(ConfigurationError, match="only valid with 'query'"):
-        DbFunctionApp().db_input(
+        DbBindings().input(
             "data", url="sqlite:///unused.db", table="t", pk={"id": 1}, params={"x": 1}
         )
 
 
-def test_db_input_resolver_rejects_var_args() -> None:
+def test_input_resolver_rejects_var_args() -> None:
     with pytest.raises(ConfigurationError, match="must not use \\*args or \\*\\*kwargs"):
 
-        @DbFunctionApp().db_input(
+        @DbBindings().input(
             "user",
             url="sqlite:///unused.db",
             table="users",
@@ -506,10 +507,10 @@ def test_db_input_resolver_rejects_var_args() -> None:
             pass
 
 
-def test_db_input_resolver_rejects_unknown_params() -> None:
+def test_input_resolver_rejects_unknown_params() -> None:
     with pytest.raises(ConfigurationError, match="references parameters.*not found"):
 
-        @DbFunctionApp().db_input(
+        @DbBindings().input(
             "user",
             url="sqlite:///unused.db",
             table="users",
@@ -519,24 +520,24 @@ def test_db_input_resolver_rejects_unknown_params() -> None:
             pass
 
 
-def test_db_input_preserves_function_name(tmp_path: Path) -> None:
+def test_input_preserves_function_name(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-name.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1})
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
     def my_handler(user: dict[str, object] | None) -> None:
         pass
 
     assert my_handler.__name__ == "my_handler"
 
 
-def test_db_input_hides_arg_from_signature(tmp_path: Path) -> None:
+def test_input_hides_arg_from_signature(tmp_path: Path) -> None:
     import inspect
 
     url = _sqlite_url(tmp_path, "input-sig.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1})
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
     def handler(req: object, user: dict[str, object] | None) -> None:
         pass
 
@@ -546,15 +547,15 @@ def test_db_input_hides_arg_from_signature(tmp_path: Path) -> None:
 
 
 # =====================================================================
-# db_output tests — return-value auto-write
+# output tests — return-value auto-write
 # =====================================================================
 
 
-def test_db_output_insert_dict(tmp_path: Path) -> None:
+def test_output_insert_dict(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-insert-dict.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> dict[str, object]:
         return {"id": 1, "status": "done"}
 
@@ -564,11 +565,11 @@ def test_db_output_insert_dict(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "done"}]
 
 
-def test_db_output_insert_list(tmp_path: Path) -> None:
+def test_output_insert_list(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-insert-list.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> list[dict[str, object]]:
         return [
             {"id": 1, "status": "a"},
@@ -581,11 +582,11 @@ def test_db_output_insert_list(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
 
 
-def test_db_output_none_is_noop(tmp_path: Path) -> None:
+def test_output_none_is_noop(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-none.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> None:
         return None
 
@@ -594,11 +595,11 @@ def test_db_output_none_is_noop(tmp_path: Path) -> None:
     assert _read_orders(url) == []
 
 
-def test_db_output_accepts_basemodel_return(tmp_path: Path) -> None:
+def test_output_accepts_basemodel_return(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-model.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> OrderModel:
         return OrderModel(id=1, status="done")
 
@@ -608,11 +609,11 @@ def test_db_output_accepts_basemodel_return(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "done"}]
 
 
-def test_db_output_accepts_list_basemodel_return(tmp_path: Path) -> None:
+def test_output_accepts_list_basemodel_return(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-model-list.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> list[OrderModel]:
         return [OrderModel(id=1, status="a"), OrderModel(id=2, status="b")]
 
@@ -622,11 +623,11 @@ def test_db_output_accepts_list_basemodel_return(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
 
 
-def test_db_output_accepts_mixed_list(tmp_path: Path) -> None:
+def test_output_accepts_mixed_list(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-model-mixed.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> list[dict[str, object] | OrderModel]:
         return [{"id": 1, "status": "a"}, OrderModel(id=2, status="b")]
 
@@ -636,20 +637,20 @@ def test_db_output_accepts_mixed_list(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
 
 
-def test_db_output_upsert_dict(tmp_path: Path) -> None:
+def test_output_upsert_dict(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-upsert-dict.db")
     _create_orders_table(url)
 
-    db = DbFunctionApp()
+    db = DbBindings()
 
-    @db.db_output(url=url, table="processed_orders", action="upsert", conflict_columns=["id"])
+    @db.output(url=url, table="processed_orders", action="upsert", conflict_columns=["id"])
     def handler() -> dict[str, object]:
         return {"id": 1, "status": "first"}
 
     handler()
     assert _read_orders(url) == [{"id": 1, "status": "first"}]
 
-    @db.db_output(url=url, table="processed_orders", action="upsert", conflict_columns=["id"])
+    @db.output(url=url, table="processed_orders", action="upsert", conflict_columns=["id"])
     def handler2() -> dict[str, object]:
         return {"id": 1, "status": "updated"}
 
@@ -657,11 +658,11 @@ def test_db_output_upsert_dict(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "updated"}]
 
 
-def test_db_output_upsert_list(tmp_path: Path) -> None:
+def test_output_upsert_list(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-upsert-list.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(
+    @DbBindings().output(
         url=url, table="processed_orders", action="upsert", conflict_columns=["id"]
     )
     def handler() -> list[dict[str, object]]:
@@ -671,16 +672,16 @@ def test_db_output_upsert_list(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "a"}, {"id": 2, "status": "b"}]
 
 
-def test_db_output_upsert_requires_conflict_columns() -> None:
+def test_output_upsert_requires_conflict_columns() -> None:
     with pytest.raises(ConfigurationError, match="requires 'conflict_columns'"):
-        DbFunctionApp().db_output(url="sqlite:///unused.db", table="t", action="upsert")
+        DbBindings().output(url="sqlite:///unused.db", table="t", action="upsert")
 
 
-def test_db_output_rejects_invalid_return_type(tmp_path: Path) -> None:
+def test_output_rejects_invalid_return_type(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-invalid.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> str:
         return "not a dict"
 
@@ -688,7 +689,7 @@ def test_db_output_rejects_invalid_return_type(tmp_path: Path) -> None:
         handler()
 
 
-def test_db_output_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_output_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     url = _sqlite_url(tmp_path, "output-close.db")
     _create_orders_table(url)
     closed: list[DbWriter] = []
@@ -700,7 +701,7 @@ def test_db_output_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(DbWriter, "close", tracking_close)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> dict[str, object]:
         return {"id": 1, "status": "done"}
 
@@ -709,19 +710,19 @@ def test_db_output_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.Monkey
     assert len(closed) == 1
 
 
-def test_db_output_preserves_function_name() -> None:
-    @DbFunctionApp().db_output(url="sqlite:///unused.db", table="t")
+def test_output_preserves_function_name() -> None:
+    @DbBindings().output(url="sqlite:///unused.db", table="t")
     def my_handler() -> None:
         return None
 
     assert my_handler.__name__ == "my_handler"
 
 
-def test_db_output_returns_original_value(tmp_path: Path) -> None:
+def test_output_returns_original_value(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-return.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> dict[str, object]:
         return {"id": 1, "status": "done"}
 
@@ -730,22 +731,22 @@ def test_db_output_returns_original_value(tmp_path: Path) -> None:
 
 
 # =====================================================================
-# db_reader tests — client injection (imperative escape hatch)
+# inject_reader tests — client injection (imperative escape hatch)
 # =====================================================================
 
 
-def test_db_reader_injects_reader(tmp_path: Path) -> None:
+def test_inject_reader_injects_reader(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "reader.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    @DbBindings().inject_reader("reader", url=url, table="users")
     def handler(reader: DbReader) -> dict[str, object] | None:
         return reader.get(pk={"id": 1})
 
     assert handler() == {"id": 1, "name": "Alice"}
 
 
-def test_db_reader_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_inject_reader_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     url = _sqlite_url(tmp_path, "reader-close.db")
     _create_users_table(url)
     closed: list[DbReader] = []
@@ -757,7 +758,7 @@ def test_db_reader_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(DbReader, "close", tracking_close)
 
-    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    @DbBindings().inject_reader("reader", url=url, table="users")
     def handler(reader: DbReader) -> None:
         assert reader.get(pk={"id": 1}) == {"id": 1, "name": "Alice"}
 
@@ -766,30 +767,30 @@ def test_db_reader_auto_closes_reader(tmp_path: Path, monkeypatch: pytest.Monkey
     assert len(closed) == 1
 
 
-def test_db_reader_invalid_arg_name_raises() -> None:
-    with pytest.raises(ConfigurationError, match="db_reader arg_name='reader' not found"):
+def test_inject_reader_invalid_arg_name_raises() -> None:
+    with pytest.raises(ConfigurationError, match="inject_reader arg_name='reader' not found"):
 
-        @DbFunctionApp().db_reader("reader", url="sqlite:///unused.db", table="users")
+        @DbBindings().inject_reader("reader", url="sqlite:///unused.db", table="users")
         def handler() -> None:
             return None
 
 
-def test_db_reader_async_proxy_get(tmp_path: Path) -> None:
+def test_inject_reader_async_proxy_get(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "reader-async-get.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    @DbBindings().inject_reader("reader", url=url, table="users")
     async def handler(reader: Any) -> Any:
         return await reader.get(pk={"id": 1})
 
     assert asyncio.run(handler()) == {"id": 1, "name": "Alice"}
 
 
-def test_db_reader_async_proxy_query(tmp_path: Path) -> None:
+def test_inject_reader_async_proxy_query(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "reader-async-query.db")
     _create_users_table_with_data(url)
 
-    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    @DbBindings().inject_reader("reader", url=url, table="users")
     async def handler(reader: Any) -> Any:
         return await reader.query(
             "SELECT id, name FROM users WHERE active = :active ORDER BY id",
@@ -800,15 +801,15 @@ def test_db_reader_async_proxy_query(tmp_path: Path) -> None:
 
 
 # =====================================================================
-# db_writer tests — client injection (imperative escape hatch)
+# inject_writer tests — client injection (imperative escape hatch)
 # =====================================================================
 
 
-def test_db_writer_injects_writer(tmp_path: Path) -> None:
+def test_inject_writer_injects_writer(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "writer.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
     def handler(writer: DbWriter) -> None:
         writer.insert(data={"id": 1, "status": "processed"})
 
@@ -817,7 +818,7 @@ def test_db_writer_injects_writer(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "processed"}]
 
 
-def test_db_writer_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_inject_writer_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     url = _sqlite_url(tmp_path, "writer-close.db")
     _create_orders_table(url)
     closed: list[DbWriter] = []
@@ -829,7 +830,7 @@ def test_db_writer_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(DbWriter, "close", tracking_close)
 
-    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
     def handler(writer: DbWriter) -> None:
         writer.insert(data={"id": 1, "status": "processed"})
 
@@ -838,19 +839,19 @@ def test_db_writer_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.Monkey
     assert len(closed) == 1
 
 
-def test_db_writer_invalid_arg_name_raises() -> None:
-    with pytest.raises(ConfigurationError, match="db_writer arg_name='writer' not found"):
+def test_inject_writer_invalid_arg_name_raises() -> None:
+    with pytest.raises(ConfigurationError, match="inject_writer arg_name='writer' not found"):
 
-        @DbFunctionApp().db_writer("writer", url="sqlite:///unused.db", table="processed")
+        @DbBindings().inject_writer("writer", url="sqlite:///unused.db", table="processed")
         def handler() -> None:
             return None
 
 
-def test_db_writer_async_proxy_insert(tmp_path: Path) -> None:
+def test_inject_writer_async_proxy_insert(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "writer-async-insert.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
     async def handler(writer: Any) -> None:
         await writer.insert(data={"id": 1, "status": "processed"})
 
@@ -859,11 +860,11 @@ def test_db_writer_async_proxy_insert(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "processed"}]
 
 
-def test_db_writer_async_proxy_upsert(tmp_path: Path) -> None:
+def test_inject_writer_async_proxy_upsert(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "writer-async-upsert.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
     async def handler(writer: Any) -> None:
         await writer.upsert(data={"id": 1, "status": "processed"}, conflict_columns=["id"])
 
@@ -877,18 +878,18 @@ def test_db_writer_async_proxy_upsert(tmp_path: Path) -> None:
 # =====================================================================
 
 
-def test_db_trigger_stacked_with_db_output(tmp_path: Path) -> None:
+def test_trigger_stacked_with_output(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "stack-trigger-output.db")
     _create_orders_table(url)
 
-    db = DbFunctionApp()
+    db = DbBindings()
 
-    @db.db_trigger(
+    @db.trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
     )
-    @db.db_output(url=url, table="processed_orders")
+    @db.output(url=url, table="processed_orders")
     def handler(events: list[RowChange]) -> list[dict[str, object]]:
         return [{"id": e.pk["id"], "status": "done"} for e in events]
 
@@ -898,19 +899,19 @@ def test_db_trigger_stacked_with_db_output(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "done"}]
 
 
-def test_db_trigger_stacked_with_db_writer(tmp_path: Path) -> None:
+def test_trigger_stacked_with_inject_writer(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "stack-trigger-writer.db")
     _create_orders_table(url)
 
-    db = DbFunctionApp()
+    db = DbBindings()
     captured: dict[str, object] = {}
 
-    @db.db_trigger(
+    @db.trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
     )
-    @db.db_writer("writer", url=url, table="processed_orders")
+    @db.inject_writer("writer", url=url, table="processed_orders")
     def handler(events: list[RowChange], writer: DbWriter) -> None:
         captured["events_count"] = len(events)
         captured["has_writer"] = writer is not None
@@ -923,17 +924,17 @@ def test_db_trigger_stacked_with_db_writer(tmp_path: Path) -> None:
     assert captured["has_writer"] is True
 
 
-def test_db_trigger_stacked_signature_hides_db_params() -> None:
+def test_trigger_stacked_signature_hides_db_params() -> None:
     import inspect
 
-    db = DbFunctionApp()
+    db = DbBindings()
 
-    @db.db_trigger(
+    @db.trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[]),
         checkpoint_store=FakeStateStore(),
     )
-    @db.db_writer("writer", url="sqlite:///unused.db", table="t")
+    @db.inject_writer("writer", url="sqlite:///unused.db", table="t")
     def handler(timer: object, events: list[RowChange], writer: DbWriter) -> None:
         del timer, events, writer
 
@@ -944,31 +945,31 @@ def test_db_trigger_stacked_signature_hides_db_params() -> None:
     assert "writer" not in param_names
 
 
-def test_db_trigger_rejects_async_db_writer_wrapper() -> None:
-    db = DbFunctionApp()
+def test_trigger_rejects_async_inject_writer_wrapper() -> None:
+    db = DbBindings()
 
     with pytest.raises(ConfigurationError, match="does not support async"):
 
-        @db.db_trigger(
+        @db.trigger(
             arg_name="events",
             source=FakeSourceAdapter(batches=[]),
             checkpoint_store=FakeStateStore(),
         )
-        @db.db_writer("writer", url="sqlite:///unused.db", table="t")
+        @db.inject_writer("writer", url="sqlite:///unused.db", table="t")
         async def handler(events: list[RowChange], writer: DbWriter) -> None:
             del events, writer
 
 
-def test_db_input_stacked_with_db_output(tmp_path: Path) -> None:
+def test_input_stacked_with_output(tmp_path: Path) -> None:
     url_read = _sqlite_url(tmp_path, "stack-input-read.db")
     url_write = _sqlite_url(tmp_path, "stack-input-write.db")
     _create_users_table(url_read)
     _create_orders_table(url_write)
 
-    db = DbFunctionApp()
+    db = DbBindings()
 
-    @db.db_input("user", url=url_read, table="users", pk={"id": 1})
-    @db.db_output(url=url_write, table="processed_orders")
+    @db.input("user", url=url_read, table="users", pk={"id": 1})
+    @db.output(url=url_write, table="processed_orders")
     def handler(user: dict[str, object] | None) -> dict[str, object] | None:
         if user is None:
             return None
@@ -985,13 +986,13 @@ def test_db_input_stacked_with_db_output(tmp_path: Path) -> None:
 # =====================================================================
 
 
-def test_db_input_resolver_rejects_positional_only_params() -> None:
+def test_input_resolver_rejects_positional_only_params() -> None:
     def resolver(x: int, /) -> dict[str, object]:
         return {"id": x}
 
     with pytest.raises(ConfigurationError, match="positional-only"):
 
-        @DbFunctionApp().db_input(
+        @DbBindings().input(
             "user",
             url="sqlite:///unused.db",
             table="users",
@@ -1001,31 +1002,31 @@ def test_db_input_resolver_rejects_positional_only_params() -> None:
             pass
 
 
-def test_db_input_invalid_on_not_found_raises() -> None:
+def test_input_invalid_on_not_found_raises() -> None:
     with pytest.raises(ConfigurationError, match="on_not_found must be"):
-        DbFunctionApp().db_input(
+        DbBindings().input(
             "user",
             url="sqlite:///unused.db",
             table="users",
             pk={"id": 1},
-            on_not_found="bogus",  # type: ignore[arg-type]
+            on_not_found=cast(Any, "bogus"),
         )
 
 
-def test_db_output_invalid_action_raises() -> None:
+def test_output_invalid_action_raises() -> None:
     with pytest.raises(ConfigurationError, match="action must be"):
-        DbFunctionApp().db_output(
+        DbBindings().output(
             url="sqlite:///unused.db",
             table="t",
-            action="bogus",  # type: ignore[arg-type]
+            action=cast(Any, "bogus"),
         )
 
 
-def test_db_output_rejects_invalid_list_elements(tmp_path: Path) -> None:
+def test_output_rejects_invalid_list_elements(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "output-bad-list.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     def handler() -> list[object]:
         return [{"id": 1, "status": "ok"}, "not_a_dict"]
 
@@ -1033,11 +1034,11 @@ def test_db_output_rejects_invalid_list_elements(tmp_path: Path) -> None:
         handler()
 
 
-def test_db_trigger_forwards_host_params_at_runtime() -> None:
+def test_trigger_forwards_host_params_at_runtime() -> None:
     received: dict[str, object] = {}
     host_timer = object()
 
-    @DbFunctionApp().db_trigger(
+    @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
@@ -1052,20 +1053,20 @@ def test_db_trigger_forwards_host_params_at_runtime() -> None:
     assert received["events_count"] == 1
 
 
-def test_db_trigger_forwards_host_params_with_db_output(tmp_path: Path) -> None:
+def test_trigger_forwards_host_params_with_output(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "trigger-host-output.db")
     _create_orders_table(url)
     received: dict[str, object] = {}
     host_timer = object()
 
-    db = DbFunctionApp()
+    db = DbBindings()
 
-    @db.db_trigger(
+    @db.trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
         checkpoint_store=FakeStateStore(),
     )
-    @db.db_output(url=url, table="processed_orders")
+    @db.output(url=url, table="processed_orders")
     def handler(timer: object, events: list[RowChange]) -> list[dict[str, object]]:
         received["timer"] = timer
         return [{"id": e.pk["id"], "status": "done"} for e in events]
@@ -1082,33 +1083,33 @@ def test_db_trigger_forwards_host_params_with_db_output(tmp_path: Path) -> None:
 # =====================================================================
 
 
-def test_db_input_async_pk_static(tmp_path: Path) -> None:
+def test_input_async_pk_static(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-input-pk.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk={"id": 1})
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
     async def handler(user: dict[str, object] | None) -> dict[str, object] | None:
         return user
 
     assert asyncio.run(handler()) == {"id": 1, "name": "Alice"}
 
 
-def test_db_input_async_query(tmp_path: Path) -> None:
+def test_input_async_query(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-input-query.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_input("users", url=url, query="SELECT id, name FROM users ORDER BY id")
+    @DbBindings().input("users", url=url, query="SELECT id, name FROM users ORDER BY id")
     async def handler(users: list[dict[str, object]]) -> list[dict[str, object]]:
         return users
 
     assert asyncio.run(handler()) == [{"id": 1, "name": "Alice"}]
 
 
-def test_db_input_async_pk_callable(tmp_path: Path) -> None:
+def test_input_async_pk_callable(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-input-pk-callable.db")
@@ -1118,7 +1119,7 @@ def test_db_input_async_pk_callable(tmp_path: Path) -> None:
         def __init__(self, user_id: int) -> None:
             self.user_id = user_id
 
-    @DbFunctionApp().db_input("user", url=url, table="users", pk=lambda req: {"id": req.user_id})
+    @DbBindings().input("user", url=url, table="users", pk=lambda req: {"id": req.user_id})
     async def handler(req: FakeReq, user: dict[str, object] | None) -> dict[str, object] | None:
         return user
 
@@ -1126,13 +1127,13 @@ def test_db_input_async_pk_callable(tmp_path: Path) -> None:
     assert asyncio.run(handler(req=FakeReq(999))) is None
 
 
-def test_db_output_async_insert(tmp_path: Path) -> None:
+def test_output_async_insert(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-output-insert.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     async def handler() -> dict[str, object]:
         return {"id": 1, "status": "async_done"}
 
@@ -1142,13 +1143,13 @@ def test_db_output_async_insert(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "async_done"}]
 
 
-def test_db_output_async_none_is_noop(tmp_path: Path) -> None:
+def test_output_async_none_is_noop(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-output-none.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_output(url=url, table="processed_orders")
+    @DbBindings().output(url=url, table="processed_orders")
     async def handler() -> None:
         return None
 
@@ -1157,26 +1158,26 @@ def test_db_output_async_none_is_noop(tmp_path: Path) -> None:
     assert _read_orders(url) == []
 
 
-def test_db_reader_async_injects_reader(tmp_path: Path) -> None:
+def test_inject_reader_async_injects_reader(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-reader.db")
     _create_users_table(url)
 
-    @DbFunctionApp().db_reader("reader", url=url, table="users")
+    @DbBindings().inject_reader("reader", url=url, table="users")
     async def handler(reader: Any) -> Any:
         return await reader.get(pk={"id": 1})
 
     assert asyncio.run(handler()) == {"id": 1, "name": "Alice"}
 
 
-def test_db_writer_async_injects_writer(tmp_path: Path) -> None:
+def test_inject_writer_async_injects_writer(tmp_path: Path) -> None:
     import asyncio
 
     url = _sqlite_url(tmp_path, "async-writer.db")
     _create_orders_table(url)
 
-    @DbFunctionApp().db_writer("writer", url=url, table="processed_orders")
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
     async def handler(writer: Any) -> None:
         await writer.insert(data={"id": 1, "status": "async_written"})
 

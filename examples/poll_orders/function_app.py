@@ -1,4 +1,4 @@
-"""Example: Poll orders table for changes using DbFunctionApp decorators.
+"""Example: Poll orders table for changes using DbBindings decorators.
 
 Prerequisites:
     pip install azure-functions-db[postgres]
@@ -15,10 +15,10 @@ import logging
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 
-from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
+from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
-db = DbFunctionApp()
+db = DbBindings()
 logger = logging.getLogger(__name__)
 
 source = SqlAlchemySource(
@@ -40,7 +40,7 @@ checkpoint_store = BlobCheckpointStore(
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
     del timer
     logger.info("Processed %d order events", len(events))

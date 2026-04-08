@@ -1,8 +1,8 @@
 from azure.storage.blob import ContainerClient
 
-from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
+from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
 
-db = DbFunctionApp()
+db = DbBindings()
 
 source = SqlAlchemySource(
     url="postgresql+psycopg://postgres:postgres@localhost:5432/orders",
@@ -21,7 +21,7 @@ checkpoint_store = BlobCheckpointStore(
 )
 
 
-@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 def handler(events: list[RowChange]) -> None:
     for event in events:
         print(event.event_id, event.pk, event.after)

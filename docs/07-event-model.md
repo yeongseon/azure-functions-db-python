@@ -127,8 +127,8 @@ class OrderChange(BaseModel):
     status: str
     updated_at: datetime
 
-# Future: Pydantic model mapping for db_trigger events
-# @db.db_trigger(arg_name="events", source=source, checkpoint_store=store, model=OrderChange)
+# Future: Pydantic model mapping for trigger events
+# @db.trigger(arg_name="events", source=source, checkpoint_store=store, model=OrderChange)
 # def handle(events: list[OrderChange], context):
 #     ...
 ```

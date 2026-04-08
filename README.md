@@ -30,8 +30,8 @@ Azure Functions Python v2 has no built-in database integration story:
 - **Pseudo DB trigger** — poll-based change detection with checkpoint, lease, and at-least-once delivery
 - **Multi-DB support** — PostgreSQL, MySQL, and SQL Server via SQLAlchemy dialects
 - **Single `pip install`** — one package with optional extras for each database driver
-- **Data injection** — `db_input` injects query results directly; `db_output` auto-writes return values
-- **Client injection** — `db_reader`/`db_writer` for imperative control when needed
+- **Data injection** — `input` injects query results directly; `output` auto-writes return values
+- **Client injection** — `inject_reader`/`inject_writer` for imperative control when needed
 
 ## Shared Core
 
@@ -66,10 +66,10 @@ azure-functions-db[postgres]
 ```python
 import azure.functions as func
 from azure.storage.blob import ContainerClient
-from azure_functions_db import BlobCheckpointStore, DbFunctionApp, RowChange, SqlAlchemySource
+from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
 
 app = func.FunctionApp()
-db = DbFunctionApp()
+db = DbBindings()
 
 source = SqlAlchemySource(
     url="%ORDERS_DB_URL%",
@@ -89,7 +89,7 @@ checkpoint_store = BlobCheckpointStore(
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
     for event in events:
         print(f"Order {event.pk}: {event.op}")
@@ -99,27 +99,27 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
 
 ### Input Binding (data injection)
 
-`db_input` injects the actual query result into your handler — no client needed.
+`input` injects the actual query result into your handler — no client needed.
 
 ```python
-from azure_functions_db import DbFunctionApp
+from azure_functions_db import DbBindings
 
-db = DbFunctionApp()
+db = DbBindings()
 
 # Single row by primary key (static)
-@db.db_input("user", url="%DB_URL%", table="users", pk={"id": 42})
+@db.input("user", url="%DB_URL%", table="users", pk={"id": 42})
 def load_user(user: dict | None) -> None:
     if user:
         print(user["name"])
 
 # Single row by primary key (dynamic — resolved from handler kwargs)
-@db.db_input("user", url="%DB_URL%", table="users",
+@db.input("user", url="%DB_URL%", table="users",
              pk=lambda req: {"id": req.params["id"]})
 def get_user(req, user: dict | None) -> None:
     print(user)
 
 # Multiple rows by SQL query
-@db.db_input("users", url="%DB_URL%",
+@db.input("users", url="%DB_URL%",
              query="SELECT * FROM users WHERE active = :active",
              params={"active": True})
 def list_active_users(users: list[dict]) -> None:
@@ -129,20 +129,20 @@ def list_active_users(users: list[dict]) -> None:
 
 ### Output Binding (auto-write)
 
-`db_output` writes the handler's return value to the database automatically.
+`output` writes the handler's return value to the database automatically.
 
 ```python
-from azure_functions_db import DbFunctionApp
+from azure_functions_db import DbBindings
 
-db = DbFunctionApp()
+db = DbBindings()
 
 # Insert — return a dict for single row, list[dict] for batch
-@db.db_output(url="%DB_URL%", table="orders")
+@db.output(url="%DB_URL%", table="orders")
 def create_order() -> dict:
     return {"id": 1, "status": "pending", "total": 99.99}
 
 # Upsert — set action and conflict_columns
-@db.db_output(url="%DB_URL%", table="orders",
+@db.output(url="%DB_URL%", table="orders",
               action="upsert", conflict_columns=["id"])
 def upsert_orders() -> list[dict]:
     return [
@@ -155,19 +155,19 @@ Supported upsert dialects: PostgreSQL, SQLite, MySQL.
 
 ### Client Injection (imperative escape hatches)
 
-For complex operations (multiple queries, transactions, update/delete), use `db_reader`/`db_writer` to get a client instance:
+For complex operations (multiple queries, transactions, update/delete), use `inject_reader`/`inject_writer` to get a client instance:
 
 ```python
-from azure_functions_db import DbFunctionApp, DbReader, DbWriter
+from azure_functions_db import DbBindings, DbReader, DbWriter
 
-db = DbFunctionApp()
+db = DbBindings()
 
-@db.db_reader("reader", url="%DB_URL%", table="users")
+@db.inject_reader("reader", url="%DB_URL%", table="users")
 def complex_read(reader: DbReader) -> None:
     user = reader.get(pk={"id": 42})
     orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
 
-@db.db_writer("writer", url="%DB_URL%", table="orders")
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
 def complex_write(writer: DbWriter) -> None:
     writer.insert(data={"id": 1, "status": "pending"})
     writer.update(data={"status": "shipped"}, pk={"id": 1})
@@ -184,14 +184,14 @@ from azure.storage.blob import ContainerClient
 
 from azure_functions_db import (
     BlobCheckpointStore,
-    DbFunctionApp,
+    DbBindings,
     EngineProvider,
     RowChange,
     SqlAlchemySource,
 )
 
 app = func.FunctionApp()
-db = DbFunctionApp()
+db = DbBindings()
 
 engine_provider = EngineProvider()
 
@@ -213,8 +213,8 @@ checkpoint_store = BlobCheckpointStore(
 
 @app.function_name(name="orders_poll")
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
-@db.db_trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
-@db.db_output(
+@db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
+@db.output(
     url="%DEST_DB_URL%",
     table="processed_orders",
     action="upsert",

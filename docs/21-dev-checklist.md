@@ -76,6 +76,6 @@
 
 ## Phase 11: Binding Integration
 - [x] Trigger + output binding combined example
-- [x] Binding decorator sugar (DbFunctionApp: db_trigger, db_input, db_output)
+- [x] Binding decorator sugar (DbBindings: trigger, input, output)
 - [x] Docs update
 - [x] Sample function_app.py with binding

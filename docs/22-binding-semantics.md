@@ -97,28 +97,28 @@ Unlike triggers, they do not manage state (checkpoint/lease) and operate on a pe
 
 ## 7. Future Extensions
 
-## 7. Decorator API (DbFunctionApp)
+## 7. Decorator API (DbBindings)
 
 ### 7.1 Data Injection Decorators
 
-- `@db.db_input()` — injects query results directly into handler parameter
+- `@db.input()` — injects query results directly into handler parameter
   - PK mode: `pk=dict | Callable` → injects `dict | None`
   - Query mode: `query=str, params=dict | Callable` → injects `list[dict]`
   - `on_not_found="none"` (default) or `"raise"` for strict mode
-- `@db.db_output()` — auto-writes handler return value to DB
+- `@db.output()` — auto-writes handler return value to DB
   - `action="insert"` (default) or `"upsert"` with `conflict_columns`
   - Return `dict` for single row, `list[dict]` for batch, `None` for no-op
 
 ### 7.2 Client Injection Decorators (imperative escape hatches)
 
-- `@db.db_reader()` — injects `DbReader` instance per invocation
-- `@db.db_writer()` — injects `DbWriter` instance per invocation
+- `@db.inject_reader()` — injects `DbReader` instance per invocation
+- `@db.inject_writer()` — injects `DbWriter` instance per invocation
 - Use for complex operations: multiple queries, transactions, update/delete
 
 ### 7.3 Trigger Decorator
 
-- `@db.db_trigger()` — decorator that wraps `PollTrigger` for change detection
-- Implemented via `DbFunctionApp` class with automatic lifecycle management
+- `@db.trigger()` — decorator that wraps `PollTrigger` for change detection
+- Implemented via `DbBindings` class with automatic lifecycle management
 - See [Python API Spec](04-python-api-spec.md) for full usage
 
 ### 7.2 DbSession (if needed)

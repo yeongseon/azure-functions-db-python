@@ -23,7 +23,7 @@ azure-functions-db/
         context.py       # PollContext
         events.py        # RowChange, EventNormalizer
         retry.py
-        decorators.py    # DbFunctionApp (db_trigger, db_input, db_output)
+        decorators.py    # DbBindings (trigger, input, output)
 
         state/
           __init__.py
@@ -73,7 +73,7 @@ azure-functions-db/
 ## Module Responsibilities
 
 ### api.py / __init__.py
-Public re-export surface. Exposes `PollTrigger`, `SqlAlchemySource`, `BlobCheckpointStore`, `DbReader`, `DbWriter`, `DbFunctionApp`.
+Public re-export surface. Exposes `PollTrigger`, `SqlAlchemySource`, `BlobCheckpointStore`, `DbReader`, `DbWriter`, `DbBindings`.
 
 ### core/*
 Common layer providing shared configuration, engine/pool, types, errors, and serializers.

@@ -54,12 +54,8 @@ class _AsyncDbWriterProxy:
     async def insert_many(self, *, rows: list[dict[str, object]]) -> None:
         await asyncio.to_thread(self._writer.insert_many, rows=rows)
 
-    async def upsert(
-        self, *, data: dict[str, object], conflict_columns: list[str]
-    ) -> None:
-        await asyncio.to_thread(
-            self._writer.upsert, data=data, conflict_columns=conflict_columns
-        )
+    async def upsert(self, *, data: dict[str, object], conflict_columns: list[str]) -> None:
+        await asyncio.to_thread(self._writer.upsert, data=data, conflict_columns=conflict_columns)
 
     async def upsert_many(
         self,
@@ -161,7 +157,7 @@ def _validate_model_type(model: object | None) -> None:
         return
     if not isinstance(model, type) or not issubclass(model, BaseModel):
         model_name = model.__name__ if isinstance(model, type) else type(model).__name__
-        msg = f"db_input model must be a subclass of BaseModel, got '{model_name}'"
+        msg = f"input model must be a subclass of BaseModel, got '{model_name}'"
         raise ConfigurationError(msg)
 
 
@@ -184,18 +180,18 @@ def _normalize_output_row(row: dict[str, object] | BaseModel) -> dict[str, objec
     return row
 
 
-class DbFunctionApp:
+class DbBindings:
     """Azure Functions-style decorator API for database integration.
 
-    Provides ``db_trigger``, ``db_input``, ``db_output``, ``db_reader``,
-    and ``db_writer`` decorator methods that wrap the imperative API
+    Provides ``trigger``, ``input``, ``output``, ``inject_reader``,
+    and ``inject_writer`` decorator methods that wrap the imperative API
     (PollTrigger, DbReader, DbWriter) in an Azure Functions-native
     decorator experience.
 
-    **Data injection** (``db_input`` / ``db_output``):
+    **Data injection** (``input`` / ``output``):
         Handlers receive actual data or have return values auto-written.
 
-    **Client injection** (``db_reader`` / ``db_writer``):
+    **Client injection** (``inject_reader`` / ``inject_writer``):
         Handlers receive ``DbReader`` / ``DbWriter`` instances for
         imperative control.
 
@@ -204,15 +200,15 @@ class DbFunctionApp:
 
             @app.function_name(name="my_func")
             @app.schedule(...)          # Azure trigger (outermost)
-            @db.db_trigger(...)         # db decorator (closest to fn)
+            @db.trigger(...)            # db decorator (closest to fn)
             def my_func(events): ...
 
-    Note: This is a pseudo-trigger implementation. ``db_trigger`` requires
+    Note: This is a pseudo-trigger implementation. ``trigger`` requires
     an actual Azure Functions trigger (e.g. ``@app.schedule``) to fire.
     It does not register a native Azure Functions binding.
     """
 
-    def db_trigger(
+    def trigger(
         self,
         *,
         arg_name: str,
@@ -251,13 +247,13 @@ class DbFunctionApp:
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            _validate_arg_name(arg_name, fn, "db_trigger")
+            _validate_arg_name(arg_name, fn, "trigger")
 
             # Reject async handlers: PollTrigger.run is synchronous and
             # calling an async function without await would silently return
             # an unawaited coroutine.
             if inspect.iscoroutinefunction(fn):
-                msg = "db_trigger does not support async handlers. Use a sync handler instead."
+                msg = "trigger does not support async handlers. Use a sync handler instead."
                 raise ConfigurationError(msg)
 
             trigger_name = name or fn.__name__
@@ -317,7 +313,7 @@ class DbFunctionApp:
     # Data injection decorators
     # ------------------------------------------------------------------
 
-    def db_input(
+    def input(
         self,
         arg_name: str,
         *,
@@ -342,14 +338,14 @@ class DbFunctionApp:
             static dict for fixed lookups or a callable for dynamic
             resolution from other handler parameters::
 
-                @db.db_input("user", url=..., table="users",
+                @db.input("user", url=..., table="users",
                              pk=lambda req: {"id": req.params["id"]})
                 def handler(req, user): ...
 
         **Query mode** (multiple rows):
             The parameter receives ``list[dict[str, object]]``::
 
-                @db.db_input("users", url=...,
+                @db.input("users", url=...,
                              query="SELECT * FROM users WHERE active = :active",
                              params={"active": True})
                 def handler(users): ...
@@ -379,19 +375,19 @@ class DbFunctionApp:
             Optional shared ``EngineProvider`` for connection pooling.
         """
         if on_not_found not in ("none", "raise"):
-            msg = f"db_input on_not_found must be 'none' or 'raise', got '{on_not_found}'"
+            msg = f"input on_not_found must be 'none' or 'raise', got '{on_not_found}'"
             raise ConfigurationError(msg)
         if pk is not None and query is not None:
-            msg = "db_input requires exactly one of 'pk' or 'query', not both"
+            msg = "input requires exactly one of 'pk' or 'query', not both"
             raise ConfigurationError(msg)
         if pk is None and query is None:
-            msg = "db_input requires exactly one of 'pk' or 'query'"
+            msg = "input requires exactly one of 'pk' or 'query'"
             raise ConfigurationError(msg)
         if pk is not None and table is None:
-            msg = "db_input with 'pk' requires 'table' to be set"
+            msg = "input with 'pk' requires 'table' to be set"
             raise ConfigurationError(msg)
         if params is not None and query is None:
-            msg = "db_input 'params' is only valid with 'query'"
+            msg = "input 'params' is only valid with 'query'"
             raise ConfigurationError(msg)
         _validate_model_type(model)
 
@@ -404,17 +400,15 @@ class DbFunctionApp:
         params_static: dict[str, object] | None = None if callable(params) else params
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            _validate_arg_name(arg_name, fn, "db_input")
+            _validate_arg_name(arg_name, fn, "input")
 
             pk_resolver_params: list[str] = []
             params_resolver_params: list[str] = []
             if pk_callable is not None:
-                pk_resolver_params = _validate_resolver(
-                    pk_callable, fn, {arg_name}, "pk", "db_input"
-                )
+                pk_resolver_params = _validate_resolver(pk_callable, fn, {arg_name}, "pk", "input")
             if params_callable is not None:
                 params_resolver_params = _validate_resolver(
-                    params_callable, fn, {arg_name}, "params", "db_input"
+                    params_callable, fn, {arg_name}, "params", "input"
                 )
 
             is_async = inspect.iscoroutinefunction(fn)
@@ -427,13 +421,11 @@ class DbFunctionApp:
                 resolved_params: dict[str, object] | None = None
                 if use_pk:
                     if pk_callable is not None:
-                        resolved_pk = _resolve_callable(
-                            pk_callable, pk_resolver_params, all_kwargs
-                        )
+                        resolved_pk = _resolve_callable(pk_callable, pk_resolver_params, all_kwargs)
                     elif pk_static is not None:
                         resolved_pk = pk_static
                     else:
-                        msg = "db_input: unreachable – neither pk callable nor pk static"
+                        msg = "input: unreachable – neither pk callable nor pk static"
                         raise ConfigurationError(msg)
                 else:
                     if params_callable is not None:
@@ -458,18 +450,18 @@ class DbFunctionApp:
                 try:
                     if use_pk:
                         if resolved_pk is None:
-                            msg = "db_input: unreachable – pk mode but resolved_pk is None"
+                            msg = "input: unreachable – pk mode but resolved_pk is None"
                             raise ConfigurationError(msg)
                         result = reader.get(pk=resolved_pk)
                         if result is None and on_not_found == "raise":
                             from .core.errors import NotFoundError
 
-                            msg = f"db_input: no row found for pk={resolved_pk} in table '{table}'"
+                            msg = f"input: no row found for pk={resolved_pk} in table '{table}'"
                             raise NotFoundError(msg)
                         return result
                     else:
                         if query is None:
-                            msg = "db_input: unreachable – query mode but query is None"
+                            msg = "input: unreachable – query mode but query is None"
                             raise ConfigurationError(msg)
                         return reader.query(query, params=resolved_params)
                 finally:
@@ -499,7 +491,7 @@ class DbFunctionApp:
 
         return decorator
 
-    def db_output(
+    def output(
         self,
         *,
         url: str,
@@ -536,10 +528,10 @@ class DbFunctionApp:
             Optional shared ``EngineProvider`` for connection pooling.
         """
         if action not in ("insert", "upsert"):
-            msg = f"db_output action must be 'insert' or 'upsert', got '{action}'"
+            msg = f"output action must be 'insert' or 'upsert', got '{action}'"
             raise ConfigurationError(msg)
         if action == "upsert" and not conflict_columns:
-            msg = "db_output with action='upsert' requires 'conflict_columns'"
+            msg = "output with action='upsert' requires 'conflict_columns'"
             raise ConfigurationError(msg)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -561,7 +553,7 @@ class DbFunctionApp:
                         row = _normalize_output_row(result)
                         if action == "upsert":
                             if conflict_columns is None:
-                                msg = "db_output: unreachable – upsert without conflict_columns"
+                                msg = "output: unreachable – upsert without conflict_columns"
                                 raise ConfigurationError(msg)
                             writer.upsert(data=row, conflict_columns=conflict_columns)
                         else:
@@ -578,21 +570,21 @@ class DbFunctionApp:
                         if bad is not None:
                             bad_type = type(result[bad]).__name__
                             msg = (
-                                f"db_output: handler returned list with non-dict element "
+                                f"output: handler returned list with non-dict element "
                                 f"at index {bad} ({bad_type}); expected list[dict | BaseModel]"
                             )
                             raise ConfigurationError(msg)
                         rows = [_normalize_output_row(row) for row in result]
                         if action == "upsert":
                             if conflict_columns is None:
-                                msg = "db_output: unreachable – upsert without conflict_columns"
+                                msg = "output: unreachable – upsert without conflict_columns"
                                 raise ConfigurationError(msg)
                             writer.upsert_many(rows=rows, conflict_columns=conflict_columns)
                         else:
                             writer.insert_many(rows=rows)
                     else:
                         msg = (
-                            f"db_output: handler returned {type(result).__name__}, "
+                            f"output: handler returned {type(result).__name__}, "
                             f"expected dict, list[dict], BaseModel, list[dict | BaseModel], or None"
                         )
                         raise ConfigurationError(msg)
@@ -627,7 +619,7 @@ class DbFunctionApp:
     # Client injection decorators (imperative escape hatches)
     # ------------------------------------------------------------------
 
-    def db_reader(
+    def inject_reader(
         self,
         arg_name: str,
         *,
@@ -640,7 +632,7 @@ class DbFunctionApp:
 
         Use this when you need imperative control over reads (multiple
         queries, dynamic SQL, etc.).  For simple data injection, prefer
-        :meth:`db_input`.
+        :meth:`input`.
 
         The handler parameter named ``arg_name`` will receive a pre-configured
         ``DbReader`` instance.  The reader is created fresh per invocation and
@@ -663,7 +655,7 @@ class DbFunctionApp:
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            _validate_arg_name(arg_name, fn, "db_reader")
+            _validate_arg_name(arg_name, fn, "inject_reader")
             is_async = inspect.iscoroutinefunction(fn)
 
             if is_async:
@@ -705,7 +697,7 @@ class DbFunctionApp:
 
         return decorator
 
-    def db_writer(
+    def inject_writer(
         self,
         arg_name: str,
         *,
@@ -718,7 +710,7 @@ class DbFunctionApp:
 
         Use this when you need imperative control over writes (multiple
         operations, transactions, update/delete, etc.).  For simple
-        auto-write, prefer :meth:`db_output`.
+        auto-write, prefer :meth:`output`.
 
         The handler parameter named ``arg_name`` will receive a pre-configured
         ``DbWriter`` instance.  The writer is created fresh per invocation and
@@ -741,7 +733,7 @@ class DbFunctionApp:
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            _validate_arg_name(arg_name, fn, "db_writer")
+            _validate_arg_name(arg_name, fn, "inject_writer")
             is_async = inspect.iscoroutinefunction(fn)
 
             if is_async:

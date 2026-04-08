@@ -17,7 +17,7 @@ pip install azure-functions-db[postgres]
 ```
 
 ```python
-from azure_functions_db import DbFunctionApp, PollTrigger, DbReader, DbWriter
+from azure_functions_db import DbBindings, PollTrigger, DbReader, DbWriter
 from azure_functions_db import DbConfig, SqlAlchemySource
 ```
 
