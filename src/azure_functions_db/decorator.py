@@ -340,9 +340,11 @@ class DbFunctionApp:
                             resolved_pk = _resolve_callable(
                                 pk_callable, pk_resolver_params, all_kwargs
                             )
-                        else:
-                            assert pk_static is not None
+                        elif pk_static is not None:
                             resolved_pk = pk_static
+                        else:
+                            msg = "db_input: unreachable – neither pk callable nor pk static"
+                            raise ConfigurationError(msg)
                         result = reader.get(pk=resolved_pk)
                         if result is None and on_not_found == "raise":
                             from .core.errors import NotFoundError
@@ -358,7 +360,9 @@ class DbFunctionApp:
                             )
                         elif params_static is not None:
                             resolved_params = params_static
-                        assert query is not None
+                        if query is None:
+                            msg = "db_input: unreachable – query mode but query is None"
+                            raise ConfigurationError(msg)
                         return reader.query(query, params=resolved_params)
                 finally:
                     reader.close()
@@ -445,13 +449,17 @@ class DbFunctionApp:
                 try:
                     if isinstance(result, dict):
                         if action == "upsert":
-                            assert conflict_columns is not None
+                            if conflict_columns is None:
+                                msg = "db_output: unreachable – upsert without conflict_columns"
+                                raise ConfigurationError(msg)
                             writer.upsert(data=result, conflict_columns=conflict_columns)
                         else:
                             writer.insert(data=result)
                     elif isinstance(result, list):
                         if action == "upsert":
-                            assert conflict_columns is not None
+                            if conflict_columns is None:
+                                msg = "db_output: unreachable – upsert without conflict_columns"
+                                raise ConfigurationError(msg)
                             writer.upsert_many(rows=result, conflict_columns=conflict_columns)
                         else:
                             writer.insert_many(rows=result)
