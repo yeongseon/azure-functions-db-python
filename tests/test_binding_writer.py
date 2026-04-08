@@ -61,7 +61,7 @@ def _create_no_pk_db(db_path: Path) -> str:
     return url
 
 
-def _read_all(url: str, table_name: str) -> list[dict]:
+def _read_all(url: str, table_name: str) -> list[dict[str, object]]:
     engine = create_engine(url)
     metadata = MetaData()
     metadata.reflect(bind=engine, only=[table_name])
@@ -485,7 +485,7 @@ class TestDbWriterErrorMapping:
         writer._ensure_initialized()
         assert writer._engine is not None
         with patch.object(
-            writer._engine.dialect,  # type: ignore[union-attr]
+            writer._engine.dialect,
             "name",
             "mssql",
         ):

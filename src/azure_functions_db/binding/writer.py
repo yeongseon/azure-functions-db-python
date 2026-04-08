@@ -366,11 +366,21 @@ class DbWriter:
 
         dialect = self._engine.dialect.name
         if dialect == "postgresql":
-            from sqlalchemy.dialects.postgresql import insert as dialect_insert
-        else:
-            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        stmt = dialect_insert(self._table).values(**data)
+            stmt = pg_insert(self._table).values(**data)
+            if update_columns:
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=conflict_columns,
+                    set_={col: stmt.excluded[col] for col in update_columns},
+                )
+            else:
+                stmt = stmt.on_conflict_do_nothing(index_elements=conflict_columns)
+            return stmt
+
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        stmt = sqlite_insert(self._table).values(**data)
         if update_columns:
             stmt = stmt.on_conflict_do_update(
                 index_elements=conflict_columns,
