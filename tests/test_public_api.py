@@ -8,6 +8,7 @@ def test_version() -> None:
 def test_public_api_exports() -> None:
     expected = {
         "__version__",
+        "BlobCheckpointStore",
         "CommitError",
         "CursorPart",
         "CursorValue",
@@ -15,10 +16,12 @@ def test_public_api_exports() -> None:
         "DbError",
         "EventNormalizer",
         "FetchError",
+        "FingerprintMismatchError",
         "HandlerError",
         "JsonScalar",
         "JsonValue",
         "LeaseAcquireError",
+        "LeaseConflictError",
         "LostLeaseError",
         "NotFoundError",
         "PollContext",
@@ -33,6 +36,7 @@ def test_public_api_exports() -> None:
         "SourceConfigurationError",
         "SourceDescriptor",
         "StateStore",
+        "StateStoreError",
         "WriteError",
     }
     assert set(__all__) == expected
@@ -40,15 +44,19 @@ def test_public_api_exports() -> None:
 
 def test_imports_resolve() -> None:
     from azure_functions_db import (
+        BlobCheckpointStore,
         PollContext,
         PollRunner,
         RetryPolicy,
         RowChange,
         SourceDescriptor,
+        StateStoreError,
     )
 
+    assert BlobCheckpointStore is not None
     assert PollContext is not None
     assert PollRunner is not None
     assert RetryPolicy is not None
     assert RowChange is not None
     assert SourceDescriptor is not None
+    assert StateStoreError is not None

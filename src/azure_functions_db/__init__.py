@@ -14,6 +14,12 @@ from azure_functions_db.core.types import (
     JsonValue,
     SourceDescriptor,
 )
+from azure_functions_db.state import (
+    BlobCheckpointStore,
+    FingerprintMismatchError,
+    LeaseConflictError,
+    StateStoreError,
+)
 from azure_functions_db.trigger.context import PollContext
 from azure_functions_db.trigger.errors import (
     CommitError,
@@ -37,6 +43,7 @@ from azure_functions_db.trigger.runner import (
 
 __all__ = [
     "__version__",
+    "BlobCheckpointStore",
     "CommitError",
     "CursorPart",
     "CursorValue",
@@ -44,10 +51,12 @@ __all__ = [
     "DbError",
     "EventNormalizer",
     "FetchError",
+    "FingerprintMismatchError",
     "HandlerError",
     "JsonScalar",
     "JsonValue",
     "LeaseAcquireError",
+    "LeaseConflictError",
     "LostLeaseError",
     "NotFoundError",
     "PollContext",
@@ -62,5 +71,6 @@ __all__ = [
     "SourceConfigurationError",
     "SourceDescriptor",
     "StateStore",
+    "StateStoreError",
     "WriteError",
 ]
