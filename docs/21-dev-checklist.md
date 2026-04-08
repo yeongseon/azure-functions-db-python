@@ -1,42 +1,42 @@
 # Development Checklist
 
 ## Phase 0: Design Finalization
-- [ ] Finalize package name
-- [ ] Finalize public API names
-- [ ] Finalize semantics documentation
-- [ ] Finalize 3 target DBs for MVP
+- [x] Finalize package name
+- [x] Finalize public API names
+- [x] Finalize semantics documentation
+- [x] Finalize 3 target DBs for MVP
 
 ## Phase 1: Core Implementation
-- [ ] RowChange
-- [ ] PollContext
-- [ ] Error hierarchy
-- [ ] Retry helper
-- [ ] PollRunner
+- [x] RowChange
+- [x] PollContext
+- [x] Error hierarchy
+- [x] Retry helper
+- [x] PollRunner
 
 ## Phase 2: State Storage
-- [ ] BlobCheckpointStore
-- [ ] Lease/fencing implementation
-- [ ] Checkpoint serializer
-- [ ] Source fingerprint
+- [x] BlobCheckpointStore
+- [x] Lease/fencing implementation
+- [x] Checkpoint serializer
+- [x] Source fingerprint
 
 ## Phase 3: Adapters
-- [ ] SQLAlchemy base adapter
-- [ ] Postgres adapter
-- [ ] MySQL adapter
-- [ ] SQL Server adapter
-- [ ] Contract tests
+- [x] SQLAlchemy base adapter
+- [x] Postgres adapter
+- [x] MySQL adapter
+- [x] SQL Server adapter
+- [x] Contract tests
 
 ## Phase 4: Functions Integration
-- [ ] Imperative runner
-- [ ] Decorator sugar
-- [ ] Sample function_app.py
-- [ ] Local runtime smoke test
+- [x] Imperative runner
+- [x] Decorator sugar
+- [x] Sample function_app.py
+- [x] Local runtime smoke test
 
 ## Phase 5: Observability
-- [ ] Structured logs
-- [ ] Metrics hooks
-- [ ] Lag calculation
-- [ ] Dashboard examples
+- [x] Structured logs
+- [x] Metrics hooks
+- [x] Lag calculation
+- [x] Dashboard examples
 
 ## Phase 6: Release
 - [ ] README quickstart

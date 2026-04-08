@@ -28,8 +28,8 @@ Azure Functions Python v2 has no built-in database integration story:
 ## What it does
 
 - **Pseudo DB trigger** — poll-based change detection with checkpoint, lease, and at-least-once delivery
-- **DbReader** — input binding for reading rows from any supported database
-- **DbWriter** — output binding for writing rows with automatic batching
+- **DbReader** — input binding for reading rows from any supported database (planned)
+- **DbWriter** — output binding for writing rows with automatic batching (planned)
 - **Multi-DB support** — PostgreSQL, MySQL, and SQL Server via SQLAlchemy dialects
 - **Single `pip install`** — one package with optional extras for each database driver
 
@@ -99,40 +99,7 @@ def orders_poll(timer: func.TimerRequest) -> None:
     trigger.run(timer=timer, handler=handle_orders)
 ```
 
-### Input Binding (DbReader)
-
-```python
-from azure_functions_db import DbReader
-
-reader = DbReader(
-    connection_string="postgresql+psycopg://user:pass@host/db",
-    table="products",
-)
-
-
-@app.route(route="products/{id}", methods=["GET"])
-def get_product(req: func.HttpRequest) -> func.HttpResponse:
-    product = reader.read(id=req.route_params["id"])
-    return func.HttpResponse(json.dumps(product), mimetype="application/json")
-```
-
-### Output Binding (DbWriter)
-
-```python
-from azure_functions_db import DbWriter
-
-writer = DbWriter(
-    connection_string="postgresql+psycopg://user:pass@host/db",
-    table="audit_logs",
-)
-
-
-@app.route(route="orders", methods=["POST"])
-def create_order(req: func.HttpRequest) -> func.HttpResponse:
-    order = req.get_json()
-    writer.write({"action": "order_created", "payload": order})
-    return func.HttpResponse(status_code=201)
-```
+> **Coming soon**: Input binding (`DbReader`) and output binding (`DbWriter`) are planned for future releases. See the [roadmap](docs/21-dev-checklist.md) for details.
 
 ## Supported Databases
 
