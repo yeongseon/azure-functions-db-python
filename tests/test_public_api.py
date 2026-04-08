@@ -35,6 +35,7 @@ def test_public_api_exports() -> None:
         "SourceAdapter",
         "SourceConfigurationError",
         "SourceDescriptor",
+        "SqlAlchemySource",
         "StateStore",
         "StateStoreError",
         "WriteError",
@@ -50,6 +51,7 @@ def test_imports_resolve() -> None:
         RetryPolicy,
         RowChange,
         SourceDescriptor,
+        SqlAlchemySource,
         StateStoreError,
     )
 
@@ -59,4 +61,5 @@ def test_imports_resolve() -> None:
     assert RetryPolicy is not None
     assert RowChange is not None
     assert SourceDescriptor is not None
+    assert SqlAlchemySource is not None
     assert StateStoreError is not None

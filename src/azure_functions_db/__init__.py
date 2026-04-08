@@ -1,5 +1,6 @@
 __version__ = "0.1.0"
 
+from azure_functions_db.adapter import SqlAlchemySource
 from azure_functions_db.core.errors import (
     DbConnectionError,
     DbError,
@@ -70,6 +71,7 @@ __all__ = [
     "SourceAdapter",
     "SourceConfigurationError",
     "SourceDescriptor",
+    "SqlAlchemySource",
     "StateStore",
     "StateStoreError",
     "WriteError",
