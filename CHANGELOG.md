@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2025-04-09
+
+### Features
+
+- Align with sibling repo conventions (`_azure_functions_toolkit_metadata`, `get_db_metadata()`, Python 3.10 compat)
+- Add three-layer test architecture for all supported databases (PostgreSQL, MySQL, MSSQL, SQLite)
+
+### Performance
+
+- Add thread-safe metadata cache to avoid per-invocation table reflection
+
+### Bug Fixes
+
+- Run Azurite as step with `--skipApiVersionCheck` instead of service container
+- Resolve CI failures for pytest 9.x fixture marks and GPG batch mode
+- Install mssql-tools18 for sqlcmd in CI MSSQL job
+
+## [0.1.0] - 2025-03-17
+
 ### Bug Fixes
 
 - *(docs)* Replace relative parent links with GitHub URLs for strict mkdocs (#29) 
