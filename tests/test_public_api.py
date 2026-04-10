@@ -4,7 +4,7 @@ from azure_functions_db import __all__, __version__
 
 
 def test_version() -> None:
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.2.1"
 
 
 def test_public_api_exports() -> None:
