@@ -1,0 +1,8 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "ORACLE_DB_URL": "oracle+oracledb://user:pass@localhost:1521/?service_name=XEPDB1"
+  }
+}

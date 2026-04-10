@@ -10,7 +10,8 @@ works with any SQLAlchemy dialect:
     Firebird:     firebird+fdb://user:pass@host/db
 
 Prerequisites:
-    pip install azure-functions-db oracledb
+    pip install azure-functions-db <your-driver>
+    # e.g. pip install azure-functions-db oracledb
 
 Usage:
     ORACLE_DB_URL="oracle+oracledb://user:pass@host:1521/?service_name=XEPDB1"
@@ -28,10 +29,12 @@ db = DbBindings()
 # The only thing that changes for BYOD is the URL and the driver install.
 # Everything else — decorators, DbReader, DbWriter, SqlAlchemySource — is identical.
 
-url = os.environ.get(
-    "ORACLE_DB_URL",
-    "oracle+oracledb://demo:demo@localhost:1521/?service_name=XEPDB1",
-)
+url = os.environ.get("ORACLE_DB_URL")
+if not url:
+    raise SystemExit(
+        "Set ORACLE_DB_URL environment variable, e.g.:\n"
+        '  export ORACLE_DB_URL="oracle+oracledb://user:pass@host:1521/?service_name=XEPDB1"'
+    )
 
 
 @db.inject_reader("reader", url=url, table="orders")
