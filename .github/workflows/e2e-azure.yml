@@ -17,9 +17,27 @@ env:
   REPO_SHORT: db
 
 jobs:
+  check_secrets:
+    name: Check Azure credentials
+    runs-on: ubuntu-latest
+    outputs:
+      has_azure: ${{ steps.check.outputs.has_azure }}
+    steps:
+      - name: Check if Azure secrets are configured
+        id: check
+        run: |
+          if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ] && [ -n "${{ secrets.AZURE_TENANT_ID }}" ] && [ -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
+            echo "has_azure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_azure=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Azure OIDC secrets not configured — skipping e2e tests."
+          fi
+
   deploy_and_test:
     name: Deploy & Test
     runs-on: ubuntu-latest
+    needs: [check_secrets]
+    if: needs.check_secrets.outputs.has_azure == 'true'
     outputs:
       resource_group: ${{ steps.names.outputs.rg }}
 
@@ -102,8 +120,8 @@ jobs:
   cleanup:
     name: Cleanup Azure Resources
     runs-on: ubuntu-latest
-    needs: [deploy_and_test]
-    if: always()
+    needs: [check_secrets, deploy_and_test]
+    if: always() && needs.check_secrets.outputs.has_azure == 'true'
     steps:
       - name: Azure login (OIDC)
         uses: azure/login@v3.0.0
