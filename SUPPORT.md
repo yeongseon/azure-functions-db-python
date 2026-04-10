@@ -2,13 +2,13 @@
 
 ## Supported Environment
 
-* Python: 3.11 and above
+* Python: 3.10 and above
 * Runtime: Azure Functions (Python)
 
 ## Support Scope
 
 This project is maintained by a single developer and support is provided on a
-best-effort basis for the `azure-functions-db` package.
+best-effort basis.
 
 Supported requests:
 
