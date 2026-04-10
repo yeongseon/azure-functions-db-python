@@ -45,7 +45,7 @@ services mocked. These form the CI quality gate for every push.
 | `tests/test_state_blob.py` | BlobCheckpointStore mock-based tests |
 | `tests/test_state_errors.py` | Lease/checkpoint error handling |
 | `tests/test_hardening.py` | Crash, stale-runner, and ambiguous-commit scenarios |
-|| `tests/test_toolkit_metadata.py` | `_azure_functions_metadata` convention |
+| `tests/test_toolkit_metadata.py` | `_azure_functions_metadata` convention |
 
 **Run**: `pytest tests/ -m "not integration and not host_e2e and not azure_e2e and not azurite"`
 
