@@ -79,6 +79,8 @@ source = SqlAlchemySource(
 
 > **Note:** The built-in extras (PostgreSQL, MySQL, SQL Server) are the tested path. Other dialects work through SQLAlchemy compatibility but are not explicitly tested by this project. Exact connection URL syntax varies by driver — check your driver's documentation.
 
+> See [`examples/byod_oracle/`](examples/byod_oracle/) for a complete runnable Function App and [`examples/usage_byod.py`](examples/usage_byod.py) for a minimal standalone script.
+
 ### Custom trigger source
 
 If your data source has no SQLAlchemy dialect, implement the [`SourceAdapter`](docs/05-adapter-sdk.md) protocol and pass it directly to `db.trigger(source=...)`. This applies only to the trigger feature. See the [Adapter SDK](docs/05-adapter-sdk.md) for the full contract.
