@@ -36,6 +36,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install build
 
+      - name: Run lightweight tests
+        run: |
+          pip install hatch
+          pip install -e ".[dev]"
+          pytest -v -m "not integration and not azurite and not host_e2e and not azure_e2e" --no-cov --maxfail=3 --disable-warnings
+
       - name: Check if tag matches __version__
         run: |
           TAG_NAME="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
