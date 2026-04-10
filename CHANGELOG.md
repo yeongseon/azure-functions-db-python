@@ -2,24 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.0] - 2025-04-09
+### Bug Fixes
 
-### Features
+- Resolve mypy errors in e2e and integration tests (#73) 
 
-- Align with sibling repo conventions (`_azure_functions_toolkit_metadata`, `get_db_metadata()`, Python 3.10 compat)
-- Add three-layer test architecture for all supported databases (PostgreSQL, MySQL, MSSQL, SQLite)
+### Documentation
 
-### Performance
+- Add BYOD example apps (Oracle DB) (#76) 
+- Clarify that any SQLAlchemy-compatible database works (#75) 
+- Standardize ecosystem table in README 
 
-- Add thread-safe metadata cache to avoid per-invocation table reflection
+### Miscellaneous Tasks
+
+- Add stale.yml and maintenance.yml workflows (#78) 
+- *(deps)* Bump codecov/codecov-action from 5.5.3 to 6.0.0 (#1) 
+- *(deps)* Bump softprops/action-gh-release from 2.2.2 to 2.6.1 (#53) 
+- Add DESIGN.md, PRD.md, i18n READMEs and bump tool versions (#71) 
+- Skip e2e-azure gracefully when OIDC secrets are missing 
+- Add lightweight smoke test step to publish workflow 
+
+### Other
+
+- Bump version to 0.2.1 
+
+### Refactor
+
+- Rename metadata attr to _azure_functions_metadata (#80) 
 
 ### Bug Fixes
 
-- Run Azurite as step with `--skipApiVersionCheck` instead of service container
-- Resolve CI failures for pytest 9.x fixture marks and GPG batch mode
-- Install mssql-tools18 for sqlcmd in CI MSSQL job
+- Install mssql-tools18 for sqlcmd in CI MSSQL job 
+- Resolve CI failures for pytest 9.x fixture marks and GPG batch mode 
+- Run Azurite as step with --skipApiVersionCheck instead of service container 
 
-## [0.1.0] - 2025-03-17
+### Features
+
+- Add three-layer test architecture for all supported databases 
+- Align with sibling repo conventions 
+
+### Other
+
+- Bump version to 0.2.0 
+
+### Performance
+
+- Add thread-safe metadata cache to avoid per-invocation table reflection 
 
 ### Bug Fixes
 
@@ -28,6 +55,7 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
+- Update changelog 
 - Align documentation structure with sibling repos 
 - Update branding, reorder README, add lifecycle/thread-safety docs (#48) 
 
