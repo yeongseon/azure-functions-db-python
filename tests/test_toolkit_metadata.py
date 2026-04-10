@@ -20,7 +20,7 @@ def test_input_pk_sets_metadata() -> None:
     def handler(user: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     assert metadata is not None
     assert "db" in metadata
     db_meta = metadata["db"]
@@ -44,7 +44,7 @@ def test_input_query_sets_metadata() -> None:
     def handler(rows: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     assert len(db_meta["bindings"]) == 1
     binding = db_meta["bindings"][0]
@@ -70,7 +70,7 @@ def test_input_with_model_sets_model_ref() -> None:
     def handler(item: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     binding = db_meta["bindings"][0]
     assert "model_ref" in binding
@@ -85,7 +85,7 @@ def test_output_sets_metadata() -> None:
     def handler(out: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     assert db_meta["version"] == 1
     assert len(db_meta["bindings"]) == 1
@@ -109,7 +109,7 @@ def test_trigger_sets_metadata() -> None:
     def handler(events: list[RowChange]) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     assert db_meta["version"] == 1
     assert len(db_meta["bindings"]) == 1
@@ -129,7 +129,7 @@ def test_inject_reader_sets_metadata() -> None:
     def handler(reader: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     assert db_meta["version"] == 1
     assert db_meta["bindings"] == []
@@ -147,7 +147,7 @@ def test_inject_writer_sets_metadata() -> None:
     def handler(writer: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     assert db_meta["version"] == 1
     assert db_meta["bindings"] == []
@@ -166,7 +166,7 @@ def test_stacked_decorators_merge_metadata() -> None:
     def handler(user: object, out: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     db_meta = metadata["db"]
     assert len(db_meta["bindings"]) == 2
     kinds = {b["kind"] for b in db_meta["bindings"]}
@@ -184,14 +184,14 @@ def test_stacked_preserves_other_namespaces() -> None:
     # Manually set metadata for another namespace
     setattr(
         handler,
-        "_azure_functions_toolkit_metadata",
+        "_azure_functions_metadata",
         {"validation": {"version": 1, "rules": []}},
     )
 
     # Apply db decorator
     handler = db.output("out", url="sqlite:///test.db", table="t")(handler)
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     assert "validation" in metadata
     assert "db" in metadata
     assert metadata["validation"] == {"version": 1, "rules": []}
@@ -215,8 +215,8 @@ def test_decorator_order_independent() -> None:
     def handler2(user: object, out: object) -> None:
         pass
 
-    meta1 = getattr(handler1, "_azure_functions_toolkit_metadata")["db"]
-    meta2 = getattr(handler2, "_azure_functions_toolkit_metadata")["db"]
+    meta1 = getattr(handler1, "_azure_functions_metadata")["db"]
+    meta2 = getattr(handler2, "_azure_functions_metadata")["db"]
 
     assert len(meta1["bindings"]) == 2
     assert len(meta2["bindings"]) == 2
@@ -244,7 +244,7 @@ def test_async_handler_sets_metadata() -> None:
     async def handler(user: object) -> None:
         pass
 
-    metadata = getattr(handler, "_azure_functions_toolkit_metadata")
+    metadata = getattr(handler, "_azure_functions_metadata")
     assert metadata is not None
     db_meta = metadata["db"]
     assert db_meta["version"] == 1

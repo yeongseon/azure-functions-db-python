@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Parameter names reserved by Azure Functions runtime.
 _RESERVED_ARGS = frozenset({"timer", "req", "context", "msg", "input", "output"})
 _DB_DECORATOR_ATTR = "_db_decorators"
-_TOOLKIT_META_ATTR = "_azure_functions_toolkit_metadata"
+_TOOLKIT_META_ATTR = "_azure_functions_metadata"
 
 
 class DbOut:
