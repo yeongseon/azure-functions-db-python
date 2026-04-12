@@ -52,20 +52,131 @@ The binding layer provides an imperative API called directly from Azure Function
 - `decorator -> trigger, binding, core` (thin orchestration layer)
 - Cross-import between `trigger` and `binding` is forbidden
 
-### 1.5 Binding Execution Flow
+### 1.5 Request Flow and Runtime Relationship
 
-```text
-Azure Function Invocation
-    -> user function
-        -> DbReader / DbWriter instantiation
-            -> DbConfig construction
-            -> EngineProvider.get_or_create(config)
-            -> invocation session open
-            -> read / write execution
-            -> success: return result or commit
-            -> failure: surface exception
-            -> close()
+`azure-functions-db` decorators integrate at two lifecycle points within the Azure Functions runtime:
+
+1. **Import time** — decorators validate configuration. `output` also creates a module-scoped `DbOut` instance.
+2. **Per invocation** — the decorator wrapper performs DB I/O around the handler call. The exact behavior differs by decorator type.
+
+The four decorator types have distinct invocation flows:
+
+| Decorator | Pre-handler | Handler receives | Post-handler |
+|-----------|------------|------------------|--------------|
+| `input` | Creates `DbReader`, reads data, closes reader | Query result (data) | — |
+| `output` | — | `DbOut` (module-scoped) | `DbWriter` created only when handler calls `.set()` |
+| `inject_reader` | Creates `DbReader` | `DbReader` instance | Closes reader |
+| `inject_writer` | Creates `DbWriter` | `DbWriter` instance | Closes writer |
+
+#### Binding Flow (input / inject_reader / inject_writer)
+
+```mermaid
+sequenceDiagram
+    participant Client as HTTP Client
+    participant Host as Azure Functions Host
+    participant Worker as Python Worker
+    participant Dec as Decorator Wrapper
+    participant DB as DbReader / DbWriter
+    participant Handler as Function Handler
+
+    rect rgb(240, 248, 255)
+    note over Worker,Dec: Import Time (startup)
+    Worker->>Worker: import function modules
+    Worker->>Dec: @db.input() / @db.inject_reader() / @db.inject_writer() validates config
+    end
+
+    rect rgb(255, 248, 240)
+    note over Client,DB: Per Invocation
+    Client->>Host: HTTP Request
+    Host->>Worker: invoke function
+    Worker->>Dec: decorator wrapper
+    Dec->>DB: create per-invocation DbReader or DbWriter
+    alt @db.input()
+        DB->>DB: execute query / pk lookup
+        DB-->>Dec: query result
+        Dec->>Handler: call handler(req, data=result)
+    else @db.inject_reader() / @db.inject_writer()
+        Dec->>Handler: call handler(req, reader=DbReader) or handler(req, writer=DbWriter)
+        Handler->>DB: handler performs reads / writes directly
+    end
+    Handler-->>Dec: return result
+    Dec->>DB: close reader / writer
+    Dec-->>Worker: HttpResponse
+    Worker-->>Host: response
+    Host-->>Client: HTTP Response
+    end
 ```
+
+#### Output Flow (@db.output)
+
+`output` differs from the other decorators: `DbOut` is created once at decoration time (module-scoped), and a `DbWriter` is only created when the handler calls `.set()`.
+
+```mermaid
+sequenceDiagram
+    participant Client as HTTP Client
+    participant Host as Azure Functions Host
+    participant Worker as Python Worker
+    participant Dec as Decorator Wrapper
+    participant Out as DbOut (module-scoped)
+    participant Handler as Function Handler
+    participant DB as DbWriter
+
+    rect rgb(240, 248, 255)
+    note over Worker,Out: Import Time (startup)
+    Worker->>Worker: import function modules
+    Worker->>Dec: @db.output() validates config
+    Dec->>Out: create DbOut instance (once)
+    end
+
+    rect rgb(255, 248, 240)
+    note over Client,DB: Per Invocation
+    Client->>Host: HTTP Request
+    Host->>Worker: invoke function
+    Worker->>Dec: decorator wrapper
+    Dec->>Handler: call handler(req, out=DbOut)
+    Handler->>Out: out.set(data)
+    Out->>DB: create DbWriter, insert/upsert, close
+    Handler-->>Dec: return result
+    Dec-->>Worker: HttpResponse
+    Worker-->>Host: response
+    Host-->>Client: HTTP Response
+    end
+```
+
+#### Trigger Flow (poll-based change detection)
+
+```mermaid
+sequenceDiagram
+    participant Timer as Azure Timer Trigger
+    participant Host as Azure Functions Host
+    participant Worker as Python Worker
+    participant PT as PollTrigger
+    participant PR as PollRunner
+    participant SS as StateStore (Blob)
+    participant SA as SourceAdapter
+    participant DB as Database
+    participant Handler as User Handler
+
+    Timer->>Host: scheduled tick
+    Host->>Worker: invoke trigger function
+    Worker->>PT: PollTrigger.run(timer, handler)
+    PT->>PR: construct PollRunner
+    PR->>PR: runner.tick()
+    PR->>SS: acquire lease (ETag CAS)
+    PR->>SS: load checkpoint
+    PR->>SA: source.fetch(cursor, batch_size)
+    SA->>DB: SELECT ... WHERE cursor > checkpoint
+    DB-->>SA: changed rows
+    SA-->>PR: raw records
+    PR->>PR: normalize(raw records) → events
+    PR->>Handler: invoke(events)
+    Handler-->>PR: success
+    PR->>SS: commit new checkpoint (ETag CAS)
+    PR-->>Worker: done
+    Worker-->>Host: completed
+```
+
+When an `EngineProvider` is passed to a decorator, it supplies a shared connection pool across invocations at module scope. When omitted, each `DbReader` or `DbWriter` creates and owns its own engine. `DbReader` and `DbWriter` instances from `input`, `inject_reader`, and `inject_writer` are always per-invocation and closed automatically by the decorator wrapper.
 
 ## Async Support
 
