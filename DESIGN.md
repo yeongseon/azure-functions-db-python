@@ -1,6 +1,6 @@
 # DESIGN.md
 
-Design Principles for `azure-functions-db`
+Design Principles for `azure-functions-db-python`
 
 ## Purpose
 
@@ -62,8 +62,8 @@ Note: `@db.trigger(...)` is a pseudo-trigger and must be composed with a real Az
 
 ## Integration Boundaries
 
-- OpenAPI document generation belongs to `azure-functions-openapi`.
-- Runtime request/response validation belongs to `azure-functions-validation`.
+- OpenAPI document generation belongs to `azure-functions-openapi-python`.
+- Runtime request/response validation belongs to `azure-functions-validation-python`.
 - This repository owns poll-based DB trigger orchestration, DB input/output bindings, and shared SQLAlchemy engine/config primitives.
 
 ## Compatibility Policy
@@ -86,8 +86,8 @@ Note: `@db.trigger(...)` is a pseudo-trigger and must be composed with a real Az
 
 ## See Also
 
-- [azure-functions-openapi — Architecture](https://github.com/yeongseon/azure-functions-openapi) - OpenAPI spec generation and Swagger UI
-- [azure-functions-validation — Architecture](https://github.com/yeongseon/azure-functions-validation) - Request/response validation pipeline
-- [azure-functions-logging — Architecture](https://github.com/yeongseon/azure-functions-logging) - Structured logging with contextvars
-- [azure-functions-doctor — Architecture](https://github.com/yeongseon/azure-functions-doctor) - Pre-deploy diagnostic CLI
-- [azure-functions-scaffold — Architecture](https://github.com/yeongseon/azure-functions-scaffold) - Project scaffolding CLI
+- [azure-functions-openapi-python — Architecture](https://github.com/yeongseon/azure-functions-openapi-python) - OpenAPI spec generation and Swagger UI
+- [azure-functions-validation-python — Architecture](https://github.com/yeongseon/azure-functions-validation-python) - Request/response validation pipeline
+- [azure-functions-logging-python — Architecture](https://github.com/yeongseon/azure-functions-logging-python) - Structured logging with contextvars
+- [azure-functions-doctor-python — Architecture](https://github.com/yeongseon/azure-functions-doctor-python) - Pre-deploy diagnostic CLI
+- [azure-functions-scaffold-python — Architecture](https://github.com/yeongseon/azure-functions-scaffold-python) - Project scaffolding CLI

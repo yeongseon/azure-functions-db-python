@@ -118,7 +118,7 @@ Examples below are deployment-agnostic and assume your metrics backend supports 
 
 ## 4. Tracing
 
-Tracing is deferred to `azure-functions-db-otel` so the base package keeps zero extra dependencies.
+Tracing is deferred to `azure-functions-db-python-otel` so the base package keeps zero extra dependencies.
 
 When tracing support lands, the expected shape remains:
 - poll tick

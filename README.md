@@ -1,12 +1,12 @@
 # Azure Functions DB
 
-[![PyPI](https://img.shields.io/pypi/v/azure-functions-db.svg)](https://pypi.org/project/azure-functions-db/)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db/)
-[![CI](https://github.com/yeongseon/azure-functions-db/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db/actions/workflows/ci-test.yml)
-[![Release](https://github.com/yeongseon/azure-functions-db/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db/actions/workflows/publish-pypi.yml)
-[![codecov](https://codecov.io/gh/yeongseon/azure-functions-db/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db)
+[![PyPI](https://img.shields.io/pypi/v/azure-functions-db-python.svg)](https://pypi.org/project/azure-functions-db-python/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db-python/)
+[![CI](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml)
+[![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
+[![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
-[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db/)
+[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Database integration for **Azure Functions Python v2** — trigger, input/output bindings, and change detection for **any database with a SQLAlchemy dialect**.
@@ -37,7 +37,7 @@ Azure Functions Python v2 has no built-in database integration story:
 
 | Path | When to use | What to do |
 |------|-------------|------------|
-| **Built-in extras** | PostgreSQL, MySQL, or SQL Server | `pip install azure-functions-db[postgres]` and go |
+| **Built-in extras** | PostgreSQL, MySQL, or SQL Server | `pip install azure-functions-db-python[postgres]` and go |
 | **Bring your own SQLAlchemy database** | Oracle, CockroachDB, DuckDB, or any other RDBMS with a SQLAlchemy dialect | Install the driver, use the SQLAlchemy connection URL |
 | **Custom trigger source** *(triggers only)* | Non-SQL sources (MongoDB, Kafka, REST APIs) | Implement the `SourceAdapter` Protocol for `db.trigger()` |
 
@@ -87,28 +87,28 @@ If your data source has no SQLAlchemy dialect, implement the [`SourceAdapter`](d
 
 ## Shared Core
 
-`azure-functions-db` now exposes shared infrastructure for upcoming bindings. Use `DbConfig` for normalized connection settings and `EngineProvider` when multiple components should reuse the same lazily created SQLAlchemy engine.
+`azure-functions-db-python` now exposes shared infrastructure for upcoming bindings. Use `DbConfig` for normalized connection settings and `EngineProvider` when multiple components should reuse the same lazily created SQLAlchemy engine.
 
 ## Installation
 
 ```bash
 # Core package (pick your database)
-pip install azure-functions-db[postgres]
-pip install azure-functions-db[mysql]
-pip install azure-functions-db[mssql]
+pip install azure-functions-db-python[postgres]
+pip install azure-functions-db-python[mysql]
+pip install azure-functions-db-python[mssql]
 
 # Multiple databases
-pip install azure-functions-db[postgres,mysql]
+pip install azure-functions-db-python[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db[all]
+pip install azure-functions-db-python[all]
 ```
 
 Your Function App dependencies should include:
 
 ```text
 azure-functions
-azure-functions-db[postgres]
+azure-functions-db-python[postgres]
 ```
 
 ## Quick Start
@@ -329,9 +329,9 @@ These databases have pre-packaged driver dependencies. Install the matching extr
 
 | Database | Extra | Driver |
 |----------|-------|--------|
-| PostgreSQL | `azure-functions-db[postgres]` | [psycopg](https://www.psycopg.org/) |
-| MySQL | `azure-functions-db[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
-| SQL Server | `azure-functions-db[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
+| PostgreSQL | `azure-functions-db-python[postgres]` | [psycopg](https://www.psycopg.org/) |
+| MySQL | `azure-functions-db-python[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
+| SQL Server | `azure-functions-db-python[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
 
 Any other database with a [SQLAlchemy dialect](https://docs.sqlalchemy.org/en/20/dialects/) works too — just install the driver yourself. See [Choose your integration path](#choose-your-integration-path).
 
@@ -347,7 +347,7 @@ This package does **not** implement a native Azure Functions trigger extension. 
 
 ## Observability
 
-`azure-functions-db` exposes structured log helpers plus a lightweight `MetricsCollector` protocol so you can connect your own metrics backend without adding hard dependencies.
+`azure-functions-db-python` exposes structured log helpers plus a lightweight `MetricsCollector` protocol so you can connect your own metrics backend without adding hard dependencies.
 
 ```python
 from collections.abc import Mapping
@@ -394,7 +394,7 @@ This package provides **at-least-once** delivery. Duplicates may occur during pr
 
 ## Documentation
 
-- Full docs: [yeongseon.github.io/azure-functions-db](https://yeongseon.github.io/azure-functions-db/)
+- Full docs: [yeongseon.github.io/azure-functions-db-python](https://yeongseon.github.io/azure-functions-db-python/)
 - Examples: `examples/`
 - [Architecture](docs/02-architecture.md)
 - [Semantics](docs/03-semantics.md)
@@ -407,15 +407,15 @@ Part of the **Azure Functions Python DX Toolkit**:
 
 | Package | Role |
 |---------|------|
-| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI spec generation and Swagger UI |
-| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | Request/response validation and serialization |
-| **azure-functions-db** | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
-| [azure-functions-langgraph](https://github.com/yeongseon/azure-functions-langgraph) | LangGraph deployment adapter for Azure Functions |
-| [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | Project scaffolding CLI |
-| [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | Structured logging and observability |
-| [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | Pre-deploy diagnostic CLI |
-| [azure-functions-durable-graph](https://github.com/yeongseon/azure-functions-durable-graph) | Manifest-first graph runtime with Durable Functions *(experimental)* |
-| [azure-functions-python-cookbook](https://github.com/yeongseon/azure-functions-python-cookbook) | Recipes and examples |
+| [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI spec generation and Swagger UI |
+| [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | Request/response validation and serialization |
+| **azure-functions-db-python** | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
+| [azure-functions-langgraph-python](https://github.com/yeongseon/azure-functions-langgraph-python) | LangGraph deployment adapter for Azure Functions |
+| [azure-functions-scaffold-python](https://github.com/yeongseon/azure-functions-scaffold-python) | Project scaffolding CLI |
+| [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | Structured logging and observability |
+| [azure-functions-doctor-python](https://github.com/yeongseon/azure-functions-doctor-python) | Pre-deploy diagnostic CLI |
+| [azure-functions-durable-graph-python](https://github.com/yeongseon/azure-functions-durable-graph-python) | Manifest-first graph runtime with Durable Functions *(experimental)* |
+| [azure-functions-cookbook-python](https://github.com/yeongseon/azure-functions-cookbook-python) | Recipes and examples |
 
 ## Disclaimer
 

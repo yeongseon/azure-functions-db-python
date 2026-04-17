@@ -22,14 +22,14 @@ Before starting, make sure you have:
 3. A running database (PostgreSQL, MySQL, or SQL Server).
 4. Dependencies installed:
     - `azure-functions`
-    - `azure-functions-db[postgres]` (or your database extra)
+    - `azure-functions-db-python[postgres]` (or your database extra)
 
 See [Installation](installation.md) for version details.
 
 ## Step 1: Install the package
 
 ```bash
-pip install azure-functions-db[postgres]
+pip install azure-functions-db-python[postgres]
 ```
 
 ## Step 2: Add an input binding

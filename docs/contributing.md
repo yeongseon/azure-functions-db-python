@@ -1,12 +1,12 @@
 # Contributing
 
-Thank you for considering contributing to `azure-functions-db`.
+Thank you for considering contributing to `azure-functions-db-python`.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/yeongseon/azure-functions-db.git
-cd azure-functions-db
+git clone https://github.com/yeongseon/azure-functions-db-python.git
+cd azure-functions-db-python
 make install
 ```
 

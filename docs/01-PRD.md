@@ -1,7 +1,7 @@
 # PRD
 
 ## 1. Product Name
-azure-functions-db
+azure-functions-db-python
 
 ## 2. One-Line Description
 A framework that provides unified DB change detection (trigger), reading (input binding), and writing (output binding) for Azure Functions Python apps.

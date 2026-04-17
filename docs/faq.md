@@ -5,8 +5,8 @@
 ### What databases are supported?
 
 **Built-in extras** (driver included): PostgreSQL, MySQL, and SQL Server. Install the
-corresponding extra: `azure-functions-db[postgres]`, `azure-functions-db[mysql]`,
-or `azure-functions-db[mssql]`.
+corresponding extra: `azure-functions-db-python[postgres]`, `azure-functions-db-python[mysql]`,
+or `azure-functions-db-python[mssql]`.
 
 **Any SQLAlchemy dialect**: The bindings and `SqlAlchemySource` are designed to work with
 any database that has a SQLAlchemy driver — Oracle, CockroachDB, SQLite, DuckDB, etc.

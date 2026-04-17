@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "azure-functions-db Poller Config",
+  "title": "azure-functions-db-python Poller Config",
   "type": "object",
   "required": [
     "name",

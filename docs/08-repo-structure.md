@@ -3,7 +3,7 @@
 ## Recommended Layout
 
 ```text
-azure-functions-db/
+azure-functions-db-python/
   src/
     azure_functions_db/
       __init__.py
@@ -111,13 +111,13 @@ Thin glue layer for integration with the Azure Functions runtime.
 ## Package Separation Strategy
 
 Core package:
-- `azure-functions-db`
+- `azure-functions-db-python`
 
 Extension package candidates:
-- `azure-functions-db-mongo`
-- `azure-functions-db-postgres-cdc`
-- `azure-functions-db-otel`
-- `azure-functions-db-cli`
+- `azure-functions-db-python-mongo`
+- `azure-functions-db-python-postgres-cdc`
+- `azure-functions-db-python-otel`
+- `azure-functions-db-python-cli`
 
 Import name:
 - `azure_functions_db`

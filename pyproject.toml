@@ -1,5 +1,5 @@
 [project]
-name = "azure-functions-db"
+name = "azure-functions-db-python"
 description = "Database trigger and input/output bindings for Azure Functions Python v2, powered by SQLAlchemy"
 keywords = ["azure-functions", "azure", "python", "v2", "database", "trigger", "polling", "sqlalchemy", "serverless", "binding", "input-binding", "output-binding", "decorator"]
 authors = [{ name = "Yeongseon Choe", email = "yeongseon.choe@gmail.com" }]
@@ -31,10 +31,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://yeongseon.github.io/azure-functions-db/"
-Documentation = "https://yeongseon.github.io/azure-functions-db/"
-Repository = "https://github.com/yeongseon/azure-functions-db"
-Issues = "https://github.com/yeongseon/azure-functions-db/issues"
+Homepage = "https://yeongseon.github.io/azure-functions-db-python/"
+Documentation = "https://yeongseon.github.io/azure-functions-db-python/"
+Repository = "https://github.com/yeongseon/azure-functions-db-python"
+Issues = "https://github.com/yeongseon/azure-functions-db-python/issues"
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]

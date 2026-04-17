@@ -225,12 +225,12 @@ The following situations produce duplicate or reprocessed events. Handlers MUST 
 | Commit timeout / ambiguous (Case G) | Possible duplicate if commit actually succeeded | Response lost; next tick reloads and may re-fetch | Upsert or dedupe at destination |
 | Redeployment / restart | Partial batch re-delivered | New instance starts from last committed checkpoint | Same as Case E/F |
 
-> **Key principle**: azure-functions-db provides **at-least-once** delivery. Handlers must be idempotent. Use event_id, upsert, or a processed-events table to handle duplicates safely.
+> **Key principle**: azure-functions-db-python provides **at-least-once** delivery. Handlers must be idempotent. Use event_id, upsert, or a processed-events table to handle duplicates safely.
 
 ## 14. Required User-Facing Disclosure
 
 Must be maintained in README / docs / docstrings:
 
-> azure-functions-db is not a native database trigger.
+> azure-functions-db-python is not a native database trigger.
 > It is a pseudo trigger framework built on Azure Functions timers.
 > The default guarantee is close to at-least-once, and handlers must be idempotent.

@@ -1,6 +1,6 @@
 # Testing
 
-How to run and write tests for `azure-functions-db`.
+How to run and write tests for `azure-functions-db-python`.
 
 ## Running Tests
 

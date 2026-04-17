@@ -1,6 +1,6 @@
 # Installation
 
-`azure-functions-db` targets the **Azure Functions Python v2 programming model**.
+`azure-functions-db-python` targets the **Azure Functions Python v2 programming model**.
 
 ## Requirements
 
@@ -32,22 +32,22 @@ Install with the driver extra for your database:
 
 ```bash
 # Pick your database
-pip install azure-functions-db[postgres]
-pip install azure-functions-db[mysql]
-pip install azure-functions-db[mssql]
+pip install azure-functions-db-python[postgres]
+pip install azure-functions-db-python[mysql]
+pip install azure-functions-db-python[mssql]
 
 # Multiple databases
-pip install azure-functions-db[postgres,mysql]
+pip install azure-functions-db-python[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db[all]
+pip install azure-functions-db-python[all]
 ```
 
 Your Function App dependencies should include:
 
 ```text
 azure-functions
-azure-functions-db[postgres]
+azure-functions-db-python[postgres]
 ```
 
 ## Verify Installation
@@ -66,7 +66,7 @@ Expected outcome:
 You can also verify package metadata:
 
 ```bash
-pip show azure-functions-db
+pip show azure-functions-db-python
 ```
 
 Check that your active environment is the same one used by your Function App.
@@ -74,8 +74,8 @@ Check that your active environment is the same one used by your Function App.
 ## Local Development
 
 ```bash
-git clone https://github.com/yeongseon/azure-functions-db.git
-cd azure-functions-db
+git clone https://github.com/yeongseon/azure-functions-db-python.git
+cd azure-functions-db-python
 make install
 ```
 
@@ -86,7 +86,7 @@ All project maintenance commands should go through the Makefile.
 Upgrade to the latest published version:
 
 ```bash
-pip install --upgrade azure-functions-db[postgres]
+pip install --upgrade azure-functions-db-python[postgres]
 ```
 
 Recommended upgrade workflow:
@@ -103,12 +103,12 @@ For deterministic deployments, pin an explicit version in your dependency file.
 ### ImportError: No module named `azure_functions_db`
 
 - Confirm installation ran in the correct environment.
-- Run `python -m pip install azure-functions-db[postgres]`.
+- Run `python -m pip install azure-functions-db-python[postgres]`.
 - Verify with `python -c "import azure_functions_db"`.
 
 ### Driver not found (psycopg, pymysql, pyodbc)
 
-- Confirm you installed the correct extra: `pip install azure-functions-db[postgres]`.
+- Confirm you installed the correct extra: `pip install azure-functions-db-python[postgres]`.
 - Run `pip show psycopg` (or `pymysql`, `pyodbc`) to verify the driver is present.
 - SQL Server requires ODBC Driver 17+ installed at the OS level.
 
@@ -120,5 +120,5 @@ For deterministic deployments, pin an explicit version in your dependency file.
 ### Runtime dependency drift in Azure
 
 - Rebuild deployment artifacts from a clean environment.
-- Confirm `requirements.txt` includes both `azure-functions` and `azure-functions-db[postgres]`.
+- Confirm `requirements.txt` includes both `azure-functions` and `azure-functions-db-python[postgres]`.
 - Verify the deployed Python runtime version is compatible with your lockfile.

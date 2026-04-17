@@ -1,4 +1,4 @@
-"""E2E test function app for azure-functions-db.
+"""E2E test function app for azure-functions-db-python.
 
 Exposes minimal HTTP routes that exercise each decorator/binding mode
 so the e2e test suite can verify wiring against a real Azure Functions host.

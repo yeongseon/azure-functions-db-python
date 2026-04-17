@@ -1,6 +1,6 @@
 # Security
 
-Security guidelines for using `azure-functions-db` in production.
+Security guidelines for using `azure-functions-db-python` in production.
 
 ## Principles
 
@@ -64,7 +64,7 @@ The following must never appear in log output:
 - Sensitive row data (PII, financial data)
 - Raw secrets
 
-`azure-functions-db` uses structured logging. Review your handler code to
+`azure-functions-db-python` uses structured logging. Review your handler code to
 ensure sensitive data from query results is not logged inadvertently.
 
 ## Multi-Tenant Considerations
@@ -81,14 +81,14 @@ When handling multiple tenant databases:
 - Pin dependencies in `requirements.txt` or a lock file.
 - Run vulnerability scanning in CI (e.g. `pip-audit`, `safety`).
 - Database drivers are installed as optional extras — only install what you need:
-    - `azure-functions-db[postgres]`
-    - `azure-functions-db[mysql]`
-    - `azure-functions-db[mssql]`
+    - `azure-functions-db-python[postgres]`
+    - `azure-functions-db-python[mysql]`
+    - `azure-functions-db-python[mssql]`
 
 ## Reporting Security Issues
 
 If you discover a security vulnerability:
 
 - **Do not** open a public GitHub issue.
-- Use [GitHub Security Advisories](https://github.com/yeongseon/azure-functions-db/security/advisories) to report privately.
+- Use [GitHub Security Advisories](https://github.com/yeongseon/azure-functions-db-python/security/advisories) to report privately.
 - Or contact the maintainer directly.

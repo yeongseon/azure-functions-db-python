@@ -1,6 +1,6 @@
 # Changelog
 
-This page documents the version history and migration paths for the `azure-functions-db` package.
+This page documents the version history and migration paths for the `azure-functions-db-python` package.
 
 ## Versioning Scheme
 

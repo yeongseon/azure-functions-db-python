@@ -1,8 +1,8 @@
-# PRD - azure-functions-db
+# PRD - azure-functions-db-python
 
 ## Overview
 
-`azure-functions-db` provides poll-based database change detection and SQLAlchemy-powered
+`azure-functions-db-python` provides poll-based database change detection and SQLAlchemy-powered
 input/output bindings for the Azure Functions Python v2 programming model.
 
 It is intended for decorator-based `func.FunctionApp()` applications that want database integration
@@ -38,7 +38,7 @@ developer experience across teams.
 
 - Maintainers of Azure Functions Python workloads backed by SQL databases
 - Teams migrating queue/cron polling scripts into Functions-hosted handlers
-- Users combining database bindings with `azure-functions-openapi` and `azure-functions-validation`
+- Users combining database bindings with `azure-functions-openapi-python` and `azure-functions-validation-python`
 
 ## Core Use Cases
 
@@ -58,7 +58,7 @@ developer experience across teams.
 ### Philosophy
 
 Small ecosystem libraries gain adoption when developers can copy a working example and get immediate
-results. `azure-functions-db` treats runnable examples as first-class deliverables so trigger,
+results. `azure-functions-db-python` treats runnable examples as first-class deliverables so trigger,
 binding, and engine-sharing patterns are visible and reproducible.
 
 ### Quick Start

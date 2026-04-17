@@ -1,2 +1,2 @@
 azure-functions
-azure-functions-db[all]
+azure-functions-db-python[all]

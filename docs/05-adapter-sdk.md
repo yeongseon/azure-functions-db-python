@@ -163,7 +163,7 @@ class AdapterCapability:
 Adapters like MongoDB should be maintained as separate packages without a SQLAlchemy dependency.
 
 Examples:
-- `azure-functions-db-mongo`
-- `azure-functions-db-postgres-cdc`
+- `azure-functions-db-python-mongo`
+- `azure-functions-db-python-postgres-cdc`
 
 The key requirement is to maintain only the common `RowChange` contract.

@@ -133,6 +133,6 @@ Unlike triggers, they do not manage state (checkpoint/lease) and operate on a pe
 
 ## 8. Notice to Users
 
-> The bindings in azure-functions-db are not Azure Functions host-native bindings;
+> The bindings in azure-functions-db-python are not Azure Functions host-native bindings;
 > they are Python-level DB helpers called directly inside the function body.
 > Each write is an invocation-scoped transaction and is independent of the trigger's checkpoint commit.

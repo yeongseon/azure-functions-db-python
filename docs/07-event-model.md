@@ -143,11 +143,11 @@ Envelope for Service Bus/Event Hub relay:
 
 ```json
 {
-  "specversion": "azure-functions-db/1.0",
+  "specversion": "azure-functions-db-python/1.0",
   "type": "db.row.change",
   "id": "evt_...",
   "time": "2026-04-07T01:23:46Z",
-  "source": "azure-functions-db://orders",
+  "source": "azure-functions-db-python://orders",
   "data": {
     "...": "RowChange payload"
   }

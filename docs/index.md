@@ -14,7 +14,7 @@ Unified DB integration (trigger + input/output binding) for Azure Functions Pyth
 ## Quick Start
 
 ```bash
-pip install azure-functions-db[postgres]
+pip install azure-functions-db-python[postgres]
 ```
 
 ```python

@@ -2,7 +2,7 @@
 
 ## Project Name
 
-`azure-functions-db`
+`azure-functions-db-python`
 
 ## Problem Statement
 
@@ -18,7 +18,7 @@ Azure Functions provides a great trigger/binding experience for Azure-native ser
 
 ## Solution
 
-`azure-functions-db` is a **unified DB integration framework** for use in Azure Functions Python apps.
+`azure-functions-db-python` is a **unified DB integration framework** for use in Azure Functions Python apps.
 
 - Execution model: Azure Functions `timer trigger`
 - Change detection: polling, outbox, CDC adapter
@@ -55,7 +55,7 @@ Change detection (trigger), reading (input binding), and writing (output binding
 
 Make Azure Functions developers think:
 
-> "If I need to work with a database, I just install azure-functions-db."
+> "If I need to work with a database, I just install azure-functions-db-python."
 
 ## MVP Scope
 

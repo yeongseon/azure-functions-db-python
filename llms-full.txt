@@ -1,25 +1,25 @@
-# azure-functions-db — Full LLM Reference
+# azure-functions-db-python — Full LLM Reference
 
 > Database trigger and input/output bindings for Azure Functions Python v2, powered by SQLAlchemy.
 
 ## Package Info
 
-- PyPI: `pip install azure-functions-db`
+- PyPI: `pip install azure-functions-db-python`
 - Version: 0.1.0
 - Python: >=3.10, <3.15
 - License: MIT
-- Docs: https://yeongseon.github.io/azure-functions-db/
-- Repository: https://github.com/yeongseon/azure-functions-db
+- Docs: https://yeongseon.github.io/azure-functions-db-python/
+- Repository: https://github.com/yeongseon/azure-functions-db-python
 - Azure Functions programming model: v2
 
 ## Installation
 
 ```bash
 # Pick your database driver
-pip install azure-functions-db[postgres]   # PostgreSQL (psycopg)
-pip install azure-functions-db[mysql]      # MySQL (PyMySQL)
-pip install azure-functions-db[mssql]      # SQL Server (pyodbc)
-pip install azure-functions-db[all]        # All drivers
+pip install azure-functions-db-python[postgres]   # PostgreSQL (psycopg)
+pip install azure-functions-db-python[mysql]      # MySQL (PyMySQL)
+pip install azure-functions-db-python[mssql]      # SQL Server (pyodbc)
+pip install azure-functions-db-python[all]        # All drivers
 ```
 
 ## Public API
@@ -383,9 +383,9 @@ async def async_handler(users: list[dict]) -> None:
 ## Ecosystem Integration
 
 Part of **Azure Functions Python DX Toolkit**:
-- `azure-functions-openapi` — OpenAPI and Swagger UI
-- `azure-functions-validation` — Request/response validation
-- **azure-functions-db** — Database trigger and bindings
-- `azure-functions-logging` — Structured logging
-- `azure-functions-doctor` — Pre-deploy diagnostics
-- `azure-functions-scaffold` — Project scaffolding
+- `azure-functions-openapi-python` — OpenAPI and Swagger UI
+- `azure-functions-validation-python` — Request/response validation
+- **azure-functions-db-python** — Database trigger and bindings
+- `azure-functions-logging-python` — Structured logging
+- `azure-functions-doctor-python` — Pre-deploy diagnostics
+- `azure-functions-scaffold-python` — Project scaffolding

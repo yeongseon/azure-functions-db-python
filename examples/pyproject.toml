@@ -1,5 +1,5 @@
 [project]
-name = "azure-functions-db"
+name = "azure-functions-db-python"
 version = "0.1.0"
 description = "Pseudo DB trigger framework for Azure Functions Python"
 requires-python = ">=3.10"

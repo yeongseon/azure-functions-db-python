@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Purpose
-`azure-functions-db` provides pseudo DB trigger functionality for Azure Functions Python v2 applications using SQLAlchemy.
+`azure-functions-db-python` provides pseudo DB trigger functionality for Azure Functions Python v2 applications using SQLAlchemy.
 
 ## Read First
 - `README.md`

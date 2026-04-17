@@ -1,6 +1,6 @@
-"""Example: Bring Your Own Database — Oracle DB with azure-functions-db.
+"""Example: Bring Your Own Database — Oracle DB with azure-functions-db-python.
 
-Demonstrates that azure-functions-db works with any SQLAlchemy dialect,
+Demonstrates that azure-functions-db-python works with any SQLAlchemy dialect,
 not just the built-in extras (PostgreSQL, MySQL, SQL Server).
 
 This example uses Oracle via the ``oracledb`` driver. The same pattern
@@ -8,7 +8,7 @@ applies to CockroachDB, DuckDB, or any other database that has a
 SQLAlchemy dialect — just swap the driver and connection URL.
 
 Prerequisites:
-    pip install azure-functions-db oracledb
+    pip install azure-functions-db-python oracledb
 
 Environment variables:
     ORACLE_DB_URL: Oracle connection string

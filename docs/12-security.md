@@ -58,6 +58,6 @@ When handling multiple tenant DBs simultaneously:
 - Separate optional drivers as extras
 
 Examples:
-- `azure-functions-db[postgres]`
-- `azure-functions-db[mysql]`
-- `azure-functions-db[mssql]`
+- `azure-functions-db-python[postgres]`
+- `azure-functions-db-python[mysql]`
+- `azure-functions-db-python[mssql]`

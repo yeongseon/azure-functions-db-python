@@ -8,8 +8,8 @@ Shows two patterns:
     2. ``inject_writer`` — client injection (imperative, for complex operations)
 
 Requirements:
-    pip install azure-functions-db[postgres]
-    # or: pip install azure-functions-db[all]
+    pip install azure-functions-db-python[postgres]
+    # or: pip install azure-functions-db-python[all]
 
 Environment variables:
     SOURCE_DB_URL: Source database connection URL

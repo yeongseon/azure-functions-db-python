@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Advisories
-    url: https://github.com/yeongseon/azure-functions-dbtrigger/security/advisories/new
+    url: https://github.com/yeongseon/azure-functions-db-pythontrigger/security/advisories/new
     about: Report security issues privately via GitHub Security Advisories

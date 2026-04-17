@@ -1,7 +1,7 @@
 """Example: Poll orders table for changes using DbBindings decorators.
 
 Prerequisites:
-    pip install azure-functions-db[postgres]
+    pip install azure-functions-db-python[postgres]
 
 Environment variables:
     ORDERS_DB_URL: PostgreSQL connection string

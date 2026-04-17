@@ -1,21 +1,21 @@
-# ADR-005: Unified Package Design (trigger + binding → azure-functions-db)
+# ADR-005: Unified Package Design (trigger + binding → azure-functions-db-python)
 
 ## Status
 **Accepted** (2026-04-08)
 
 ## Context
 
-In the initial design, a package named `azure-functions-dbtrigger` was planned to provide only
+In the initial design, a package named `azure-functions-db-pythontrigger` was planned to provide only
 DB change detection (trigger) functionality.
 During development, the following requirements emerged:
 
 1. Providing DB reads (input binding) and writes (output binding) together improves user experience
 2. Splitting trigger and binding into separate packages forces users to install multiple packages
-3. A single package (`azure-functions-db`) simplifies installation and configuration
+3. A single package (`azure-functions-db-python`) simplifies installation and configuration
 
 ## Decision
 
-Rename `azure-functions-dbtrigger` to `azure-functions-db` and include both
+Rename `azure-functions-db-pythontrigger` to `azure-functions-db-python` and include both
 trigger (change detection) and binding (read/write) in a single package.
 
 ### Internal Structure
@@ -31,12 +31,12 @@ trigger (change detection) and binding (read/write) in a single package.
 
 ## Alternatives Considered
 
-### Alternative A: Keep trigger-only (azure-functions-dbtrigger)
+### Alternative A: Keep trigger-only (azure-functions-db-pythontrigger)
 - Pros: focused scope, clear naming
 - Cons: users who need binding must implement it themselves or install a separate package
 - Rejected: poor user DX
 
-### Alternative B: Separate packages (azure-functions-dbtrigger + azure-functions-dbbinding)
+### Alternative B: Separate packages (azure-functions-db-pythontrigger + azure-functions-db-pythonbinding)
 - Pros: clear separation of concerns
 - Cons: requires installing two packages; engine/config duplication
 - Rejected: "having to download multiple packages is inconvenient"
@@ -49,7 +49,7 @@ trigger (change detection) and binding (read/write) in a single package.
 ## Rationale
 
 1. **Technical synergy**: natural sharing of engine/config/pool
-2. **User convenience**: a single `pip install azure-functions-db` covers all DB operations
+2. **User convenience**: a single `pip install azure-functions-db-python` covers all DB operations
 3. **Scope management**: internal core/trigger/binding separation isolates complexity
 4. **Incremental delivery**: trigger implemented first; binding added in Phase 8+
 5. **Design review**: adopted recommendation of "one package, but not one programming model"
@@ -62,7 +62,7 @@ trigger (change detection) and binding (read/write) in a single package.
 
 ## Consequences
 
-- Package name: `azure-functions-db`
+- Package name: `azure-functions-db-python`
 - Import: `azure_functions_db`
 - Existing trigger design is preserved as-is
 - Binding semantics defined in a separate document (22-binding-semantics.md)

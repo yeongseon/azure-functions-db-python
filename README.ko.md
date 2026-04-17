@@ -1,12 +1,12 @@
 # Azure Functions DB
 
-[![PyPI](https://img.shields.io/pypi/v/azure-functions-db.svg)](https://pypi.org/project/azure-functions-db/)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db/)
-[![CI](https://github.com/yeongseon/azure-functions-db/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db/actions/workflows/ci-test.yml)
-[![Release](https://github.com/yeongseon/azure-functions-db/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db/actions/workflows/publish-pypi.yml)
-[![codecov](https://codecov.io/gh/yeongseon/azure-functions-db/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db)
+[![PyPI](https://img.shields.io/pypi/v/azure-functions-db-python.svg)](https://pypi.org/project/azure-functions-db-python/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db-python/)
+[![CI](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml)
+[![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
+[![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
-[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db/)
+[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Read this in: [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
@@ -37,28 +37,28 @@ Azure Functions Python v2에는 데이터베이스 통합에 대한 기본 스�
 
 ## Shared Core
 
-`azure-functions-db`는 향후 바인딩에서 재사용할 공통 인프라를 제공합니다. 정규화된 연결 설정에는 `DbConfig`를, 여러 컴포넌트에서 지연 생성 SQLAlchemy 엔진을 공유할 때는 `EngineProvider`를 사용하세요.
+`azure-functions-db-python`는 향후 바인딩에서 재사용할 공통 인프라를 제공합니다. 정규화된 연결 설정에는 `DbConfig`를, 여러 컴포넌트에서 지연 생성 SQLAlchemy 엔진을 공유할 때는 `EngineProvider`를 사용하세요.
 
 ## 설치
 
 ```bash
 # Core package (pick your database)
-pip install azure-functions-db[postgres]
-pip install azure-functions-db[mysql]
-pip install azure-functions-db[mssql]
+pip install azure-functions-db-python[postgres]
+pip install azure-functions-db-python[mysql]
+pip install azure-functions-db-python[mssql]
 
 # Multiple databases
-pip install azure-functions-db[postgres,mysql]
+pip install azure-functions-db-python[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db[all]
+pip install azure-functions-db-python[all]
 ```
 
 Function App 의존성에는 다음이 포함되어야 합니다.
 
 ```text
 azure-functions
-azure-functions-db[postgres]
+azure-functions-db-python[postgres]
 ```
 
 ## 빠른 시작
@@ -277,9 +277,9 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 | Database | Extra | Driver |
 |----------|-------|--------|
-| PostgreSQL | `azure-functions-db[postgres]` | [psycopg](https://www.psycopg.org/) |
-| MySQL | `azure-functions-db[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
-| SQL Server | `azure-functions-db[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
+| PostgreSQL | `azure-functions-db-python[postgres]` | [psycopg](https://www.psycopg.org/) |
+| MySQL | `azure-functions-db-python[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
+| SQL Server | `azure-functions-db-python[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
 
 ## 범위
 
@@ -293,7 +293,7 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 ## 관측 가능성
 
-`azure-functions-db`는 구조화 로그 헬퍼와 가벼운 `MetricsCollector` 프로토콜을 제공하여, 하드 의존성 추가 없이 원하는 메트릭 백엔드를 연결할 수 있습니다.
+`azure-functions-db-python`는 구조화 로그 헬퍼와 가벼운 `MetricsCollector` 프로토콜을 제공하여, 하드 의존성 추가 없이 원하는 메트릭 백엔드를 연결할 수 있습니다.
 
 ```python
 from collections.abc import Mapping
@@ -340,7 +340,7 @@ trigger = PollTrigger(
 
 ## 문서
 
-- 전체 문서: [yeongseon.github.io/azure-functions-db](https://yeongseon.github.io/azure-functions-db/)
+- 전체 문서: [yeongseon.github.io/azure-functions-db-python](https://yeongseon.github.io/azure-functions-db-python/)
 - 예제: `examples/`
 - [Architecture](docs/02-architecture.md)
 - [Semantics](docs/03-semantics.md)
@@ -353,15 +353,15 @@ trigger = PollTrigger(
 
 | Package | Role |
 |---------|------|
-| [azure-functions-openapi](https://github.com/yeongseon/azure-functions-openapi) | OpenAPI spec generation and Swagger UI |
-| [azure-functions-validation](https://github.com/yeongseon/azure-functions-validation) | Request/response validation and serialization |
-| **azure-functions-db** | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
-| [azure-functions-langgraph](https://github.com/yeongseon/azure-functions-langgraph) | LangGraph deployment adapter for Azure Functions |
-| [azure-functions-scaffold](https://github.com/yeongseon/azure-functions-scaffold) | Project scaffolding CLI |
-| [azure-functions-logging](https://github.com/yeongseon/azure-functions-logging) | Structured logging and observability |
-| [azure-functions-doctor](https://github.com/yeongseon/azure-functions-doctor) | Pre-deploy diagnostic CLI |
-| [azure-functions-durable-graph](https://github.com/yeongseon/azure-functions-durable-graph) | Manifest-first graph runtime with Durable Functions *(experimental)* |
-| [azure-functions-python-cookbook](https://github.com/yeongseon/azure-functions-python-cookbook) | Recipes and examples |
+| [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI spec generation and Swagger UI |
+| [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | Request/response validation and serialization |
+| **azure-functions-db-python** | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
+| [azure-functions-langgraph-python](https://github.com/yeongseon/azure-functions-langgraph-python) | LangGraph deployment adapter for Azure Functions |
+| [azure-functions-scaffold-python](https://github.com/yeongseon/azure-functions-scaffold-python) | Project scaffolding CLI |
+| [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | Structured logging and observability |
+| [azure-functions-doctor-python](https://github.com/yeongseon/azure-functions-doctor-python) | Pre-deploy diagnostic CLI |
+| [azure-functions-durable-graph-python](https://github.com/yeongseon/azure-functions-durable-graph-python) | Manifest-first graph runtime with Durable Functions *(experimental)* |
+| [azure-functions-cookbook-python](https://github.com/yeongseon/azure-functions-cookbook-python) | Recipes and examples |
 
 ## 면책 조항
 

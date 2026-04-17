@@ -1,6 +1,6 @@
 # Release Process
 
-This document outlines the steps to release a new version of **azure-functions-db** to PyPI using the automated GitHub Actions pipeline and the Makefile-based workflow.
+This document outlines the steps to release a new version of **azure-functions-db-python** to PyPI using the automated GitHub Actions pipeline and the Makefile-based workflow.
 
 ---
 
@@ -58,7 +58,7 @@ Each command will:
 
 Tag push automatically triggers the CI/CD workflows listed above.
 
-> **Important**: After bumping the version, update `tests/test_public_api.py` to match the new version string. See [AGENTS.md](https://github.com/yeongseon/azure-functions-db/blob/main/AGENTS.md) for details.
+> **Important**: After bumping the version, update `tests/test_public_api.py` to match the new version string. See [AGENTS.md](https://github.com/yeongseon/azure-functions-db-python/blob/main/AGENTS.md) for details.
 
 > Make sure your `main` branch is up-to-date before running these commands.
 
@@ -133,7 +133,7 @@ make publish-test       # Publish to TestPyPI
 To install from TestPyPI:
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ azure-functions-db
+pip install --index-url https://test.pypi.org/simple/ azure-functions-db-python
 ```
 
 ---
@@ -155,6 +155,6 @@ pip install --index-url https://test.pypi.org/simple/ azure-functions-db
 
 ## Related
 
-- [CHANGELOG.md](https://github.com/yeongseon/azure-functions-db/blob/main/CHANGELOG.md)
-- [AGENTS.md](https://github.com/yeongseon/azure-functions-db/blob/main/AGENTS.md) — release flow and version update rules
-- [Contributing](https://github.com/yeongseon/azure-functions-db/blob/main/CONTRIBUTING.md)
+- [CHANGELOG.md](https://github.com/yeongseon/azure-functions-db-python/blob/main/CHANGELOG.md)
+- [AGENTS.md](https://github.com/yeongseon/azure-functions-db-python/blob/main/AGENTS.md) — release flow and version update rules
+- [Contributing](https://github.com/yeongseon/azure-functions-db-python/blob/main/CONTRIBUTING.md)

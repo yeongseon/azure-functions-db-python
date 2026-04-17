@@ -2,7 +2,7 @@
 
 ## 1. Top-Level Structure
 
-`azure-functions-db` is composed of three top-level modules:
+`azure-functions-db-python` is composed of three top-level modules:
 
 1. **core**
    - `DbConfig`
@@ -54,7 +54,7 @@ The binding layer provides an imperative API called directly from Azure Function
 
 ### 1.5 Request Flow and Runtime Relationship
 
-`azure-functions-db` decorators integrate at two lifecycle points within the Azure Functions runtime:
+`azure-functions-db-python` decorators integrate at two lifecycle points within the Azure Functions runtime:
 
 1. **Import time** — decorators validate configuration. `output` also creates a module-scoped `DbOut` instance.
 2. **Per invocation** — the decorator wrapper performs DB I/O around the handler call. The exact behavior differs by decorator type.

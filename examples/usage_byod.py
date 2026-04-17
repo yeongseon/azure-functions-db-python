@@ -1,6 +1,6 @@
 """Minimal BYOD (Bring Your Own Database) example.
 
-Shows the simplest possible usage of azure-functions-db with a
+Shows the simplest possible usage of azure-functions-db-python with a
 non-built-in database. This example uses Oracle, but the same pattern
 works with any SQLAlchemy dialect:
 
@@ -10,8 +10,8 @@ works with any SQLAlchemy dialect:
     Firebird:     firebird+fdb://user:pass@host/db
 
 Prerequisites:
-    pip install azure-functions-db <your-driver>
-    # e.g. pip install azure-functions-db oracledb
+    pip install azure-functions-db-python <your-driver>
+    # e.g. pip install azure-functions-db-python oracledb
 
 Usage:
     ORACLE_DB_URL="oracle+oracledb://user:pass@host:1521/?service_name=XEPDB1"
