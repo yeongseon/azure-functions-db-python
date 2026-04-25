@@ -74,6 +74,7 @@ build-backend = "hatchling.build"
 sources = ["src"]
 
 [tool.hatch.build.targets.wheel]
+packages = ["src/azure_functions_db"]
 
 [tool.hatch.version]
 path = "src/azure_functions_db/__init__.py"
