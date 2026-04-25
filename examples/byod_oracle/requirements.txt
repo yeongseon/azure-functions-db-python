@@ -1,4 +1,4 @@
 azure-functions>=1.22.0
-azure-functions-db-python
+azure-functions-db
 oracledb>=2.0
 azure-storage-blob>=12.21.0

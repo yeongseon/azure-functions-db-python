@@ -1,5 +1,5 @@
 [project]
-name = "azure-functions-db-python"
+name = "azure-functions-db"
 description = "Database trigger and input/output bindings for Azure Functions Python v2, powered by SQLAlchemy"
 keywords = ["azure-functions", "azure", "python", "v2", "database", "trigger", "polling", "sqlalchemy", "serverless", "binding", "input-binding", "output-binding", "decorator"]
 authors = [{ name = "Yeongseon Choe", email = "yeongseon.choe@gmail.com" }]

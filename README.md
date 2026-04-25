@@ -1,7 +1,7 @@
 # Azure Functions DB
 
-[![PyPI](https://img.shields.io/pypi/v/azure-functions-db-python.svg)](https://pypi.org/project/azure-functions-db-python/)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db-python/)
+[![PyPI](https://img.shields.io/pypi/v/azure-functions-db.svg)](https://pypi.org/project/azure-functions-db/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db/)
 [![CI](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml)
 [![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
 [![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
@@ -37,7 +37,7 @@ Azure Functions Python v2 has no built-in database integration story:
 
 | Path | When to use | What to do |
 |------|-------------|------------|
-| **Built-in extras** | PostgreSQL, MySQL, or SQL Server | `pip install azure-functions-db-python[postgres]` and go |
+| **Built-in extras** | PostgreSQL, MySQL, or SQL Server | `pip install azure-functions-db[postgres]` and go |
 | **Bring your own SQLAlchemy database** | Oracle, CockroachDB, DuckDB, or any other RDBMS with a SQLAlchemy dialect | Install the driver, use the SQLAlchemy connection URL |
 | **Custom trigger source** *(triggers only)* | Non-SQL sources (MongoDB, Kafka, REST APIs) | Implement the `SourceAdapter` Protocol for `db.trigger()` |
 
@@ -93,22 +93,22 @@ If your data source has no SQLAlchemy dialect, implement the [`SourceAdapter`](d
 
 ```bash
 # Core package (pick your database)
-pip install azure-functions-db-python[postgres]
-pip install azure-functions-db-python[mysql]
-pip install azure-functions-db-python[mssql]
+pip install azure-functions-db[postgres]
+pip install azure-functions-db[mysql]
+pip install azure-functions-db[mssql]
 
 # Multiple databases
-pip install azure-functions-db-python[postgres,mysql]
+pip install azure-functions-db[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db-python[all]
+pip install azure-functions-db[all]
 ```
 
 Your Function App dependencies should include:
 
 ```text
 azure-functions
-azure-functions-db-python[postgres]
+azure-functions-db[postgres]
 ```
 
 ## Quick Start
@@ -329,9 +329,9 @@ These databases have pre-packaged driver dependencies. Install the matching extr
 
 | Database | Extra | Driver |
 |----------|-------|--------|
-| PostgreSQL | `azure-functions-db-python[postgres]` | [psycopg](https://www.psycopg.org/) |
-| MySQL | `azure-functions-db-python[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
-| SQL Server | `azure-functions-db-python[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
+| PostgreSQL | `azure-functions-db[postgres]` | [psycopg](https://www.psycopg.org/) |
+| MySQL | `azure-functions-db[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
+| SQL Server | `azure-functions-db[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
 
 Any other database with a [SQLAlchemy dialect](https://docs.sqlalchemy.org/en/20/dialects/) works too — just install the driver yourself. See [Choose your integration path](#choose-your-integration-path).
 
