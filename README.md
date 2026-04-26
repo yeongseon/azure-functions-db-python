@@ -240,6 +240,8 @@ def create_order(req: func.HttpRequest, out: DbOut) -> func.HttpResponse:
 
 Supported upsert dialects: PostgreSQL, SQLite, MySQL.
 
+`DbOut.set([])` is an explicit no-op: it accepts an empty list (e.g. when your handler computed nothing to write) and emits no SQL. Calling `set` again with a non-empty payload after a no-op still writes normally.
+
 ### Client injection (imperative escape hatches)
 
 For complex operations (multiple queries, transactions, update/delete), use `inject_reader` / `inject_writer` to receive a client instance:
@@ -254,12 +256,44 @@ def complex_read(reader: DbReader) -> None:
     user = reader.get(pk={"id": 42})
     orders = reader.query("SELECT * FROM orders WHERE user_id = :uid", params={"uid": 42})
 
+    total = reader.scalar("SELECT COUNT(*) FROM users")
+    profile = reader.one("SELECT * FROM users WHERE id = :id", params={"id": 42})
+    maybe_admin = reader.one_or_none(
+        "SELECT * FROM admins WHERE user_id = :uid", params={"uid": 42}
+    )
+
 @db.inject_writer("writer", url="%DB_URL%", table="orders")
 def complex_write(writer: DbWriter) -> None:
     writer.insert(data={"id": 1, "status": "pending"})
     writer.update(data={"status": "shipped"}, pk={"id": 1})
     writer.delete(pk={"id": 1})
 ```
+
+#### Atomic multi-statement writes — `DbWriter.transaction()`
+
+`transaction()` is a context manager that opens a single SQLAlchemy connection, begins a transaction, and shares it across every `insert` / `upsert` / `update` / `delete` call made on the same writer inside the `with` block. The transaction commits on successful exit and rolls back on any exception, including `WriteError` raised by individual write calls.
+
+```python
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
+def transfer(writer: DbWriter) -> None:
+    with writer.transaction():
+        writer.insert(data={"id": 1, "status": "pending", "total": 99.99})
+        writer.update(data={"status": "shipped"}, pk={"id": 1})
+```
+
+Notes:
+
+- Nested transactions are not supported; calling `transaction()` while one is active raises `WriteError`.
+- After the `with` block exits the writer returns to its default per-call autocommit behavior.
+- `transaction()` works only on the imperative `DbWriter` (`inject_writer`). The `@db.output` `DbOut` writer commits its single `.set(...)` call atomically and does not need a transaction wrapper.
+
+#### `DbReader` row-shape helpers
+
+| Method | Rows | Behavior |
+|---|---|---|
+| `reader.scalar(sql, params=...)` | 0 or 1 | First column of the row, or `None` for zero rows. Multiple rows raise `QueryError`. |
+| `reader.one(sql, params=...)` | exactly 1 | Returns a `dict[str, object]`. Zero or multiple rows raise `QueryError`. |
+| `reader.one_or_none(sql, params=...)` | 0 or 1 | Returns a `dict[str, object]` or `None`. Multiple rows raise `QueryError`. |
 
 ### Trigger (poll-based pseudo trigger)
 
@@ -387,6 +421,16 @@ Any other database with a [SQLAlchemy dialect](https://docs.sqlalchemy.org/en/20
 - Read/write bindings via HTTP/Queue/Event triggers
 
 This package does **not** implement a native Azure Functions trigger extension. It uses a poll-based approach on top of the existing timer trigger.
+
+## Async handlers
+
+`async def` handlers are supported. SQLAlchemy operations inside `azure-functions-db` run synchronously; when an `async` handler invokes a binding (input fetch, `DbOut.set(...)`, polling commit, etc.) the package offloads the blocking call to a worker thread via `asyncio.to_thread`, so the event loop is not blocked.
+
+This package does **not** use SQLAlchemy `AsyncEngine` internally. If you need fully native asyncio drivers (e.g. `asyncpg`, `aiomysql`), drive them yourself outside the binding — `azure-functions-db` deliberately exposes a single sync engine path so behavior across dialects stays identical.
+
+## `engine_kwargs` flow-through
+
+Every binding decorator and `DbConfig` accept an `engine_kwargs` mapping that is forwarded to `sqlalchemy.create_engine`. Anything the underlying dialect supports — connection / query timeouts, pool sizing, isolation level, `connect_args`, custom event listeners — flows through unchanged. Use `EngineProvider` when several bindings should share a single engine instance with a consistent `engine_kwargs` configuration.
 
 ## Observability
 
