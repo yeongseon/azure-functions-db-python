@@ -398,7 +398,7 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
     ])
 ```
 
-See [`examples/trigger_with_binding/`](examples/trigger_with_binding/) for a complete runnable sample.
+See [`examples/trigger_with_binding/`](examples/trigger_with_binding/) for a complete runnable sample, or [`examples/postgresql-poll-trigger/`](examples/postgresql-poll-trigger/) for an end-to-end PostgreSQL + Azurite docker-compose setup.
 
 ## Built-in Extras
 
