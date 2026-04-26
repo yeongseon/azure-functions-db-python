@@ -2,29 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+### Documentation
+
+- *(agents)* Add Issue Conventions section to AGENTS.md 
+
+### Features
+
+- DbWriter.transaction() and DbReader.scalar/one/one_or_none (#95) (#97) 
+
+### Other
+
+- Bump version to 0.3.0 
+
+### Testing
+
+- Bump expected __version__ to 0.3.0 ahead of release 
+
 ### Bug Fixes
 
 - Align distribution name with PyPI publish name (azure-functions-db) (#92) 
 - Declare wheel packages explicitly for hatchling (#91) 
-
-### Documentation
-
-- Reposition README against official Azure SQL bindings (#93) (#96) 
-
-### Other
-
-- Bump version to 0.2.2 
-
-### Testing
-
-- Bump expected __version__ to 0.2.2 ahead of release 
-
-### Bug Fixes
-
 - Remove stale site/ artifacts and fix broken issue template URL 
 
 ### Documentation
 
+- Update changelog 
+- Reposition README against official Azure SQL bindings (#93) (#96) 
 - Replace text-only binding flow with accurate Mermaid diagrams 
 
 ### Miscellaneous Tasks
@@ -37,6 +40,14 @@ All notable changes to this project will be documented in this file.
 - *(deps)* Bump softprops/action-gh-release from 2.6.1 to 3.0.0 
 - *(deps)* Bump actions/checkout from 4 to 6 
 - Update repo references for azure-functions-{feature}-python naming convention 
+
+### Other
+
+- Bump version to 0.2.2 
+
+### Testing
+
+- Bump expected __version__ to 0.2.2 ahead of release 
 
 ### Bug Fixes
 
