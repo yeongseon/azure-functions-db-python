@@ -68,7 +68,7 @@ through every item below before promoting a polling trigger to production.
       change it.
 - [ ] **You have measured `p99` handler duration in a load test or in
       production with a low-traffic poller**, not just guessed it. The
-      runtime emits `handler_duration_ms` as a metric (see §6).
+      runtime emits `azfdb_handler_duration_ms` as a metric (see §6).
 
 See the formula and reasoning in
 [Polling Runtime §7](24-polling-runtime-semantics.md#7-tuning-lease_ttl_seconds-and-timer-interval).
@@ -115,22 +115,24 @@ See the formula and reasoning in
 ## 6. Observability
 
 A `MetricsCollector` is wired to your metrics backend, and the following
-signals have alerts:
+signals have alerts. All metrics are emitted with the `azfdb_` prefix
+(see [`src/azure_functions_db/observability.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/src/azure_functions_db/observability.py)
+for the canonical names) and are labeled with `poller_name`.
 
-- [ ] **`failures_total`** — non-zero rate over a 5–10 min window pages
+- [ ] **`azfdb_failures_total`** — non-zero rate over a 5–10 min window pages
       on-call.
-- [ ] **`lag_seconds`** — gauge exceeding `2 × timer_interval` for more
+- [ ] **`azfdb_lag_seconds`** — gauge exceeding `2 × timer_interval` for more
       than 2 ticks indicates the trigger is falling behind.
-- [ ] **`last_success_timestamp`** — `now - last_success > 3 ×
+- [ ] **`azfdb_last_success_timestamp`** — `now - last_success > 3 ×
       timer_interval` indicates the trigger is stuck (no successful tick).
-- [ ] **`batches_total{result="failure"}`** — repeating failures on the
+- [ ] **`azfdb_batches_total{result="failure"}`** — repeating failures on the
       same `checkpoint_after` indicate a poison batch (see §7).
 - [ ] **Structured logs** (`event=tick_complete`, `event=handler_failed`,
       `event=commit_failed`, `event=lease_acquire_failed`) flow into your
       log store with `poller_name` and `invocation_id` searchable.
-- [ ] A dashboard shows `handler_duration_ms`, `commit_duration_ms`, and
-      `batch_size` percentiles per `poller_name` so you can detect drift
-      before it breaches `lease_ttl_seconds`.
+- [ ] A dashboard shows `azfdb_handler_duration_ms`, `azfdb_commit_duration_ms`,
+      and `azfdb_batch_size` percentiles per `poller_name` so you can
+      detect drift before it breaches `lease_ttl_seconds`.
 
 For the metric inventory see
 [`src/azure_functions_db/observability.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/src/azure_functions_db/observability.py)
@@ -156,10 +158,10 @@ The on-call runbook covers each of the following recovery paths.
 
 ### 7.2 Lost lease / fencing rejection
 
-1. Symptom: `LostLeaseError` in logs, `failures_total{error_type="LostLeaseError"}`
+1. Symptom: `LostLeaseError` in logs, `azfdb_failures_total{error_type="LostLeaseError"}`
    spiking.
 2. Most common cause: handler duration exceeded `lease_ttl_seconds`.
-   Check `handler_duration_ms` p99 against `lease_ttl_seconds`.
+   Check `azfdb_handler_duration_ms` p99 against `lease_ttl_seconds`.
 3. Resolution: raise `lease_ttl_seconds`, lower `batch_size`, or split
    long-running side effects into a queue + worker pattern.
 
@@ -198,17 +200,21 @@ The on-call runbook covers each of the following recovery paths.
 The following smoke runs against the production environment before
 traffic is enabled:
 
-- [ ] Deploy with the timer **disabled** (e.g. `disabled: true` in
-      `function.json` or comment out the schedule decorator). Verify
-      the Function App boots and the `EngineProvider` resolves the URL
-      from app settings.
+- [ ] Deploy with the timer **disabled** for the smoke. The recommended
+      mechanism on the v2 model is the per-function disable app setting
+      (`AzureWebJobs.<FUNCTION_NAME>.Disabled=true`); a separate slot or
+      a dedicated smoke environment also works. Avoid commenting out the
+      `@app.schedule` decorator — that's a code change, not an
+      operational toggle. Verify the Function App boots and the
+      `EngineProvider` resolves the URL from app settings.
 - [ ] Manually invoke the function once with a fixed timer payload.
       Verify a single successful tick: `event=tick_complete`,
       `result=success`, `total_processed=0` (no rows yet) or the
       expected backfill count.
 - [ ] Verify the state blob exists and contains the expected
       `source_fingerprint` and an initial `checkpoint`.
-- [ ] Re-enable the timer.
+- [ ] Re-enable the timer (`AzureWebJobs.<FUNCTION_NAME>.Disabled=false`
+      or remove the setting).
 
 ---
 
