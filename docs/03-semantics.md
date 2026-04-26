@@ -2,6 +2,11 @@
 
 This document defines the **most important contracts** of the project.
 
+> **Operating the polling trigger?** See
+> [Polling Runtime & Failure Scenarios](24-polling-runtime-semantics.md) for
+> the consolidated operational reference (tick lifecycle, duplicate windows,
+> lease tuning, recovery procedures).
+
 ## 1. Core Guarantees
 
 ### 1.1 Delivery Contract (Precise Definition)
