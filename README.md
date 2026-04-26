@@ -432,6 +432,8 @@ This package does **not** use SQLAlchemy `AsyncEngine` internally. If you need f
 
 Every binding decorator and `DbConfig` accept an `engine_kwargs` mapping that is forwarded to `sqlalchemy.create_engine`. Anything the underlying dialect supports — connection / query timeouts, pool sizing, isolation level, `connect_args`, custom event listeners — flows through unchanged. Use `EngineProvider` when several bindings should share a single engine instance with a consistent `engine_kwargs` configuration.
 
+> See [EngineProvider Lifecycle & SQLAlchemy Pooling Guidance](docs/25-engine-provider-pooling.md) for engine cache-key rules, recommended pool settings on Azure Functions (`pool_pre_ping`, `pool_recycle`, `pool_size` / `max_overflow`), per-dialect snippets, and SQLite test caveats.
+
 ## Observability
 
 `azure-functions-db-python` exposes structured log helpers plus a lightweight `MetricsCollector` protocol so you can connect your own metrics backend without adding hard dependencies.
