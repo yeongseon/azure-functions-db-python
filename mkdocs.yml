@@ -19,6 +19,7 @@ nav:
   - User Guide:
       - Architecture: 02-architecture.md
       - Binding Semantics: 22-binding-semantics.md
+      - Polling Runtime & Failure Scenarios: 24-polling-runtime-semantics.md
       - Python API Spec: 04-python-api-spec.md
       - Local Development: 09-local-dev-guide.md
   - Examples:
