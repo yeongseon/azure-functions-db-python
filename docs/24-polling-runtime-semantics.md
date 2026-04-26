@@ -25,9 +25,11 @@ one.
 
 Concretely:
 
-- A row visible to the source query at or after the last committed checkpoint
-  may be delivered to the handler **zero or more times** until the checkpoint
-  for the batch containing it is committed.
+- A row that remains visible to the source query and satisfies the source
+  preconditions will be delivered to the handler **at least once** before the
+  checkpoint advances past it. Until the checkpoint commit for the batch
+  containing that row succeeds, the same row may be delivered **more than
+  once** (process crash, lease loss, retry after a failed commit, etc.).
 - After the checkpoint commit succeeds, the framework will not intentionally
   re-fetch rows at or below that checkpoint on subsequent ticks.
 - The framework does **not** provide exactly-once delivery, cross-instance
