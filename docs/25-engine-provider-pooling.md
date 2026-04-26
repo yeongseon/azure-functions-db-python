@@ -149,6 +149,9 @@ config = DbConfig(
     connection_url="%DB_URL%",
     pool_size=5,                # one engine per worker; total = pool_size * worker_count
     pool_recycle=1800,          # 30 min — below most managed-DB idle timeouts
+    connect_args={
+        "connect_timeout": 10,  # driver-level TCP / login timeout (seconds)
+    },
     engine_kwargs={
         "pool_pre_ping": True,  # detect stale connections before use
         "max_overflow": 10,     # short bursts above pool_size during fan-out
@@ -156,6 +159,12 @@ config = DbConfig(
     },
 )
 ```
+
+> `DbConfig` exposes `connect_args` as a dedicated field. Prefer it over
+> nesting `connect_args` inside `engine_kwargs`: a `connect_args` key inside
+> `engine_kwargs` will silently override the dedicated field
+> (see [`core/engine.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/src/azure_functions_db/core/engine.py)
+> — `engine_kwargs` is applied after `connect_args`).
 
 ### 4.1 `pool_pre_ping=True`
 
@@ -180,6 +189,11 @@ this on next checkout, regardless of whether the server still considers it
 alive.
 
 Set it **below** your database's server-side idle timeout. Common values:
+
+> The values below are **starting points**, not Azure platform guarantees.
+> Server-side idle timeouts are configurable on every managed database and
+> may differ from the defaults shown here. Always confirm the configured
+> timeout on your specific database/server before relying on these numbers.
 
 | Database | Typical server idle timeout | Recommended `pool_recycle` |
 |---|---|---|
@@ -242,9 +256,7 @@ For tests, a typical config is:
 ```python
 DbConfig(
     connection_url="sqlite:///:memory:",
-    engine_kwargs={
-        "connect_args": {"check_same_thread": False},
-    },
+    connect_args={"check_same_thread": False},
 )
 ```
 
@@ -259,14 +271,14 @@ DbConfig(
     connection_url="postgresql+psycopg://user:pass@host:5432/db",
     pool_size=5,
     pool_recycle=1800,
+    connect_args={
+        "connect_timeout": 10,                        # TCP connect timeout (s)
+        "options": "-c statement_timeout=30000",      # 30s server-side query timeout
+    },
     engine_kwargs={
         "pool_pre_ping": True,
         "max_overflow": 10,
         "pool_timeout": 30,
-        "connect_args": {
-            "connect_timeout": 10,           # TCP connect timeout (s)
-            "options": "-c statement_timeout=30000",  # 30s server-side query timeout
-        },
     },
 )
 ```
@@ -278,15 +290,15 @@ DbConfig(
     connection_url="mysql+pymysql://user:pass@host:3306/db",
     pool_size=5,
     pool_recycle=1800,
+    connect_args={
+        "connect_timeout": 10,
+        "read_timeout": 30,
+        "write_timeout": 30,
+    },
     engine_kwargs={
         "pool_pre_ping": True,
         "max_overflow": 10,
         "pool_timeout": 30,
-        "connect_args": {
-            "connect_timeout": 10,
-            "read_timeout": 30,
-            "write_timeout": 30,
-        },
     },
 )
 ```
@@ -302,14 +314,14 @@ DbConfig(
     ),
     pool_size=5,
     pool_recycle=1500,
+    connect_args={
+        "timeout": 10,                       # login timeout (s)
+    },
     engine_kwargs={
         "pool_pre_ping": True,
         "max_overflow": 10,
         "pool_timeout": 30,
         "fast_executemany": True,            # bulk insert acceleration
-        "connect_args": {
-            "timeout": 10,                   # login timeout (s)
-        },
     },
 )
 ```
