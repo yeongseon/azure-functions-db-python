@@ -300,7 +300,7 @@ Notes:
 > **This is a pseudo trigger, not a native Azure Functions trigger.**
 > `@db.trigger` does not register a binding with the Functions host. It must be stacked **on top of a real Azure Functions trigger** (typically `@app.schedule` / timer) that fires the polling loop.
 >
-> Delivery is **at-least-once**. Duplicates may occur during process crashes, lease transitions, or checkpoint commit failures. **Handlers must be idempotent.** See [Semantics — Duplicate Windows](docs/03-semantics.md#13-duplicate-and-reprocessing-windows).
+> Delivery is **at-least-once**. Duplicates may occur during process crashes, lease transitions, or checkpoint commit failures. **Handlers must be idempotent.** See [Polling Runtime & Failure Scenarios](docs/24-polling-runtime-semantics.md) for the full operational reference (tick lifecycle, duplicate windows, lease tuning, recovery procedures), [Production Checklist](docs/26-polling-production-checklist.md) before going to production, and [Semantics — Duplicate Windows](docs/03-semantics.md#13-duplicate-and-reprocessing-windows) for the formal contract.
 
 ```python
 import azure.functions as func
@@ -432,6 +432,8 @@ This package does **not** use SQLAlchemy `AsyncEngine` internally. If you need f
 
 Every binding decorator and `DbConfig` accept an `engine_kwargs` mapping that is forwarded to `sqlalchemy.create_engine`. Anything the underlying dialect supports — connection / query timeouts, pool sizing, isolation level, `connect_args`, custom event listeners — flows through unchanged. Use `EngineProvider` when several bindings should share a single engine instance with a consistent `engine_kwargs` configuration.
 
+> See [EngineProvider Lifecycle & SQLAlchemy Pooling Guidance](docs/25-engine-provider-pooling.md) for engine cache-key rules, recommended pool settings on Azure Functions (`pool_pre_ping`, `pool_recycle`, `pool_size` / `max_overflow`), per-dialect snippets, and SQLite test caveats.
+
 ## Observability
 
 `azure-functions-db-python` exposes structured log helpers plus a lightweight `MetricsCollector` protocol so you can connect your own metrics backend without adding hard dependencies.
@@ -483,7 +485,7 @@ This package provides **at-least-once** delivery for the polling trigger. Duplic
 - Wrap downstream writes in a transaction with a unique constraint that you can swallow.
 - For batch writes, prefer upsert (`action="upsert"` with `conflict_columns=...`) over plain insert.
 
-See [Semantics — Duplicate Windows](docs/03-semantics.md#13-duplicate-and-reprocessing-windows) for the full guarantee model and the windows in which duplicates can be observed.
+See [Semantics — Duplicate Windows](docs/03-semantics.md#13-duplicate-and-reprocessing-windows) for the full guarantee model and the windows in which duplicates can be observed. See [Polling Runtime & Failure Scenarios](docs/24-polling-runtime-semantics.md) for tick lifecycle, lease tuning, and recovery procedures, and the [Production Checklist](docs/26-polling-production-checklist.md) for pre-deployment verification.
 
 ## Documentation
 
