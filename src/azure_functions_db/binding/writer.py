@@ -7,6 +7,7 @@ from types import TracebackType
 from typing import Any
 
 from sqlalchemy.engine import Connection, Engine, create_engine
+from sqlalchemy.engine.base import Transaction
 from sqlalchemy.schema import Table
 from sqlalchemy.sql import and_, delete, update
 
@@ -65,6 +66,7 @@ class DbWriter:
         self._owns_engine = False
         self._initialized = False
         self._tx_conn: Connection | None = None
+        self._tx: Transaction | None = None
 
     @contextmanager
     def transaction(self) -> Iterator[DbWriter]:
@@ -110,12 +112,14 @@ class DbWriter:
 
         tx = conn.begin()
         self._tx_conn = conn
+        self._tx = tx
         try:
             yield self
         except BaseException:
             try:
                 tx.rollback()
             finally:
+                self._tx = None
                 self._tx_conn = None
                 conn.close()
             raise
@@ -123,10 +127,12 @@ class DbWriter:
             try:
                 tx.commit()
             except Exception as exc:
+                self._tx = None
                 self._tx_conn = None
                 conn.close()
                 msg = "Failed to commit transaction"
                 raise WriteError(msg) from exc
+            self._tx = None
             self._tx_conn = None
             conn.close()
 
@@ -275,7 +281,25 @@ class DbWriter:
             raise WriteError(msg) from exc
 
     def close(self) -> None:
-        """Release resources held by this writer."""
+        """Release resources held by this writer.
+
+        If a transaction is active (because ``close()`` was called inside
+        a ``transaction()`` block via abrupt teardown, or because the
+        caller forgot to exit the context manager), the transaction is
+        explicitly rolled back before the connection is released. A
+        rollback failure is logged but does not prevent connection close
+        or engine disposal.
+        """
+        if self._tx is not None:
+            tx = self._tx
+            self._tx = None
+            try:
+                tx.rollback()
+            except Exception:
+                logger.warning(
+                    "Failed to roll back active transaction on writer.close()",
+                    exc_info=True,
+                )
         if self._tx_conn is not None:
             tx_conn = self._tx_conn
             self._tx_conn = None

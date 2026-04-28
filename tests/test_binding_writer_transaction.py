@@ -100,3 +100,96 @@ class TestTransactionWithMultipleOps:
                 writer.update(data={"name": "Alicia"}, pk={"id": 1})
                 writer.delete(pk={"id": 2})
         assert _row_count(users_url) == 1
+
+
+class TestCloseRollsBackActiveTransaction:
+    def test_close_mid_transaction_rolls_back_inserts(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        tx_cm = writer.transaction()
+        tx_cm.__enter__()
+        try:
+            writer.insert(data={"id": 1, "name": "Alice"})
+            writer.insert(data={"id": 2, "name": "Bob"})
+        finally:
+            writer.close()
+            _quietly_finalize_dangling_cm(tx_cm)
+
+        assert _row_count(users_url) == 0
+
+    def test_close_clears_transaction_handles(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        tx_cm = writer.transaction()
+        tx_cm.__enter__()
+        writer.insert(data={"id": 1, "name": "Alice"})
+
+        writer.close()
+        _quietly_finalize_dangling_cm(tx_cm)
+
+        assert writer._tx is None
+        assert writer._tx_conn is None
+        assert writer._engine is None
+
+    def test_close_without_active_transaction_is_unaffected(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer.insert(data={"id": 1, "name": "Alice"})
+
+        writer.close()
+
+        assert writer._tx is None
+        assert writer._tx_conn is None
+        assert _row_count(users_url) == 1
+
+    def test_close_logs_and_continues_when_rollback_fails(
+        self,
+        users_url: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        import logging
+        from unittest.mock import MagicMock
+
+        writer = DbWriter(url=users_url, table="users")
+        tx_cm = writer.transaction()
+        tx_cm.__enter__()
+        writer.insert(data={"id": 1, "name": "Alice"})
+
+        assert writer._tx is not None
+
+        failing_tx = MagicMock()
+        failing_tx.rollback.side_effect = RuntimeError("rollback failed")
+        writer._tx = failing_tx
+
+        with caplog.at_level(logging.WARNING, logger="azure_functions_db.binding.writer"):
+            writer.close()
+
+        _quietly_finalize_dangling_cm(tx_cm)
+
+        failing_tx.rollback.assert_called_once()
+        assert any(
+            "Failed to roll back active transaction" in record.message
+            for record in caplog.records
+        )
+        assert writer._tx is None
+        assert writer._tx_conn is None
+        assert writer._engine is None
+
+
+def _quietly_finalize_dangling_cm(tx_cm: object) -> None:
+    """Drive a half-entered ``writer.transaction()`` context manager to a clean
+    finalized state in tests that intentionally call ``writer.close()`` while
+    the transaction generator is still suspended.
+
+    Without this, the underlying generator is finalized at GC time and SQLAlchemy
+    emits a ``transaction already deassociated from connection`` SAWarning when
+    its ``except BaseException`` branch tries to roll back the (already closed)
+    transaction. We swallow the resulting exception because the writer has
+    already torn down both the transaction and the connection.
+    """
+    import contextlib
+    import warnings
+
+    gen = getattr(tx_cm, "gen", None)
+    if gen is None:
+        return
+    with warnings.catch_warnings(), contextlib.suppress(Exception):
+        warnings.simplefilter("ignore")
+        gen.close()
