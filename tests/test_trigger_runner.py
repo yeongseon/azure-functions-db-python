@@ -18,6 +18,7 @@ from azure_functions_db.observability import (
     METRIC_LAST_SUCCESS_TIMESTAMP,
     NoOpCollector,
 )
+from azure_functions_db.state.errors import LeaseConflictError
 from azure_functions_db.trigger.context import PollContext
 from azure_functions_db.trigger.errors import (
     CommitError,
@@ -684,6 +685,73 @@ class TestPollRunner:
 
         with pytest.raises(LeaseAcquireError, match="Failed to acquire lease"):
             runner.tick()
+
+    def test_lease_conflict_is_silent_noop(self) -> None:
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        store.acquire_error = LeaseConflictError("held by another instance")
+        store.load_error = AssertionError("checkpoint must not be loaded on conflict")
+        metrics = RecordingMetricsCollector()
+
+        handler_calls: list[list[RowChange]] = []
+
+        def handler(events: list[RowChange]) -> None:
+            handler_calls.append(events)
+
+        runner = PollRunner(
+            name="test_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=handler,
+            metrics=metrics,
+        )
+
+        result = runner.tick()
+
+        assert result == 0
+        assert handler_calls == []
+        assert all(
+            name != METRIC_FAILURES_TOTAL
+            for name, _value, _labels in metrics.increments
+        )
+        assert all(
+            not (
+                name == METRIC_BATCHES_TOTAL
+                and (labels or {}).get("result") == "failure"
+            )
+            for name, _value, labels in metrics.increments
+        )
+
+    def test_lease_conflict_logs_at_debug_not_error(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        source = FakeSourceAdapter(batches=[])
+        store = FakeStateStore()
+        store.acquire_error = LeaseConflictError("held by another instance")
+
+        runner = PollRunner(
+            name="test_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+        )
+
+        with caplog.at_level(
+            logging.DEBUG, logger="azure_functions_db.trigger.runner"
+        ):
+            runner.tick()
+
+        assert any(
+            record.levelno == logging.DEBUG
+            and getattr(record, "event", None) == "lease_acquire_skipped"
+            for record in caplog.records
+        )
+        assert not any(
+            record.levelno >= logging.ERROR for record in caplog.records
+        )
 
     def test_fetch_failure_raises(self) -> None:
         source = FakeSourceAdapter(batches=[])

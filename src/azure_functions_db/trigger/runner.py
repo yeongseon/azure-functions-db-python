@@ -26,6 +26,7 @@ from ..observability import (
     NoOpCollector,
     build_log_fields,
 )
+from ..state.errors import LeaseConflictError
 from .context import PollContext
 from .errors import (
     CommitError,
@@ -184,6 +185,22 @@ class PollRunner:
             lease_id = self._state_store.acquire_lease(
                 self._name, self._lease_ttl_seconds
             )
+        except LeaseConflictError:
+            # Scale-out contention: another instance holds the lease this
+            # cycle. Treating it as a failure (logger.exception /
+            # failures_total / LeaseAcquireError) would generate alert noise,
+            # so skip the tick silently.
+            logger.debug(
+                "Poller '%s': lease already held by another instance; skipping tick",
+                self._name,
+                extra=build_log_fields(
+                    event="lease_acquire_skipped",
+                    poller_name=self._name,
+                    invocation_id=invocation_id,
+                    result="skipped",
+                ),
+            )
+            return 0
         except Exception as exc:
             logger.exception(
                 "Failed to acquire lease for poller '%s'",
