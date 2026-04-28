@@ -635,7 +635,7 @@ def test_output_accepts_list_basemodel(tmp_path: Path) -> None:
 
     @DbBindings().output("out", url=url, table="processed_orders")
     def handler(out: DbOut) -> str:
-        out.set([OrderModel(id=1, status="a"), OrderModel(id=2, status="b")])
+        out.set([OrderModel(id=1, status="a"), OrderModel(id=2, status="b")])  # type: ignore[arg-type]
         return "batch_model"
 
     result = handler()
@@ -706,6 +706,21 @@ def test_output_rejects_invalid_set_type(tmp_path: Path) -> None:
     @DbBindings().output("out", url=url, table="processed_orders")
     def handler(out: DbOut) -> None:
         out.set("not a dict")  # type: ignore[arg-type]
+
+    with pytest.raises(ConfigurationError, match="expected dict, list"):
+        handler()
+
+
+def test_output_rejects_tuple_payload(tmp_path: Path) -> None:
+    # DbOut.set is typed as `dict | list[dict] | BaseModel | list[BaseModel] | None`.
+    # Tuples are not list, so the runtime must reject them — the type hint and
+    # the runtime branching agree.
+    url = _sqlite_url(tmp_path, "output-tuple.db")
+    _create_orders_table(url)
+
+    @DbBindings().output("out", url=url, table="processed_orders")
+    def handler(out: DbOut) -> None:
+        out.set(({"id": 1, "status": "pending"},))  # type: ignore[arg-type]
 
     with pytest.raises(ConfigurationError, match="expected dict, list"):
         handler()
