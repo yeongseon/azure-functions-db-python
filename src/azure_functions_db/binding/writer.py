@@ -66,6 +66,7 @@ class DbWriter:
         self._owns_engine = False
         self._initialized = False
         self._tx_conn: Connection | None = None
+        self._closed_in_active_tx = False
         self._tx: Transaction | None = None
 
     @contextmanager
@@ -113,6 +114,7 @@ class DbWriter:
         tx = conn.begin()
         self._tx_conn = conn
         self._tx = tx
+        self._closed_in_active_tx = False
         try:
             yield self
         except BaseException:
@@ -285,15 +287,21 @@ class DbWriter:
             raise WriteError(msg) from exc
 
     def close(self) -> None:
-        """Release resources held by this writer.
+        """Tear down resources held by this writer.
 
-        Safe to call from inside a ``transaction()`` ``with`` block: any
-        active transaction is rolled back, the connection is released,
-        and when the surrounding ``with`` block exits the writer detects
-        that teardown already happened and skips the commit/rollback.
-        Rollback failures are logged at WARNING and do not prevent
-        connection close or engine disposal.
+        If called while a ``transaction()`` ``with`` block is still active,
+        the transaction is rolled back, the connection is released, and a
+        sentinel is set so that any subsequent write call inside the same
+        ``with`` block raises :class:`WriteError`. The surrounding context
+        manager's ``__exit__`` observes the teardown and skips its own
+        commit/rollback. Rollback failures are logged at WARNING and do
+        not prevent connection close or engine disposal.
+
+        After ``close()``, do not continue using the writer inside the
+        original ``transaction()`` block — start a new ``with`` block on
+        a fresh writer instance.
         """
+        had_active_tx = self._tx is not None
         if self._tx is not None:
             tx = self._tx
             self._tx = None
@@ -321,6 +329,8 @@ class DbWriter:
             self._table = None
             self._initialized = False
             self._owns_engine = False
+        if had_active_tx:
+            self._closed_in_active_tx = True
 
     def __enter__(self) -> DbWriter:
         return self
@@ -356,6 +366,13 @@ class DbWriter:
             yield conn
 
     def _ensure_initialized(self) -> None:
+        if self._closed_in_active_tx:
+            msg = (
+                "DbWriter was close()d while a transaction() block was still "
+                "active; further writes inside that block are rejected. Exit "
+                "the transaction() block and use a fresh writer instance."
+            )
+            raise WriteError(msg)
         if self._initialized:
             return
 

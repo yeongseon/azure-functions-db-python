@@ -140,6 +140,27 @@ class TestCloseRollsBackActiveTransaction:
         assert writer._tx_conn is None
         assert _row_count(users_url) == 1
 
+    def test_write_after_close_inside_transaction_is_rejected(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        with writer.transaction():
+            writer.insert(data={"id": 1, "name": "Alice"})
+            writer.close()
+
+            with pytest.raises(WriteError, match="close.*transaction"):
+                writer.insert(data={"id": 2, "name": "Bob"})
+
+        assert _row_count(users_url) == 0
+
+    def test_close_outside_transaction_does_not_block_reuse(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer.insert(data={"id": 1, "name": "Alice"})
+        writer.close()
+
+        writer.insert(data={"id": 2, "name": "Bob"})
+        writer.close()
+
+        assert _row_count(users_url) == 2
+
     def test_close_logs_and_continues_when_rollback_fails(
         self,
         users_url: str,
