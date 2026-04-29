@@ -67,3 +67,15 @@ jobs:
 
       - name: Run catch-up benchmark
         run: python benchmarks/bench_catchup.py
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Lint shell scripts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck examples/postgresql-poll-trigger/smoke.sh

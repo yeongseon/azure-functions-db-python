@@ -119,14 +119,23 @@ def orders_poll(
     if not events:
         return
 
+    # `event.cursor` is a tuple aligned with the source's
+    # `(cursor_column, *pk_columns)` ordering — here `(updated_at, id)`. The
+    # first element is the source-side change timestamp (TIMESTAMPTZ); we
+    # persist that as `source_cursor`. `processed_at` records when *we*
+    # observed the event, so it is wall-clock `now()`, not the source cursor.
+    from datetime import datetime, timezone
+
+    processed_at = datetime.now(timezone.utc)
+
     out.set([
         {
             "order_id": event.pk["id"],
-            "source_cursor": event.cursor,
+            "source_cursor": event.cursor[0],
             "customer_name": event.after["customer_name"],
             "amount": event.after["amount"],
             "status": event.after["status"],
-            "processed_at": str(event.cursor),
+            "processed_at": processed_at,
         }
         for event in events
         if event.after is not None

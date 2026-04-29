@@ -41,6 +41,13 @@ change as an event, and writes an idempotent projection into a
 
 ## End-to-end run
 
+> **Verify your environment first**: run [`./smoke.sh`](smoke.sh) to bring
+> up Postgres + Azurite, apply the schema, drive a single poll tick from
+> Python, and assert the projection table received the expected rows. The
+> script is self-contained (no `func` CLI required) and exits non-zero on
+> any failure. Use it as a smoke test in CI or as a sanity check before
+> running the full Functions host below.
+
 ### 1. Start PostgreSQL and Azurite
 
 ```bash
