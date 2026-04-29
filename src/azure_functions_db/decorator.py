@@ -69,7 +69,11 @@ class DbOut:
     def set(
         self,
         data: (
-            dict[str, object] | Sequence[dict[str, object]] | BaseModel | Sequence[BaseModel] | None
+            dict[str, object]
+            | Sequence[dict[str, object]]
+            | BaseModel
+            | Sequence[BaseModel]
+            | None
         ),
     ) -> None:
         """Write *data* to the configured table.
@@ -79,7 +83,8 @@ class DbOut:
         data:
             ``dict`` for single row, ``list[dict]`` for batch,
             ``BaseModel`` / ``list[BaseModel]`` for Pydantic models,
-            or ``None`` to skip.
+            or ``None`` to skip. Tuples and other non-``list`` sequences
+            are rejected with :class:`ConfigurationError`.
         """
         if data is None:
             return
@@ -143,7 +148,11 @@ class _AsyncDbOutProxy:
     async def set(
         self,
         data: (
-            dict[str, object] | Sequence[dict[str, object]] | BaseModel | Sequence[BaseModel] | None
+            dict[str, object]
+            | Sequence[dict[str, object]]
+            | BaseModel
+            | Sequence[BaseModel]
+            | None
         ),
     ) -> None:
         """Async version of :meth:`DbOut.set`."""

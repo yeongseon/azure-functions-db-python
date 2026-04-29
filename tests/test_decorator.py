@@ -711,6 +711,21 @@ def test_output_rejects_invalid_set_type(tmp_path: Path) -> None:
         handler()
 
 
+def test_output_rejects_tuple_payload(tmp_path: Path) -> None:
+    # DbOut.set is statically typed with Sequence[...] for covariance,
+    # but the runtime contract intentionally accepts only list batches.
+    # Tuples are sequences but not list, so the runtime must reject them.
+    url = _sqlite_url(tmp_path, "output-tuple.db")
+    _create_orders_table(url)
+
+    @DbBindings().output("out", url=url, table="processed_orders")
+    def handler(out: DbOut) -> None:
+        out.set(({"id": 1, "status": "pending"},))
+
+    with pytest.raises(ConfigurationError, match="expected dict, list"):
+        handler()
+
+
 def test_output_auto_closes_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     url = _sqlite_url(tmp_path, "output-close.db")
     _create_orders_table(url)
