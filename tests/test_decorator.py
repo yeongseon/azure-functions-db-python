@@ -920,6 +920,48 @@ def test_inject_reader_async_proxy_one_or_none_returns_none(tmp_path: Path) -> N
     assert asyncio.run(handler()) is None
 
 
+def test_inject_reader_async_proxy_one_raises_on_multiple_rows(tmp_path: Path) -> None:
+    from azure_functions_db.core.errors import QueryError
+
+    url = _sqlite_url(tmp_path, "reader-async-one-multi.db")
+    _create_users_table_with_data(url)
+
+    @DbBindings().inject_reader("reader", url=url, table="users")
+    async def handler(reader: Any) -> Any:
+        return await reader.one("SELECT id FROM users")
+
+    with pytest.raises(QueryError):
+        asyncio.run(handler())
+
+
+def test_inject_reader_async_proxy_one_or_none_raises_on_multiple_rows(tmp_path: Path) -> None:
+    from azure_functions_db.core.errors import QueryError
+
+    url = _sqlite_url(tmp_path, "reader-async-oon-multi.db")
+    _create_users_table_with_data(url)
+
+    @DbBindings().inject_reader("reader", url=url, table="users")
+    async def handler(reader: Any) -> Any:
+        return await reader.one_or_none("SELECT id FROM users")
+
+    with pytest.raises(QueryError):
+        asyncio.run(handler())
+
+
+def test_inject_reader_async_proxy_scalar_raises_on_multiple_rows(tmp_path: Path) -> None:
+    from azure_functions_db.core.errors import QueryError
+
+    url = _sqlite_url(tmp_path, "reader-async-scalar-multi.db")
+    _create_users_table_with_data(url)
+
+    @DbBindings().inject_reader("reader", url=url, table="users")
+    async def handler(reader: Any) -> Any:
+        return await reader.scalar("SELECT id FROM users")
+
+    with pytest.raises(QueryError):
+        asyncio.run(handler())
+
+
 # =====================================================================
 # inject_writer tests — client injection (imperative escape hatch)
 # =====================================================================
