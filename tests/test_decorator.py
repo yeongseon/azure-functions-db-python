@@ -635,7 +635,7 @@ def test_output_accepts_list_basemodel(tmp_path: Path) -> None:
 
     @DbBindings().output("out", url=url, table="processed_orders")
     def handler(out: DbOut) -> str:
-        out.set([OrderModel(id=1, status="a"), OrderModel(id=2, status="b")])  # type: ignore[arg-type]
+        out.set([OrderModel(id=1, status="a"), OrderModel(id=2, status="b")])
         return "batch_model"
 
     result = handler()
@@ -720,7 +720,7 @@ def test_output_rejects_tuple_payload(tmp_path: Path) -> None:
 
     @DbBindings().output("out", url=url, table="processed_orders")
     def handler(out: DbOut) -> None:
-        out.set(({"id": 1, "status": "pending"},))  # type: ignore[arg-type]
+        out.set(({"id": 1, "status": "pending"},))
 
     with pytest.raises(ConfigurationError, match="expected dict, list"):
         handler()
