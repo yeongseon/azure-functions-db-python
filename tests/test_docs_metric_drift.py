@@ -24,7 +24,7 @@ _OBSERVABILITY_DOC = _DOCS_DIR / "11-observability.md"
 
 _METRIC_TOKEN_RE = re.compile(r"\bazfdb_[a-z0-9_]+\b")
 _METRICS_TABLE_ROW_RE = re.compile(
-    r"^\|\s*(?:Counter|Gauge|Histogram|Summary)\s*\|\s*"
+    r"^\|\s*(?P<type>[^|`]+?)\s*\|\s*"
     r"`(?P<name>azfdb_[a-z0-9_]+)`\s*\|\s*"
     r"(?P<status>implemented|deferred)\s*\|",
     re.IGNORECASE,
