@@ -88,6 +88,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
+from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import ContainerClient
 from sqlalchemy import create_engine, text
 
@@ -107,7 +108,7 @@ container = ContainerClient.from_connection_string(
 )
 try:
     container.create_container()
-except Exception:
+except ResourceExistsError:
     pass
 
 source = SqlAlchemySource(
