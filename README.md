@@ -428,6 +428,33 @@ This package does **not** implement a native Azure Functions trigger extension. 
 
 This package does **not** use SQLAlchemy `AsyncEngine` internally. If you need fully native asyncio drivers (e.g. `asyncpg`, `aiomysql`), drive them yourself outside the binding — `azure-functions-db` deliberately exposes a single sync engine path so behavior across dialects stays identical.
 
+### Async writer transactions
+
+The async writer proxy injected by `@db.inject_writer` into `async def` handlers exposes `insert`, `insert_many`, `upsert`, `upsert_many`, and `close` — but **does not** expose a `transaction()` context manager. SQLAlchemy `Connection` / `Transaction` objects are not safe to share across threads, and `asyncio.to_thread` does not pin work to a single OS thread, so a per-call async transaction would silently break atomicity.
+
+If you need multi-statement atomicity from an async handler, wrap the entire transactional unit in a single `asyncio.to_thread` call that drives a synchronous `DbWriter` end-to-end:
+
+```python
+import asyncio
+from azure_functions_db import DbWriter
+
+
+def _transfer(url: str) -> None:
+    writer = DbWriter(url=url, table="orders")
+    try:
+        with writer.transaction():
+            writer.insert(data={"id": 1, "status": "pending"})
+            writer.update(data={"status": "shipped"}, pk={"id": 1})
+    finally:
+        writer.close()
+
+
+async def handler() -> None:
+    await asyncio.to_thread(_transfer, "%DB_URL%")
+```
+
+A native async transaction context manager may be added in a future release.
+
 ## `engine_kwargs` flow-through
 
 Every binding decorator and `DbConfig` accept an `engine_kwargs` mapping that is forwarded to `sqlalchemy.create_engine`. Anything the underlying dialect supports — connection / query timeouts, pool sizing, isolation level, custom event listeners — flows through unchanged. Use `EngineProvider` when several bindings should share a single engine instance with a consistent `engine_kwargs` configuration.

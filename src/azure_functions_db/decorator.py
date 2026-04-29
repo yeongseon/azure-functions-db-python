@@ -257,6 +257,32 @@ class _AsyncDbReaderProxy:
 
 
 class _AsyncDbWriterProxy:
+    """Async wrapper around :class:`DbWriter` for async handlers.
+
+    Each write call is offloaded to a worker thread via
+    :func:`asyncio.to_thread` so the event loop is not blocked.
+
+    Limitation: this proxy intentionally does not expose
+    :meth:`DbWriter.transaction`. SQLAlchemy ``Connection`` /
+    ``Transaction`` objects are not safe to share across threads, and
+    :func:`asyncio.to_thread` does not pin the work to a single thread.
+    For multi-statement atomicity from an async handler, wrap the entire
+    transactional unit in a single :func:`asyncio.to_thread` call that
+    drives a synchronous :class:`DbWriter` end-to-end::
+
+        def _do_transfer(url: str) -> None:
+            writer = DbWriter(url=url, table="orders")
+            try:
+                with writer.transaction():
+                    writer.insert(data={...})
+                    writer.update(data={...}, pk={...})
+            finally:
+                writer.close()
+
+        async def handler() -> None:
+            await asyncio.to_thread(_do_transfer, url)
+    """
+
     def __init__(self, writer: DbWriter) -> None:
         self._writer = writer
 
