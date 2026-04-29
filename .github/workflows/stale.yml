@@ -151,6 +151,7 @@ jobs:
               /^docs\/.+$/,
               /^chore\/.+$/,
               /^ci\/.+$/,
+              /^test\/.+$/,
               /^codex\/.+$/,
               /^main$/
             ];
@@ -166,6 +167,7 @@ jobs:
                 - docs/<description>
                 - chore/<description>
                 - ci/<description>
+                - test/<description>
                 - codex/<description>
                 - main`);
             } else {
