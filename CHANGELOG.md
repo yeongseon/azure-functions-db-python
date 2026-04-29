@@ -2,8 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+### Bug Fixes
+
+- *(out)* Align DbOut.set type hints with runtime contract (Sequence + runtime list-only) (#125) 
+- *(writer)* Roll back active transaction on DbWriter.close() (#126) 
+- *(engine)* Reject connect_args inside engine_kwargs (#124) 
+- *(trigger)* Treat LeaseConflictError as no-op in PollRunner.tick() (#122) 
+
 ### Documentation
 
+- *(async)* Document async writer transaction limitation (#129) 
+- *(examples)* Add runnable PostgreSQL + Azurite poll-trigger example (#100) (#110) 
+- *(trigger)* Add production checklist for polling triggers (#111) 
+- *(core)* Add EngineProvider lifecycle & pooling guidance (#99) (#112) 
+- *(trigger)* Add polling runtime semantics & failure scenarios page (#98) (#108) 
+
+### Features
+
+- *(async)* Add scalar/one/one_or_none to _AsyncDbReaderProxy (#123) 
+
+### Miscellaneous Tasks
+
+- *(deps)* Bump ruff from 0.15.10 to 0.15.12 (#90) 
+- *(deps)* Bump mypy from 1.20.1 to 1.20.2 (#89) 
+- Allow 'test/' branch prefix in branch-naming-validation (#131) 
+
+### Other
+
+- Bump version to 0.4.0 
+
+### Testing
+
+- *(observability)* Pin metrics docs/code drift contract (#127) 
+- *(examples)* Add PostgreSQL poll-trigger smoke script (#130) 
+
+### Documentation
+
+- Update changelog 
 - *(agents)* Add Issue Conventions section to AGENTS.md 
 
 ### Features
