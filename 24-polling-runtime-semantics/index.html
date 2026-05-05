@@ -1,0 +1,2710 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Unified DB integration (trigger + input/output binding) for Azure Functions Python v2">
+      
+      
+        <meta name="author" content="Yeongseon Choe">
+      
+      
+      
+        <link rel="prev" href="../22-binding-semantics/">
+      
+      
+        <link rel="next" href="../25-engine-provider-pooling/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Polling Runtime & Failure Scenarios - Azure Functions DB</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#polling-trigger-runtime-semantics-failure-scenarios" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Azure Functions DB" class="md-header__button md-logo" aria-label="Azure Functions DB" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Azure Functions DB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Polling Runtime & Failure Scenarios
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/yeongseon/azure-functions-db-python" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../02-architecture/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/input_binding/" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../api/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contributing/" class="md-tabs__link">
+          
+  
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../security/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Security
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../16-ADR-001-pseudo-trigger-over-native/" class="md-tabs__link">
+          
+  
+  
+  Architecture Decision Records
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Azure Functions DB" class="md-nav__button md-logo" aria-label="Azure Functions DB" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Azure Functions DB
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/yeongseon/azure-functions-db-python" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../22-binding-semantics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Binding Semantics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polling Runtime & Failure Scenarios
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polling Runtime & Failure Scenarios
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-delivery-guarantee" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Delivery Guarantee
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-tick-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Tick Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-checkpoint-commit-timing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Checkpoint Commit Timing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-duplicate-window-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Duplicate Window Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-failure-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Failure Scenarios
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Failure Scenarios">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-lease-cannot-be-acquired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Lease cannot be acquired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-checkpoint-blob-load-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Checkpoint blob load fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-source-fetch-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Source fetch fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-record-normalization-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 Record normalization fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-handler-raises" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 Handler raises
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56-checkpoint-commit-fails-lease-lost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 Checkpoint commit fails (lease lost)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#57-checkpoint-commit-fails-other" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.7 Checkpoint commit fails (other)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#58-heartbeat-lease-loss-mid-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.8 Heartbeat / lease loss mid-handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#59-poison-batch-permanent-handler-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.9 Poison batch / permanent handler failure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#510-storage-blobcheckpointstore-unavailability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.10 Storage / BlobCheckpointStore unavailability
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-partial-batch-failure-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Partial-Batch Failure Behavior
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-tuning-lease_ttl_seconds-and-timer-interval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Tuning lease_ttl_seconds and timer interval
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-timer-overlap-and-scale-out" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Timer Overlap and Scale-Out
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Timer Overlap and Scale-Out">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-timer-overlap-on-a-single-instance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 Timer overlap on a single instance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-multiple-instances-polling-the-same-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 Multiple instances polling the same source
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-multiple-pollers-on-the-same-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 Multiple pollers on the same source
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-idempotent-handler-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Idempotent Handler Pattern
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Idempotent Handler Pattern">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#91-upsert-at-the-sink" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.1 Upsert at the sink
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#92-processed-events-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.2 Processed-events table
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#93-downstream-idempotency-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.3 Downstream idempotency key
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-operational-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Operational Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. See Also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../25-engine-provider-pooling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    EngineProvider & Pooling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../26-polling-production-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Production Checklist — Polling Trigger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04-python-api-spec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API Spec
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../09-local-dev-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/input_binding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input Binding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/output_binding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output Binding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/trigger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trigger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/trigger_with_binding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trigger + Binding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/client_injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Client Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Decision Records
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture Decision Records
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../16-ADR-001-pseudo-trigger-over-native/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001 Pseudo Trigger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../17-ADR-002-sqlalchemy-centric-adapter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002 SQLAlchemy Adapter
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../18-ADR-003-blob-checkpoint-mvp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-003 Blob Checkpoint MVP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../19-ADR-004-at-least-once-default/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-004 At-Least-Once Default
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../23-ADR-005-unified-package-design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-005 Unified Package
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-delivery-guarantee" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Delivery Guarantee
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-tick-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Tick Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-checkpoint-commit-timing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Checkpoint Commit Timing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-duplicate-window-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Duplicate Window Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-failure-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Failure Scenarios
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Failure Scenarios">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-lease-cannot-be-acquired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Lease cannot be acquired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-checkpoint-blob-load-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Checkpoint blob load fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-source-fetch-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Source fetch fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-record-normalization-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 Record normalization fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-handler-raises" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 Handler raises
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56-checkpoint-commit-fails-lease-lost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 Checkpoint commit fails (lease lost)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#57-checkpoint-commit-fails-other" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.7 Checkpoint commit fails (other)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#58-heartbeat-lease-loss-mid-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.8 Heartbeat / lease loss mid-handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#59-poison-batch-permanent-handler-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.9 Poison batch / permanent handler failure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#510-storage-blobcheckpointstore-unavailability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.10 Storage / BlobCheckpointStore unavailability
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-partial-batch-failure-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Partial-Batch Failure Behavior
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-tuning-lease_ttl_seconds-and-timer-interval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Tuning lease_ttl_seconds and timer interval
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-timer-overlap-and-scale-out" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Timer Overlap and Scale-Out
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Timer Overlap and Scale-Out">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-timer-overlap-on-a-single-instance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 Timer overlap on a single instance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-multiple-instances-polling-the-same-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 Multiple instances polling the same source
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-multiple-pollers-on-the-same-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 Multiple pollers on the same source
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-idempotent-handler-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Idempotent Handler Pattern
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Idempotent Handler Pattern">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#91-upsert-at-the-sink" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.1 Upsert at the sink
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#92-processed-events-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.2 Processed-events table
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#93-downstream-idempotency-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.3 Downstream idempotency key
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-operational-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Operational Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. See Also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="polling-trigger-runtime-semantics-failure-scenarios">Polling Trigger Runtime Semantics &amp; Failure Scenarios<a class="headerlink" href="#polling-trigger-runtime-semantics-failure-scenarios" title="Permanent link">&para;</a></h1>
+<p>This page is the <strong>single operational reference</strong> for running <code>db.trigger</code> /
+<code>PollTrigger</code> in production. It collects the runtime contract, duplicate
+windows, lease and checkpoint timing, scale-out behavior, and recovery
+procedures in one place.</p>
+<p>If you only read one document before deploying the polling trigger, read this
+one.</p>
+<blockquote>
+<p><strong>The polling trigger is a pseudo trigger.</strong> It is <strong>not</strong> a native Azure
+Functions trigger and <strong>not</strong> a database trigger. It runs as a plain timer
+trigger that polls the source on every tick. Delivery is <strong>at-least-once</strong>.
+Handlers MUST be idempotent.</p>
+<p>For the formal contract see <a href="../03-semantics/">Semantics</a>. For the on-disk
+state format see <a href="../06-checkpoint-lease-spec/">Checkpoint / Lease Spec</a>.</p>
+</blockquote>
+<hr />
+<h2 id="1-delivery-guarantee">1. Delivery Guarantee<a class="headerlink" href="#1-delivery-guarantee" title="Permanent link">&para;</a></h2>
+<p><code>PollTrigger</code> and <code>SqlAlchemySource</code> deliver each row change to your handler
+<strong>at least once</strong>. This is the only delivery guarantee the framework promises.</p>
+<p>Concretely:</p>
+<ul>
+<li>A row that remains visible to the source query and satisfies the source
+  preconditions will be delivered to the handler <strong>at least once</strong> before the
+  checkpoint advances past it. Until the checkpoint commit for the batch
+  containing that row succeeds, the same row may be delivered <strong>more than
+  once</strong> (process crash, lease loss, retry after a failed commit, etc.).</li>
+<li>After the checkpoint commit succeeds, the framework will not intentionally
+  re-fetch rows at or below that checkpoint on subsequent ticks.</li>
+<li>The framework does <strong>not</strong> provide exactly-once delivery, cross-instance
+  global deduplication, or cross-database transactional acknowledgment.</li>
+</ul>
+<p>This guarantee holds only when the source preconditions in
+<a href="../03-semantics/#12-source-preconditions">Semantics §1.2</a> are met:
+monotonic non-decreasing cursor, stable PK with total ordering, deterministic
+query.</p>
+<p>Handlers must therefore be idempotent. See
+<a href="#9-idempotent-handler-pattern">Idempotent Handler Pattern</a> below.</p>
+<hr />
+<h2 id="2-tick-lifecycle">2. Tick Lifecycle<a class="headerlink" href="#2-tick-lifecycle" title="Permanent link">&para;</a></h2>
+<p>Every timer firing executes a single <code>tick</code>. The runner performs the following
+steps in order. Each step has well-defined failure behavior — see
+<a href="#5-failure-scenarios">§5 Failure Scenarios</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>1. acquire_lease (CAS write to state blob)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>2. load_checkpoint (read state blob)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>3. for batch_idx in range(max_batches_per_tick):
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   3a. source.fetch(cursor, batch_size)
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>   3b. if no rows -&gt; break
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>   3c. normalize raw records into RowChange events
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>   3d. invoke handler(events[, context])
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   3e. commit_checkpoint (CAS write to state blob)
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>4. release_lease (best effort)
+</code></pre></div>
+<p>Key invariants:</p>
+<ul>
+<li>The handler is invoked <strong>only after fetch + normalize succeed</strong>. A fetch
+  failure never reaches the handler.</li>
+<li>The checkpoint is <strong>only advanced after the handler returns successfully</strong>.
+  Handler return ≠ acknowledgment; checkpoint commit success = acknowledgment.</li>
+<li>All state mutations are CAS writes against the same state blob. A stale
+  owner cannot silently overwrite a newer owner's checkpoint.</li>
+</ul>
+<hr />
+<h2 id="3-checkpoint-commit-timing">3. Checkpoint Commit Timing<a class="headerlink" href="#3-checkpoint-commit-timing" title="Permanent link">&para;</a></h2>
+<p>The checkpoint advances <strong>after handler success and only via CAS commit</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Checkpoint state</th>
+<th>Outcome on crash</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Before fetch</td>
+<td>Last committed checkpoint</td>
+<td>No effect</td>
+</tr>
+<tr>
+<td>After fetch, before handler</td>
+<td>Last committed checkpoint</td>
+<td>Same batch re-fetched on next tick</td>
+</tr>
+<tr>
+<td>Handler running</td>
+<td>Last committed checkpoint</td>
+<td>Whole batch re-fetched on next tick</td>
+</tr>
+<tr>
+<td>Handler returned, before commit</td>
+<td>Last committed checkpoint</td>
+<td>Whole batch re-delivered on next tick</td>
+</tr>
+<tr>
+<td>Commit succeeded</td>
+<td>New checkpoint</td>
+<td>Subsequent ticks resume from new checkpoint</td>
+</tr>
+<tr>
+<td>Commit ambiguous (timeout)</td>
+<td>Unknown</td>
+<td>Resolved by reload on next tick; worst case duplicate, never loss</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Implication for replay:</strong> any side effects performed by the handler before
+the commit succeeds may be replayed. Plan side effects accordingly (idempotent
+writes, upserts, dedup keys).</p>
+<hr />
+<h2 id="4-duplicate-window-reference">4. Duplicate Window Reference<a class="headerlink" href="#4-duplicate-window-reference" title="Permanent link">&para;</a></h2>
+<p>The polling trigger can produce duplicates (or full re-deliveries of a batch)
+in the following windows. This is the authoritative list — every "why does my
+handler see the same row twice" question maps to one of these.</p>
+<table>
+<thead>
+<tr>
+<th>Window</th>
+<th>Cause</th>
+<th>Re-delivery scope</th>
+<th>Detectable from handler?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>W1. Handler success, commit failure</strong></td>
+<td>Checkpoint CAS failed (network, transient blob error, lease lost)</td>
+<td>Entire batch</td>
+<td>No — <code>event</code> is identical</td>
+</tr>
+<tr>
+<td><strong>W2. Crash after fetch, before handler returns</strong></td>
+<td>Process killed mid-batch (instance recycle, OOM, deploy)</td>
+<td>Entire batch</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>W3. Crash with partial side effects</strong></td>
+<td>Handler did N of M writes, then crashed</td>
+<td>Entire batch (M writes redone)</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>W4. Lease lost during processing</strong></td>
+<td>Heartbeat / commit CAS rejected because another instance acquired the lease</td>
+<td>Entire batch (next owner re-fetches)</td>
+<td>Indirectly — <code>LostLeaseError</code> logged</td>
+</tr>
+<tr>
+<td><strong>W5. Commit response timeout (ambiguous)</strong></td>
+<td>Network timeout on the commit blob write; commit may or may not have persisted</td>
+<td>Entire batch (only if commit actually failed)</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>W6. Redeploy / restart</strong></td>
+<td>New instance starts from last committed checkpoint</td>
+<td>Whole or partial in-flight batch</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>W7. Cursor precision collapse</strong></td>
+<td>Multiple updates within one cursor tick collapse into one</td>
+<td>Latest state only — earlier intermediate states lost</td>
+<td>Yes (only one event arrives)</td>
+</tr>
+</tbody>
+</table>
+<p>Windows that <strong>cannot</strong> produce duplicates within this framework:</p>
+<ul>
+<li>A successful commit followed by a clean shutdown. The next tick will only
+  see rows strictly newer than the committed cursor + tiebreaker PK.</li>
+<li>Two ticks racing on the same instance — <code>lease_ttl_seconds</code> and the single
+  state blob CAS prevent this.</li>
+</ul>
+<p>For the matching state-machine view see
+<a href="../03-semantics/#12-failure-matrix">Semantics §12 Failure Matrix</a> and
+<a href="../03-semantics/#13-duplicate-and-reprocessing-windows">§13 Duplicate and Reprocessing Windows</a>.</p>
+<hr />
+<h2 id="5-failure-scenarios">5. Failure Scenarios<a class="headerlink" href="#5-failure-scenarios" title="Permanent link">&para;</a></h2>
+<p>This section maps each failure to the runtime behavior, the metric / log
+emitted, and the operator action (if any).</p>
+<h3 id="51-lease-cannot-be-acquired">5.1 Lease cannot be acquired<a class="headerlink" href="#51-lease-cannot-be-acquired" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> another instance currently holds the lease and it has not expired.</p>
+<p><strong>Behavior:</strong> <code>tick()</code> returns <code>0</code> immediately. <code>LeaseAcquireError</code> is raised
+internally, caught, and logged at DEBUG. <strong>No handler invocation. No
+checkpoint change.</strong> The next timer firing retries normally.</p>
+<p><strong>Operator action:</strong> none required. Multiple instances polling the same source
+is the expected scale-out shape — exactly one tick runs at a time.</p>
+<h3 id="52-checkpoint-blob-load-fails">5.2 Checkpoint blob load fails<a class="headerlink" href="#52-checkpoint-blob-load-fails" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> transient blob storage error, missing container, RBAC issue,
+network partition.</p>
+<p><strong>Behavior:</strong> <code>FetchError</code> raised. Handler is <strong>not</strong> invoked. Lease is
+released. Next tick retries.</p>
+<p><strong>Operator action:</strong> verify storage account connectivity and the RBAC role on
+the <code>db-state</code> container.</p>
+<h3 id="53-source-fetch-fails">5.3 Source fetch fails<a class="headerlink" href="#53-source-fetch-fails" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> database unreachable, query error, driver-level exception.</p>
+<p><strong>Behavior:</strong> <code>FetchError</code> raised. Handler is <strong>not</strong> invoked. Lease is
+released. Next tick retries (the cursor has not advanced).</p>
+<p><strong>Operator action:</strong> investigate the source database. Polling will resume
+automatically once fetches succeed.</p>
+<h3 id="54-record-normalization-fails">5.4 Record normalization fails<a class="headerlink" href="#54-record-normalization-fails" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> missing cursor or PK column in returned rows; non-serializable
+cursor type.</p>
+<p><strong>Behavior:</strong> <code>SerializationError</code> raised. Handler is <strong>not</strong> invoked. The
+cursor does not advance — the same fetch will fail again next tick. <strong>This
+is a poison configuration</strong>, not a transient failure.</p>
+<p><strong>Operator action:</strong> fix the source query / table / <code>SqlAlchemySource</code>
+configuration. The trigger cannot make progress until this is resolved.</p>
+<h3 id="55-handler-raises">5.5 Handler raises<a class="headerlink" href="#55-handler-raises" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> business logic error, downstream sink unavailable, etc.</p>
+<p><strong>Behavior:</strong> <code>HandlerError</code> raised. Checkpoint <strong>does not advance</strong>. Lease is
+released. The same batch will be re-fetched and re-delivered on the next tick.</p>
+<p><strong>Operator action:</strong> if the failure is transient (network, sink restart) the
+trigger self-heals. If the same batch fails repeatedly you have a <strong>poison
+batch</strong> (see <a href="#59-poison-batch-permanent-handler-failure">§5.9</a>).</p>
+<h3 id="56-checkpoint-commit-fails-lease-lost">5.6 Checkpoint commit fails (lease lost)<a class="headerlink" href="#56-checkpoint-commit-fails-lease-lost" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> another instance acquired the lease while the handler was running
+and bumped the fencing token.</p>
+<p><strong>Behavior:</strong> <code>LostLeaseError</code> is raised on commit. Handler results are
+discarded; the next owner re-fetches the same batch. This is window <strong>W4</strong>.</p>
+<p><strong>Operator action:</strong> none — this is the lease protocol working correctly.
+Reduce duplication risk by ensuring <code>lease_ttl_seconds</code> exceeds the worst-case
+handler duration; see <a href="#7-tuning-lease_ttl_seconds-and-timer-interval">§7</a>.</p>
+<h3 id="57-checkpoint-commit-fails-other">5.7 Checkpoint commit fails (other)<a class="headerlink" href="#57-checkpoint-commit-fails-other" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> transient blob error, ETag mismatch, network timeout.</p>
+<p><strong>Behavior:</strong> <code>CommitError</code> raised. Handler <strong>already ran</strong>. The same batch
+will be re-delivered on the next tick. This is window <strong>W1</strong> (pure failure)
+or <strong>W5</strong> (timeout — commit may or may not have actually persisted).</p>
+<p><strong>Operator action:</strong> none required. Handler must be idempotent so the replay
+is safe.</p>
+<h3 id="58-heartbeat-lease-loss-mid-handler">5.8 Heartbeat / lease loss mid-handler<a class="headerlink" href="#58-heartbeat-lease-loss-mid-handler" title="Permanent link">&para;</a></h3>
+<p>The current implementation does not perform an in-flight heartbeat from inside
+a long-running handler. If <code>handler_duration &gt; lease_ttl_seconds</code>:</p>
+<ol>
+<li>Another instance may acquire the lease via the expiry + grace window in
+   <code>BlobCheckpointStore</code>.</li>
+<li>The original handler's commit will fail with <code>LostLeaseError</code> (window W4).</li>
+<li>The new owner will re-fetch and re-deliver the same batch.</li>
+</ol>
+<p><strong>Operator action:</strong> size <code>lease_ttl_seconds</code> so <code>lease_ttl_seconds &gt; p99
+handler duration + commit time + safety margin</code>. See
+<a href="#7-tuning-lease_ttl_seconds-and-timer-interval">§7</a>.</p>
+<h3 id="59-poison-batch-permanent-handler-failure">5.9 Poison batch / permanent handler failure<a class="headerlink" href="#59-poison-batch-permanent-handler-failure" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> a batch deterministically fails the handler (bad row, schema
+mismatch, downstream rejection that will never recover).</p>
+<p><strong>Behavior:</strong> the same batch is reprocessed indefinitely. The trigger does
+<strong>not</strong> auto-quarantine in MVP.</p>
+<p><strong>Operator action (MVP):</strong></p>
+<ol>
+<li>Identify the poison batch from <code>event=handler_failed</code> logs (look for the
+   same <code>checkpoint_after</code> repeated across ticks).</li>
+<li>Either fix the source data, fix the handler, or <strong>manually advance the
+   checkpoint</strong> in the state blob to skip past the poison row. Treat manual
+   advance as data loss — log it.</li>
+<li>Track quarantine sink work in the project roadmap.</li>
+</ol>
+<h3 id="510-storage-blobcheckpointstore-unavailability">5.10 Storage / <code>BlobCheckpointStore</code> unavailability<a class="headerlink" href="#510-storage-blobcheckpointstore-unavailability" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> Azure Blob Storage outage, expired credentials, deleted container.</p>
+<p><strong>Behavior:</strong> lease acquisition fails, ticks no-op (logged at DEBUG/ERROR
+depending on the failure), no handler invocation, no checkpoint change.
+Polling resumes automatically when storage becomes available.</p>
+<p><strong>Operator action:</strong> restore storage access. There is no special recovery
+required — the last committed checkpoint is intact and polling resumes from
+it.</p>
+<hr />
+<h2 id="6-partial-batch-failure-behavior">6. Partial-Batch Failure Behavior<a class="headerlink" href="#6-partial-batch-failure-behavior" title="Permanent link">&para;</a></h2>
+<p><code>PollTrigger</code> treats a batch as an atomic unit:</p>
+<ul>
+<li>If <strong>any</strong> row in the batch causes the handler to raise, the <strong>entire
+  batch</strong> is considered failed and the checkpoint does not advance.</li>
+<li>The handler will be re-invoked on the next tick with the <strong>same</strong> events
+  (same <code>pk</code>, <code>cursor</code>, <code>op</code>, <code>before</code>, <code>after</code>).</li>
+<li>There is no row-by-row commit, no quarantine of the failing row, and no
+  automatic batch splitting in MVP.</li>
+</ul>
+<p>If you need finer granularity, structure your handler to:</p>
+<ol>
+<li>Catch per-row exceptions inside the handler.</li>
+<li>Route failures to your own dead-letter sink (queue, table, log).</li>
+<li>Let the handler return successfully so the checkpoint advances past the
+   batch.</li>
+</ol>
+<p>This pushes the partial-failure decision to the handler, where you can apply
+business rules.</p>
+<hr />
+<h2 id="7-tuning-lease_ttl_seconds-and-timer-interval">7. Tuning <code>lease_ttl_seconds</code> and timer interval<a class="headerlink" href="#7-tuning-lease_ttl_seconds-and-timer-interval" title="Permanent link">&para;</a></h2>
+<p>The two timing knobs you control are:</p>
+<ul>
+<li>The <strong>timer schedule</strong> on the wrapping <code>@app.schedule(...)</code> decorator.</li>
+<li><code>lease_ttl_seconds</code> on <code>PollTrigger</code> / <code>db.trigger(...)</code> (default <code>120</code>).</li>
+</ul>
+<p>Recommended sizing:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>lease_ttl_seconds  &gt;  p99(fetch + handler + commit) + safety_margin (~30s)
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>timer_interval     &gt;= lease_ttl_seconds / 2
+</code></pre></div>
+<p>Reasoning:</p>
+<ul>
+<li><code>lease_ttl_seconds</code> must outlast the worst-case tick. If the handler runs
+  longer than the TTL, another instance can steal the lease and you fall into
+  window W4.</li>
+<li>The timer interval should be at least half the TTL so a single instance
+  comfortably renews ownership across ticks. Faster timers under contention
+  just produce more <code>LeaseAcquireError</code> no-ops.</li>
+<li>Use the lease grace window in <code>BlobCheckpointStore</code> (<code>min(ttl * 0.5, 5s)</code>)
+  as your buffer for clock skew.</li>
+</ul>
+<p>If you <strong>cannot</strong> bound your handler duration, split the work: write events to
+a queue inside the handler and process them asynchronously downstream.</p>
+<hr />
+<h2 id="8-timer-overlap-and-scale-out">8. Timer Overlap and Scale-Out<a class="headerlink" href="#8-timer-overlap-and-scale-out" title="Permanent link">&para;</a></h2>
+<h3 id="81-timer-overlap-on-a-single-instance">8.1 Timer overlap on a single instance<a class="headerlink" href="#81-timer-overlap-on-a-single-instance" title="Permanent link">&para;</a></h3>
+<p>Azure Functions timers can overlap if <code>use_monitor=False</code> and a tick takes
+longer than the schedule interval. With the polling trigger this is <strong>safe</strong>:</p>
+<ul>
+<li>The first tick holds the lease.</li>
+<li>The second (overlapping) tick calls <code>acquire_lease</code>, gets <code>LeaseAcquireError</code>,
+  and immediately returns <code>0</code>. No handler runs. No checkpoint change.</li>
+</ul>
+<p>We still recommend <code>use_monitor=True</code> so the Functions host serializes ticks
+where possible.</p>
+<h3 id="82-multiple-instances-polling-the-same-source">8.2 Multiple instances polling the same source<a class="headerlink" href="#82-multiple-instances-polling-the-same-source" title="Permanent link">&para;</a></h3>
+<p>This is the supported scale-out shape and the <strong>purpose</strong> of the lease.</p>
+<ul>
+<li>All instances point at the <strong>same</strong> state blob (same poller name, same
+  checkpoint store). The <code>source_fingerprint</code> field guarantees they agree on
+  the source definition.</li>
+<li>On every tick, each instance attempts <code>acquire_lease</code>. Exactly one wins.
+  The losers no-op.</li>
+<li>If the winner's handler runs longer than <code>lease_ttl_seconds</code>, the lease
+  becomes stealable after the grace window. A new instance takes over and
+  the original owner's commit is rejected via fencing token mismatch (W4).</li>
+</ul>
+<p><strong>Do not</strong> point multiple instances at different state blobs for the same
+source. That deliberately runs the source twice and produces duplicates by
+construction.</p>
+<h3 id="83-multiple-pollers-on-the-same-source">8.3 Multiple pollers on the same source<a class="headerlink" href="#83-multiple-pollers-on-the-same-source" title="Permanent link">&para;</a></h3>
+<p>If you want <strong>independent</strong> consumers of the same source (e.g. a backfill
+poller alongside the live one), give them <strong>distinct <code>name</code></strong> values. Each
+gets its own state blob and its own checkpoint. They do not coordinate, and
+each delivers every row independently.</p>
+<hr />
+<h2 id="9-idempotent-handler-pattern">9. Idempotent Handler Pattern<a class="headerlink" href="#9-idempotent-handler-pattern" title="Permanent link">&para;</a></h2>
+<p>Because every duplicate window in <a href="#4-duplicate-window-reference">§4</a> replays
+the <strong>same</strong> <code>RowChange</code> events, you can dedupe with a stable key derived from
+the event itself. The recommended dedup key is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>dedup_key = (event.pk, event.cursor)
+</code></pre></div>
+<p><code>event.pk</code> is the source's primary key dict. <code>event.cursor</code> is the value of
+the source's cursor column at the time the event was emitted. Together they
+uniquely identify a single source-side state, even if the row is updated
+again later.</p>
+<p>Three idiomatic patterns:</p>
+<h3 id="91-upsert-at-the-sink">9.1 Upsert at the sink<a class="headerlink" href="#91-upsert-at-the-sink" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@db</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">arg_name</span><span class="o">=</span><span class="s2">&quot;events&quot;</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span> <span class="n">checkpoint_store</span><span class="o">=</span><span class="n">checkpoint_store</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nd">@db</span><span class="o">.</span><span class="n">output</span><span class="p">(</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="s2">&quot;out&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">url</span><span class="o">=</span><span class="s2">&quot;%DEST_DB_URL%&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">table</span><span class="o">=</span><span class="s2">&quot;processed_orders&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;upsert&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">conflict_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;order_id&quot;</span><span class="p">,</span> <span class="s2">&quot;cursor&quot;</span><span class="p">],</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">)</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">orders_poll</span><span class="p">(</span><span class="n">timer</span><span class="p">,</span> <span class="n">events</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RowChange</span><span class="p">],</span> <span class="n">out</span><span class="p">:</span> <span class="n">DbOut</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">([</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="p">{</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>            <span class="s2">&quot;order_id&quot;</span><span class="p">:</span> <span class="n">e</span><span class="o">.</span><span class="n">pk</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>            <span class="s2">&quot;cursor&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">cursor</span><span class="p">),</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>            <span class="s2">&quot;after&quot;</span><span class="p">:</span> <span class="n">e</span><span class="o">.</span><span class="n">after</span><span class="p">,</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="p">}</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">events</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="p">])</span>
+</code></pre></div>
+<p>Replays collide on <code>(order_id, cursor)</code> and become no-ops.</p>
+<h3 id="92-processed-events-table">9.2 Processed-events table<a class="headerlink" href="#92-processed-events-table" title="Permanent link">&para;</a></h3>
+<p>Maintain a <code>processed_events(poller_name, pk_hash, cursor)</code> table with a
+unique constraint. In a transaction:</p>
+<ol>
+<li>Insert the dedup row. If it conflicts, skip (already processed).</li>
+<li>Apply the side effect.</li>
+</ol>
+<p>This works for sinks that are not natively upsert-friendly (HTTP APIs,
+external systems).</p>
+<h3 id="93-downstream-idempotency-key">9.3 Downstream idempotency key<a class="headerlink" href="#93-downstream-idempotency-key" title="Permanent link">&para;</a></h3>
+<p>Pass <code>f"{poller_name}:{pk_hash}:{cursor}"</code> to a downstream system that
+supports idempotency keys (Stripe, many message brokers, custom HTTP APIs).</p>
+<hr />
+<h2 id="10-operational-checklist">10. Operational Checklist<a class="headerlink" href="#10-operational-checklist" title="Permanent link">&para;</a></h2>
+<p>A short summary is below. The <strong>full pre-deployment checklist</strong> — including
+runbook items, observability alert thresholds, and pool-configuration
+checks — lives in
+<a href="../26-polling-production-checklist/">Production Checklist — Polling Trigger</a>.</p>
+<p>Before promoting a <code>db.trigger</code> to production:</p>
+<ul>
+<li>[ ] Confirm <code>lease_ttl_seconds &gt; p99 handler duration + commit time + 30s</code>.</li>
+<li>[ ] Confirm timer interval ≥ <code>lease_ttl_seconds / 2</code>.</li>
+<li>[ ] Confirm the handler is idempotent under <a href="#4-duplicate-window-reference">§4</a>.</li>
+<li>[ ] Confirm <code>BlobCheckpointStore</code> has its own dedicated container and the
+      Function App identity has only the RBAC needed for that container.</li>
+<li>[ ] Confirm the source query has a stable <code>ORDER BY cursor ASC, pk ASC</code> and
+      the cursor column is monotonically non-decreasing.</li>
+<li>[ ] Confirm metrics are wired (<code>MetricsCollector</code>) and <code>failures_total</code>,
+      <code>lag_seconds</code>, <code>last_success_timestamp</code> have alerts.</li>
+<li>[ ] Confirm the runbook covers manual checkpoint advance for poison
+      batches.</li>
+</ul>
+<hr />
+<h2 id="11-see-also">11. See Also<a class="headerlink" href="#11-see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../26-polling-production-checklist/">Production Checklist — Polling Trigger</a> —
+  full pre-deployment checklist with runbook items.</li>
+<li><a href="../03-semantics/">Semantics</a> — formal delivery contract, ordering, cursor,
+  failure matrix.</li>
+<li><a href="../06-checkpoint-lease-spec/">Checkpoint / Lease Spec</a> — on-disk state
+  format, CAS algorithm, fencing tokens.</li>
+<li><a href="../02-architecture/">Architecture</a> — overall component layout.</li>
+<li><a href="../19-ADR-004-at-least-once-default/">ADR-004 At-Least-Once Default</a> — why
+  this is the chosen guarantee level.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/yeongseon/azure-functions-db-python" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
