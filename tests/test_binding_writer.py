@@ -214,10 +214,12 @@ class TestDbWriterInsertMany:
         with DbWriter(url=users_url, table="users") as writer:
             writer.insert(data={"id": 1, "name": "Existing", "email": "e@e.com"})
             with pytest.raises(WriteError, match="Failed to insert rows"):
-                writer.insert_many(rows=[
-                    {"id": 2, "name": "New", "email": "n@n.com"},
-                    {"id": 1, "name": "Dup", "email": "d@d.com"},
-                ])
+                writer.insert_many(
+                    rows=[
+                        {"id": 2, "name": "New", "email": "n@n.com"},
+                        {"id": 1, "name": "Dup", "email": "d@d.com"},
+                    ]
+                )
         rows = _read_all(users_url, "users")
         assert len(rows) == 1
         assert rows[0]["name"] == "Existing"
@@ -499,7 +501,8 @@ class TestDbWriterErrorMapping:
                 writer.insert(data={"id": 1})
 
     def test_table_reflection_failure_raises_configuration_error(
-        self, users_url: str,
+        self,
+        users_url: str,
     ) -> None:
         writer = DbWriter(url=users_url, table="nonexistent_table")
         with pytest.raises(ConfigurationError, match="Failed to reflect table"):
@@ -532,4 +535,139 @@ class TestDbWriterErrorMapping:
                     data={"id": 1, "name": "A"},
                     conflict_columns=["id"],
                 )
+        writer.close()
+
+
+class TestDbWriterAdditionalCoverage:
+    def test_transaction_connection_acquire_failure_raises_write_error(
+        self, users_url: str
+    ) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+        assert writer._engine is not None
+
+        with patch.object(writer._engine, "connect", side_effect=RuntimeError("boom")):
+            with pytest.raises(WriteError, match="Failed to acquire connection for transaction"):
+                with writer.transaction():
+                    pass
+
+        writer.close()
+
+    def test_transaction_commit_failure_raises_write_error(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+
+        tx_mock = Mock()
+        tx_mock.commit.side_effect = RuntimeError("commit fail")
+        conn_mock = Mock()
+        conn_mock.begin.return_value = tx_mock
+        assert writer._engine is not None
+
+        with pytest.raises(WriteError, match="Failed to commit transaction"):
+            with patch.object(writer._engine, "connect", return_value=conn_mock):
+                with writer.transaction():
+                    pass
+
+        writer.close()
+
+    def test_transaction_reraises_when_tx_already_cleared(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+
+        with pytest.raises(RuntimeError, match="sentinel"):
+            with writer.transaction():
+                writer._tx = None
+                raise RuntimeError("sentinel")
+
+        writer.close()
+
+    def test_insert_many_re_raises_configuration_error_from_execution_scope(
+        self, users_url: str
+    ) -> None:
+        writer = DbWriter(url=users_url, table="users")
+
+        with patch.object(writer, "_execution_scope", side_effect=ConfigurationError("scope")):
+            with pytest.raises(ConfigurationError, match="scope"):
+                writer.insert_many(rows=[{"id": 1, "name": "A", "email": "a@a.com"}])
+
+        writer.close()
+
+    def test_upsert_re_raises_configuration_error_from_execution_scope(
+        self, users_url: str
+    ) -> None:
+        writer = DbWriter(url=users_url, table="users")
+
+        with patch.object(writer, "_execution_scope", side_effect=ConfigurationError("scope")):
+            with pytest.raises(ConfigurationError, match="scope"):
+                writer.upsert(
+                    data={"id": 1, "name": "A", "email": "a@a.com"},
+                    conflict_columns=["id"],
+                )
+
+        writer.close()
+
+    def test_upsert_many_re_raises_write_error_from_execution_scope(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+
+        with patch.object(writer, "_execution_scope", side_effect=WriteError("scope")):
+            with pytest.raises(WriteError, match="scope"):
+                writer.upsert_many(
+                    rows=[{"id": 1, "name": "A", "email": "a@a.com"}],
+                    conflict_columns=["id"],
+                )
+
+        writer.close()
+
+    def test_update_re_raises_configuration_error_from_execution_scope(
+        self, users_url: str
+    ) -> None:
+        writer = DbWriter(url=users_url, table="users")
+
+        with patch.object(writer, "_execution_scope", side_effect=ConfigurationError("scope")):
+            with pytest.raises(ConfigurationError, match="scope"):
+                writer.update(data={"name": "B"}, pk={"id": 1})
+
+        writer.close()
+
+    def test_delete_re_raises_write_error_from_execution_scope(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+
+        with patch.object(writer, "_execution_scope", side_effect=WriteError("scope")):
+            with pytest.raises(WriteError, match="scope"):
+                writer.delete(pk={"id": 1})
+
+        writer.close()
+
+    def test_reflect_table_not_found_raises(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users", schema="missing")
+        with pytest.raises(ConfigurationError, match="Failed to reflect table"):
+            writer.insert(data={"id": 1, "name": "A", "email": "a@a.com"})
+
+    def test_ensure_initialized_disposes_engine_after_reflect_error(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        with patch.object(writer, "_reflect_table", side_effect=RuntimeError("bad reflect")):
+            with pytest.raises(RuntimeError, match="bad reflect"):
+                writer._ensure_initialized()
+        assert writer._engine is None
+        assert writer._table is None
+
+    def test_build_pg_sqlite_upsert_uses_postgresql_branch(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+        assert writer._engine is not None
+
+        with patch.object(writer._engine.dialect, "name", "postgresql"):
+            stmt = writer._build_pg_sqlite_upsert(
+                {"id": 1, "name": "A"},
+                ["id"],
+                {"name": "A"},
+            )
+
+        assert stmt is not None
+        writer.close()
+
+    def test_build_mysql_upsert_without_update_columns_path(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+        stmt = writer._build_mysql_upsert({"id": 1, "name": "A"}, {})
+        assert stmt is not None
         writer.close()

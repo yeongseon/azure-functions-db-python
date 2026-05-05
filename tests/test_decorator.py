@@ -13,6 +13,7 @@ from azure_functions_db.binding.reader import DbReader
 from azure_functions_db.binding.writer import DbWriter
 from azure_functions_db.core.errors import NotFoundError
 from azure_functions_db.decorator import DbOut
+import azure_functions_db.decorator as decorator_mod
 from azure_functions_db.observability import NoOpCollector
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
@@ -1460,3 +1461,78 @@ def test_inject_writer_and_output_conflict() -> None:
         @db.output("out", url="sqlite:///x.db", table="t")
         def handler(writer: DbWriter, out: DbOut) -> None:
             del writer, out
+
+
+def test_get_db_decorators_returns_empty_on_invalid_attr() -> None:
+    def fn() -> None:
+        return None
+
+    setattr(fn, "_db_decorators", {"input"})
+    assert decorator_mod._get_db_decorators(fn) == frozenset()
+
+
+def test_merge_toolkit_metadata_handles_non_dict_existing() -> None:
+    def fn() -> None:
+        return None
+
+    setattr(fn, "_azure_functions_metadata", "invalid")
+    decorator_mod._merge_toolkit_metadata(
+        fn, "db", {"version": 1, "bindings": [], "injections": []}
+    )
+    meta = getattr(fn, "_azure_functions_metadata")
+    assert isinstance(meta, dict)
+    assert meta["db"]["version"] == 1
+
+
+def test_merge_toolkit_metadata_merges_bindings_and_injections() -> None:
+    def fn() -> None:
+        return None
+
+    decorator_mod._merge_toolkit_metadata(
+        fn,
+        "db",
+        {"version": 1, "bindings": [{"kind": "input"}], "injections": [{"kind": "reader"}]},
+    )
+    decorator_mod._merge_toolkit_metadata(
+        fn,
+        "db",
+        {"version": 1, "bindings": [{"kind": "output"}], "injections": [{"kind": "writer"}]},
+    )
+    meta = getattr(fn, "_azure_functions_metadata")
+    assert meta["db"]["bindings"] == [{"kind": "input"}, {"kind": "output"}]
+    assert meta["db"]["injections"] == [{"kind": "reader"}, {"kind": "writer"}]
+
+
+def test_trigger_timer_from_kwargs_and_first_host_param(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "trigger-host-param-kwargs.db")
+    _create_orders_table(url)
+    received: dict[str, object] = {}
+
+    db = DbBindings()
+
+    @db.trigger(
+        arg_name="events",
+        source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+        checkpoint_store=FakeStateStore(),
+    )
+    @db.output("out", url=url, table="processed_orders")
+    def handler(timer: object, events: list[RowChange], out: DbOut) -> None:
+        received["timer"] = timer
+        out.set([{"id": e.pk["id"], "status": "done"} for e in events])
+
+    host_timer = object()
+    result = handler(timer=host_timer)
+
+    assert result == 1
+    assert received["timer"] is host_timer
+
+
+def test_get_db_metadata_returns_dict_and_none() -> None:
+    def fn() -> None:
+        return None
+
+    setattr(fn, "_azure_functions_metadata", {"db": {"version": 1}})
+    assert decorator_mod.get_db_metadata(fn) == {"version": 1}
+
+    setattr(fn, "_azure_functions_metadata", {"db": "bad"})
+    assert decorator_mod.get_db_metadata(fn) is None
