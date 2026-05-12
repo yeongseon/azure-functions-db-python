@@ -1,6 +1,28 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [Unreleased]
+
+### Documentation
+
+- Fix ecosystem table names, badges, and Part of intro line 
+- Mark cookbook as dogfood, fix ecosystem table description 
+
+### Testing
+
+- Raise coverage to 95%+ and enforce via AGENTS.md and pyproject.toml 
+## [0.4.2] - 2026-04-30
+
+### Bug Fixes
+
+- Use hatch build in publish workflow to fix empty wheel on PyPI 
+## [0.4.1] - 2026-04-30
+
+### Bug Fixes
+
+- Update version assertion to 0.4.1 
+- Bump version to 0.4.1 to fix empty PyPI wheel 
+## [0.4.0] - 2026-04-29
 
 ### Bug Fixes
 
@@ -11,6 +33,7 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
+- Update changelog 
 - *(async)* Document async writer transaction limitation (#129) 
 - *(examples)* Add runnable PostgreSQL + Azurite poll-trigger example (#100) (#110) 
 - *(trigger)* Add production checklist for polling triggers (#111) 
@@ -35,6 +58,7 @@ All notable changes to this project will be documented in this file.
 
 - *(observability)* Pin metrics docs/code drift contract (#127) 
 - *(examples)* Add PostgreSQL poll-trigger smoke script (#130) 
+## [0.3.0] - 2026-04-26
 
 ### Documentation
 
@@ -52,6 +76,7 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - Bump expected __version__ to 0.3.0 ahead of release 
+## [0.2.2] - 2026-04-26
 
 ### Bug Fixes
 
@@ -83,6 +108,7 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - Bump expected __version__ to 0.2.2 ahead of release 
+## [0.2.1] - 2026-04-10
 
 ### Bug Fixes
 
@@ -111,6 +137,7 @@ All notable changes to this project will be documented in this file.
 ### Refactor
 
 - Rename metadata attr to _azure_functions_metadata (#80) 
+## [0.2.0] - 2026-04-09
 
 ### Bug Fixes
 
@@ -130,6 +157,7 @@ All notable changes to this project will be documented in this file.
 ### Performance
 
 - Add thread-safe metadata cache to avoid per-invocation table reflection 
+## [0.1.0] - 2026-04-08
 
 ### Bug Fixes
 
