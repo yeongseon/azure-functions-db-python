@@ -12,8 +12,8 @@ from azure_functions_db import ConfigurationError, DbBindings
 from azure_functions_db.binding.reader import DbReader
 from azure_functions_db.binding.writer import DbWriter
 from azure_functions_db.core.errors import NotFoundError
-from azure_functions_db.decorator import DbOut
 import azure_functions_db.decorator as decorator_mod
+from azure_functions_db.decorator import DbOut
 from azure_functions_db.observability import NoOpCollector
 from azure_functions_db.trigger.errors import FetchError
 from azure_functions_db.trigger.events import RowChange
