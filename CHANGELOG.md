@@ -1,12 +1,26 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-## [Unreleased]
+## [0.4.3] - 2026-05-14
 
 ### Documentation
 
 - Fix ecosystem table names, badges, and Part of intro line 
 - Mark cookbook as dogfood, fix ecosystem table description 
+
+### Miscellaneous Tasks
+
+- *(deps)* Bump mypy from 1.20.2 to 2.1.0 
+- *(deps)* Bump github/codeql-action from 4.35.2 to 4.35.4 
+- *(release)* Fix changelog template and decouple version test from literals 
+
+### Other
+
+- Bump version to 0.4.3 
+
+### Styling
+
+- *(tests)* Sort imports in test_decorator.py 
 
 ### Testing
 
