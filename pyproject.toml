@@ -56,7 +56,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-html",
-    "ruff==0.15.12",
+    "ruff==0.15.13",
     "requests",
     "types-requests",
 ]
