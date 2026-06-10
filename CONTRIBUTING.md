@@ -80,13 +80,26 @@ the call site:
   release channel; this pinning style is explicitly recommended upstream.
 - Local composite actions (`uses: ./...`) — versioned with the repo.
 
-When adding a new external Action, run `git ls-remote <repo-url> <tag>`
-to resolve the SHA, then pin to the dereferenced commit
-(`<sha>^{}` form):
+When adding a new external Action, resolve the SHA with
+`git ls-remote <repo-url> 'refs/tags/<tag>^{}'`. The trailing `^{}`
+**dereferences** the ref to its target commit; without it, an
+*annotated* tag returns the tag-object SHA instead of the commit SHA,
+and the tag-object SHA is **not** a valid `uses:` target.
 
 ```bash
-git ls-remote https://github.com/actions/checkout refs/tags/v6
+# Annotated tag — the two forms return *different* SHAs:
+git ls-remote https://github.com/Azure/login 'refs/tags/v3.0.0' 'refs/tags/v3.0.0^{}'
+# 93381592...   refs/tags/v3.0.0       <- tag object, do NOT pin to this
+# 532459ea...   refs/tags/v3.0.0^{}    <- commit, pin to this one
+
+# Lightweight tag — only the non-deref form returns a row, and it is
+# already the commit SHA. Always include the `^{}` form anyway so the
+# same command works for both tag types:
+git ls-remote https://github.com/actions/setup-python 'refs/tags/v6' 'refs/tags/v6^{}'
 ```
+
+Single-quote the `refs/...^{}` argument so the `{}` and `^` are not
+interpreted by your shell (notably zsh with `EXTENDED_GLOB`).
 
 ## Example Coverage Policy
 
