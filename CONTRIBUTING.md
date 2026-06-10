@@ -43,6 +43,51 @@ make cov         # Run tests with coverage
 make check-all   # Run the full local gate
 ```
 
+## GitHub Actions Pinning
+
+All external `uses:` references in `.github/workflows/` MUST pin to a
+full 40-character commit SHA with a trailing comment documenting the
+released version or channel. Example:
+
+```yaml
+- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+```
+
+This applies to first-party (`actions/*`, `github/*`, `azure/*`) and
+third-party Actions alike.
+
+**Rationale.** Mutable tags (including immutable-looking version tags
+like `@v6.0.1`) can be retroactively moved by an attacker who gains
+write access to the upstream repository. The
+[`tj-actions/changed-files` compromise (CVE-2025-30066, March 2025)](https://www.cisa.gov/news-events/alerts/2025/03/18/supply-chain-compromise-third-party-tj-actionschanged-files-cve-2025-30066)
+demonstrated this exact failure mode: ~23,000 repositories had their CI
+secrets exfiltrated, and only workflows that pinned to a commit SHA were
+safe. GitHub's own guidance now identifies SHA pinning as
+[the only way to use an Action as an immutable release](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-third-party-actions),
+and OpenSSF Scorecard's
+[`Pinned-Dependencies` check](https://github.com/ossf/scorecard/blob/main/docs/checks.md#pinned-dependencies)
+flags anything weaker as Medium-risk.
+
+Dependabot updates SHA-pinned references on the configured schedule and
+keeps the trailing version comment in sync, so the human-readable
+context never drifts from the pinned commit.
+
+**Approved exceptions.** The following mutable refs are the only ones
+permitted in this repository and are flagged with an inline comment at
+the call site:
+
+- `pypa/gh-action-pypi-publish@release/v1` — PyPA-maintained stable
+  release channel; this pinning style is explicitly recommended upstream.
+- Local composite actions (`uses: ./...`) — versioned with the repo.
+
+When adding a new external Action, run `git ls-remote <repo-url> <tag>`
+to resolve the SHA, then pin to the dereferenced commit
+(`<sha>^{}` form):
+
+```bash
+git ls-remote https://github.com/actions/checkout refs/tags/v6
+```
+
 ## Example Coverage Policy
 
 Examples are part of the supported API experience and should stay verified.

@@ -60,4 +60,7 @@ jobs:
           hatch build --clean
 
       - name: Publish to PyPI
+        # Documented exception to the SHA-pinning policy: PyPA officially
+        # recommends pinning to the rolling `release/v1` branch. See
+        # CONTRIBUTING.md "GitHub Actions Pinning" for rationale.
         uses: pypa/gh-action-pypi-publish@release/v1
