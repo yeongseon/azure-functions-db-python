@@ -20,6 +20,7 @@
 - Semantics changes require ADR or design note.
 - Never suppress type errors.
 - Guarantee claims must be honest (pseudo trigger, at-least-once).
+- Pin every external GitHub Action `uses:` ref to a full commit SHA with a `# vX.Y.Z` comment. See [`CONTRIBUTING.md` § "GitHub Actions Pinning"](CONTRIBUTING.md#github-actions-pinning) for the policy and approved exceptions.
 
 ## Issue Conventions
 
