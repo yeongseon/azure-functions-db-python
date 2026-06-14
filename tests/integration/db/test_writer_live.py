@@ -254,10 +254,10 @@ def test_upsert_partial_columns(upsert_db: tuple[str, Engine, str]) -> None:
 
 @pytest.mark.integration
 @pytest.mark.mssql
-def test_upsert_mssql_raises_configuration_error(mssql_db: tuple[str, Engine]) -> None:
+def test_upsert_mssql_raises_write_error(mssql_db: tuple[str, Engine]) -> None:
     url, _engine = mssql_db
     with DbWriter(url=url, table="users") as writer:
-        with pytest.raises(ConfigurationError, match="Upsert is not supported for dialect 'mssql'"):
+        with pytest.raises(WriteError, match="Upsert is not supported for dialect 'mssql'"):
             writer.upsert(
                 data={"id": 1, "name": "Nope", "email": "nope@example.com"},
                 conflict_columns=["id"],
