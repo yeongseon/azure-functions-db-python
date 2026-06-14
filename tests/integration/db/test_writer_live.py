@@ -9,7 +9,7 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, 
 from sqlalchemy.engine import Engine
 
 from azure_functions_db.binding.writer import DbWriter
-from azure_functions_db.core.errors import ConfigurationError, WriteError
+from azure_functions_db.core.errors import WriteError
 
 
 def _db_param(db: str) -> object:
