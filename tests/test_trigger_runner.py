@@ -468,6 +468,29 @@ class TestPollRunner:
             name != METRIC_LAG_SECONDS for name, _, _ in metrics.gauges
         )  # noqa: S101
 
+    def test_lag_naive_datetime_emits_debug_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A tz-naive cursor string should produce a debug log, not silently vanish."""
+        naive_cursor = "2024-01-01T12:00:00"  # no tzinfo
+        records: list[RawRecord] = [{"id": 1, "updated_at": naive_cursor}]
+
+        runner = PollRunner(
+            name="naive_lag_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=FakeStateStore(),
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+        )
+
+        with caplog.at_level(logging.DEBUG, logger="azure_functions_db.trigger.runner"):
+            runner.tick()
+
+        assert any(
+            "tz-naive" in r.message and "naive_lag_poller" in r.message
+            for r in caplog.records
+        ), "Expected debug log about tz-naive cursor"
+
     def test_collector_exception_on_gauge_does_not_break_tick(self) -> None:
         lagging_cursor = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
         records: list[RawRecord] = [{"id": 1, "updated_at": lagging_cursor}]
