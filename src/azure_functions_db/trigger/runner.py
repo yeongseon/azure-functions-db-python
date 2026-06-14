@@ -523,6 +523,14 @@ class PollRunner:
                                 (datetime.now(timezone.utc) - cursor_dt).total_seconds(),
                             )
                             emit_lag_metric(lag_seconds)
+                        else:
+                            logger.debug(
+                                "Poller '%s': cursor datetime '%s' is tz-naive;"
+                                " lag metric skipped. Use a tz-aware ISO timestamp"
+                                " (e.g. '…+00:00') to enable lag tracking.",
+                                self._name,
+                                cursor_for_lag,
+                            )
                     except (ValueError, TypeError):
                         pass
                 elif isinstance(cursor_for_lag, tuple) and cursor_for_lag:
@@ -536,6 +544,13 @@ class PollRunner:
                                     (datetime.now(timezone.utc) - cursor_dt).total_seconds(),
                                 )
                                 emit_lag_metric(lag_seconds)
+                            else:
+                                logger.debug(
+                                    "Poller '%s': cursor tuple[0] '%s' is"
+                                    " tz-naive; lag metric skipped.",
+                                    self._name,
+                                    first_part,
+                                )
                         except (ValueError, TypeError):
                             pass
 
