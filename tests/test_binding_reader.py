@@ -300,6 +300,35 @@ class TestDbReaderQuery:
         assert cast(int, rows[0]["cnt"]) == 3
         reader.close()
 
+    def test_query_without_params_emits_user_warning(self, users_url: str) -> None:
+        reader = DbReader(url=users_url)
+        with pytest.warns(UserWarning, match="SQL injection"):
+            reader.query("SELECT 1")
+        reader.close()
+
+    def test_query_with_params_does_not_warn(self, users_url: str) -> None:
+        reader = DbReader(url=users_url)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            # Supplying params must not trigger the injection warning.
+            reader.query("SELECT * FROM users WHERE id = :id", params={"id": 1})
+        reader.close()
+
+    def test_scalar_without_params_emits_user_warning(self, users_url: str) -> None:
+        reader = DbReader(url=users_url)
+        with pytest.warns(UserWarning, match="SQL injection"):
+            reader.scalar("SELECT COUNT(*) FROM users")
+        reader.close()
+
+    def test_scalar_with_params_does_not_warn(self, users_url: str) -> None:
+        reader = DbReader(url=users_url)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            reader.scalar("SELECT * FROM users WHERE id = :id", params={"id": 1})
+        reader.close()
+
 
 class TestDbReaderLifecycle:
     def test_close_resets_state(self, users_url: str) -> None:

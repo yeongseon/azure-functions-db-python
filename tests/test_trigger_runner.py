@@ -166,6 +166,34 @@ class TestPollRunner:
 
         assert runner is not None  # noqa: S101
 
+    def test_retry_policy_emits_user_warning(self) -> None:
+        """Passing retry_policy must emit UserWarning since it has no effect yet."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        with pytest.warns(UserWarning, match="not yet applied"):
+            PollRunner(
+                name="retry_poller",
+                source=FakeSourceAdapter(batches=[]),
+                state_store=FakeStateStore(),
+                normalizer=_default_normalizer,
+                handler=lambda events: None,
+                retry_policy=RetryPolicy(max_retries=5),
+            )
+
+    def test_no_retry_policy_does_not_warn(self) -> None:
+        """Omitting retry_policy must not emit any warning."""
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            PollRunner(
+                name="no_retry_poller",
+                source=FakeSourceAdapter(batches=[]),
+                state_store=FakeStateStore(),
+                normalizer=_default_normalizer,
+                handler=lambda events: None,
+                # retry_policy defaults to None — no warning expected
+            )
     def test_default_metrics_is_noop(self) -> None:
         runner = PollRunner(
             name="test_poller",

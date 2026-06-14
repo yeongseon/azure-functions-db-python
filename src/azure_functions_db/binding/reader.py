@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from types import TracebackType
 from typing import Any
+import warnings
 
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.schema import Table
@@ -154,6 +155,14 @@ class DbReader:
         QueryError
             If the query execution fails.
         """
+        if params is None:
+            warnings.warn(
+                "query() called without params: verify that sql does not"
+                " concatenate user input. Use :name placeholders and pass"
+                " params=\"{'name': value}\" to prevent SQL injection.",
+                UserWarning,
+                stacklevel=2,
+            )
         self._ensure_initialized()
         assert self._engine is not None  # noqa: S101  # nosec B101
 
@@ -203,6 +212,14 @@ class DbReader:
         QueryError
             If the query execution fails or returns multiple rows.
         """
+        if params is None:
+            warnings.warn(
+                "scalar() called without params: verify that sql does not"
+                " concatenate user input. Use :name placeholders and pass"
+                " params=\"{'name': value}\" to prevent SQL injection.",
+                UserWarning,
+                stacklevel=2,
+            )
         self._ensure_initialized()
         assert self._engine is not None  # noqa: S101  # nosec B101
 

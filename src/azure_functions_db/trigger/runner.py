@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Any, Protocol, runtime_checkable
 import uuid
+import warnings
 
 from ..core.errors import CursorSerializationError
 from ..core.serializers import parse_checkpoint_cursor
@@ -123,6 +124,14 @@ class PollRunner:
         self._batch_size = batch_size
         self._max_batches_per_tick = max_batches_per_tick
         self._lease_ttl_seconds = lease_ttl_seconds
+        if retry_policy is not None:
+            warnings.warn(
+                "RetryPolicy is accepted but not yet applied in tick(). "
+                "The parameter is reserved for a future release and currently"
+                " has no effect on handler retry behaviour.",
+                UserWarning,
+                stacklevel=2,
+            )
         self._retry_policy = retry_policy or RetryPolicy()
         self._metrics = metrics or NoOpCollector()
         self._handler_arity = _detect_handler_arity(handler)
