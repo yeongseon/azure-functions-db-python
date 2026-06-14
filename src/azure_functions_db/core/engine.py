@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import threading
 
@@ -13,6 +14,10 @@ class EngineProvider:
     def __init__(self) -> None:
         self._lock: threading.Lock = threading.Lock()
         self._engines: dict[str, Engine] = {}
+        # Best-effort pool cleanup on interpreter shutdown.  Azure Functions
+        # workers stay alive between invocations; without this, connection-pool
+        # resources are leaked when the process exits.
+        atexit.register(self.dispose_all)
 
     def get_engine(self, config: DbConfig) -> Engine:
         cache_key = self._cache_key(config)
@@ -60,4 +65,12 @@ class EngineProvider:
             "connect_args": config.connect_args,
             "engine_kwargs": config.engine_kwargs,
         }
-        return json.dumps(normalized, sort_keys=True, default=str)
+
+        def _encode(obj: object) -> str:
+            # Include the fully-qualified type name so that two non-JSON-
+            # serializable objects whose str() representations are identical
+            # but whose types differ still produce distinct cache keys.
+            qualified = f"{type(obj).__module__}.{type(obj).__qualname__}"
+            return f"<{qualified}:{str(obj)!r}>"
+
+        return json.dumps(normalized, sort_keys=True, default=_encode)
