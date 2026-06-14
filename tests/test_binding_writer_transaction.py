@@ -70,6 +70,33 @@ class TestTransactionRollback:
                 writer.insert(data={"id": 1, "name": "Bob"})
         assert _row_count(users_url) == 0
 
+    def test_original_exception_preserved_when_rollback_fails(
+        self,
+        users_url: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Original exception must surface even when rollback() itself raises."""
+        import logging
+        from unittest.mock import MagicMock, patch
+
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+
+        mock_tx = MagicMock()
+        mock_tx.rollback.side_effect = RuntimeError("rollback forced to fail")
+        mock_conn = MagicMock()
+        mock_conn.begin.return_value = mock_tx
+
+        with caplog.at_level(logging.WARNING, logger="azure_functions_db.binding.writer"):
+            with patch.object(writer._engine, "connect", return_value=mock_conn):
+                with pytest.raises(RuntimeError, match="the original error"):
+                    with writer.transaction():
+                        raise RuntimeError("the original error")
+
+        assert any(
+            "Failed to roll back transaction on exception" in r.message
+            for r in caplog.records
+        ), "Expected rollback-failure warning in log"
 
 class TestTransactionNesting:
     def test_nested_transaction_raises(self, users_url: str) -> None:

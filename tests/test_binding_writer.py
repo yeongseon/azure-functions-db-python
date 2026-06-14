@@ -530,7 +530,7 @@ class TestDbWriterErrorMapping:
             "name",
             "mssql",
         ):
-            with pytest.raises(ConfigurationError, match="not supported for dialect"):
+            with pytest.raises(WriteError, match="not supported for dialect"):
                 writer.upsert(
                     data={"id": 1, "name": "A"},
                     conflict_columns=["id"],

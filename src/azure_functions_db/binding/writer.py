@@ -122,6 +122,12 @@ class DbWriter:
                 raise
             try:
                 tx.rollback()
+            except Exception:
+                logger.warning(
+                    "Failed to roll back transaction on exception;"
+                    " original exception will still be raised",
+                    exc_info=True,
+                )
             finally:
                 self._tx = None
                 self._tx_conn = None
@@ -503,7 +509,7 @@ class DbWriter:
             f"Upsert is not supported for dialect '{dialect}'. "
             f"Supported dialects: {sorted(_UPSERT_DIALECTS)}"
         )
-        raise ConfigurationError(msg)
+        raise WriteError(msg)
 
     def _build_pg_sqlite_upsert(
         self,
