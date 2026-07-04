@@ -43,6 +43,7 @@ nav:
       - ADR-003 Blob Checkpoint MVP: 18-ADR-003-blob-checkpoint-mvp.md
       - ADR-004 At-Least-Once Default: 19-ADR-004-at-least-once-default.md
       - ADR-005 Unified Package: 23-ADR-005-unified-package-design.md
+      - ADR-006 Python Wrapper over Native Extension: 27-ADR-006-no-native-extension.md
   - Changelog: changelog.md
 
 markdown_extensions:
