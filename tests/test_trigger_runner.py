@@ -166,34 +166,253 @@ class TestPollRunner:
 
         assert runner is not None  # noqa: S101
 
-    def test_retry_policy_emits_user_warning(self) -> None:
-        """Passing retry_policy must emit UserWarning since it has no effect yet."""
+    def test_no_retry_policy_single_attempt(self) -> None:
+        """Without retry_policy, handler failure raises after a single attempt."""
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        call_count = 0
+
+        def bad_handler(events: list[RowChange]) -> None:
+            nonlocal call_count
+            call_count += 1
+            msg = "boom"
+            raise RuntimeError(msg)
+
+        runner = PollRunner(
+            name="no_retry_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=bad_handler,
+        )
+
+        with pytest.raises(HandlerError):
+            runner.tick()
+        assert call_count == 1  # noqa: S101
+
+    def test_retry_policy_does_not_warn(self) -> None:
+        """Passing retry_policy must not emit UserWarning (it is now applied)."""
+        import warnings
+
         from azure_functions_db.trigger.retry import RetryPolicy
 
-        with pytest.warns(UserWarning, match="not yet applied"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
             PollRunner(
                 name="retry_poller",
                 source=FakeSourceAdapter(batches=[]),
                 state_store=FakeStateStore(),
                 normalizer=_default_normalizer,
                 handler=lambda events: None,
-                retry_policy=RetryPolicy(max_retries=5),
+                retry_policy=RetryPolicy(max_retries=3),
             )
 
-    def test_no_retry_policy_does_not_warn(self) -> None:
-        """Omitting retry_policy must not emit any warning."""
-        import warnings
+    def test_retry_policy_succeeds_first_attempt(self) -> None:
+        """Handler succeeds on first attempt: no retries, no sleeps."""
+        from azure_functions_db.trigger.retry import RetryPolicy
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
-            PollRunner(
-                name="no_retry_poller",
-                source=FakeSourceAdapter(batches=[]),
-                state_store=FakeStateStore(),
-                normalizer=_default_normalizer,
-                handler=lambda events: None,
-                # retry_policy defaults to None — no warning expected
-            )
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        call_count = 0
+
+        def handler(events: list[RowChange]) -> None:
+            nonlocal call_count
+            call_count += 1
+
+        runner = PollRunner(
+            name="retry_ok_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=handler,
+            retry_policy=RetryPolicy(max_retries=3, base_delay_seconds=0.01),
+        )
+        sleeps: list[float] = []
+        runner._sleep = sleeps.append  # noqa: SLF001
+
+        runner.tick()
+        assert call_count == 1  # noqa: S101
+        assert sleeps == []  # noqa: S101
+
+    def test_retry_policy_recovers_from_transient_failure(self) -> None:
+        """Handler fails then succeeds: retries invoked, checkpoint advances."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        call_count = 0
+
+        def flaky_handler(events: list[RowChange]) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:  # noqa: PLR2004
+                msg = "transient"
+                raise RuntimeError(msg)
+
+        runner = PollRunner(
+            name="flaky_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=flaky_handler,
+            retry_policy=RetryPolicy(max_retries=3, base_delay_seconds=0.01),
+        )
+        sleeps: list[float] = []
+        runner._sleep = sleeps.append  # noqa: SLF001
+
+        runner.tick()
+        assert call_count == 3  # noqa: S101,PLR2004
+        assert len(sleeps) == 2  # noqa: S101,PLR2004
+        assert "flaky_poller" in store.checkpoints  # noqa: S101
+
+    def test_retry_policy_exhaustion_raises_handler_error(self) -> None:
+        """Handler always fails: max_retries+1 attempts total, then HandlerError."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        call_count = 0
+
+        def bad_handler(events: list[RowChange]) -> None:
+            nonlocal call_count
+            call_count += 1
+            msg = "perma-fail"
+            raise RuntimeError(msg)
+
+        runner = PollRunner(
+            name="exhausted_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=bad_handler,
+            retry_policy=RetryPolicy(max_retries=2, base_delay_seconds=0.01),
+        )
+        sleeps: list[float] = []
+        runner._sleep = sleeps.append  # noqa: SLF001
+
+        with pytest.raises(HandlerError):
+            runner.tick()
+        assert call_count == 3  # 1 initial + 2 retries  # noqa: S101,PLR2004
+        assert len(sleeps) == 2  # sleep only between retries  # noqa: S101,PLR2004
+        assert "exhausted_poller" not in store.checkpoints  # noqa: S101
+
+    def test_retry_policy_uses_exponential_backoff(self) -> None:
+        """Sleep delays follow RetryPolicy.delay_for_attempt()."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+
+        def bad_handler(events: list[RowChange]) -> None:
+            msg = "fail"
+            raise RuntimeError(msg)
+
+        policy = RetryPolicy(
+            max_retries=3,
+            base_delay_seconds=0.5,
+            exponential_base=2.0,
+            max_delay_seconds=60.0,
+        )
+        runner = PollRunner(
+            name="backoff_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=bad_handler,
+            retry_policy=policy,
+        )
+        sleeps: list[float] = []
+        runner._sleep = sleeps.append  # noqa: SLF001
+
+        with pytest.raises(HandlerError):
+            runner.tick()
+        # delay_for_attempt(0)=0.5, (1)=1.0, (2)=2.0
+        assert sleeps == [
+            pytest.approx(0.5),
+            pytest.approx(1.0),
+            pytest.approx(2.0),
+        ]  # noqa: S101
+
+    def test_retry_policy_respects_max_delay_cap(self) -> None:
+        """delay_for_attempt is clamped to max_delay_seconds."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+
+        def bad_handler(events: list[RowChange]) -> None:
+            msg = "fail"
+            raise RuntimeError(msg)
+
+        policy = RetryPolicy(
+            max_retries=4,
+            base_delay_seconds=10.0,
+            exponential_base=10.0,
+            max_delay_seconds=15.0,
+        )
+        runner = PollRunner(
+            name="cap_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=bad_handler,
+            retry_policy=policy,
+        )
+        sleeps: list[float] = []
+        runner._sleep = sleeps.append  # noqa: SLF001
+
+        with pytest.raises(HandlerError):
+            runner.tick()
+        # 10.0, 100.0->15, 1000.0->15, 10000.0->15
+        assert sleeps == [
+            pytest.approx(10.0),
+            pytest.approx(15.0),
+            pytest.approx(15.0),
+            pytest.approx(15.0),
+        ]  # noqa: S101
+
+    def test_retry_policy_logs_each_retry_attempt(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Each retry emits a warning log with attempt number and delay."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+
+        def bad_handler(events: list[RowChange]) -> None:
+            msg = "boom"
+            raise RuntimeError(msg)
+
+        runner = PollRunner(
+            name="logged_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=bad_handler,
+            retry_policy=RetryPolicy(max_retries=2, base_delay_seconds=0.01),
+        )
+        runner._sleep = lambda _s: None  # noqa: SLF001
+
+        with caplog.at_level(
+            logging.WARNING, logger="azure_functions_db.trigger.runner"
+        ), pytest.raises(HandlerError):
+            runner.tick()
+
+        retry_records = [
+            r for r in caplog.records if r.getMessage().startswith("Handler attempt")
+        ]
+        assert len(retry_records) == 2  # noqa: S101,PLR2004
+        assert getattr(retry_records[0], "attempt", None) == 1  # noqa: S101
+        assert getattr(retry_records[1], "attempt", None) == 2  # noqa: S101,PLR2004
+
     def test_default_metrics_is_noop(self) -> None:
         runner = PollRunner(
             name="test_poller",

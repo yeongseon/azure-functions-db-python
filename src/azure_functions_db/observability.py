@@ -70,6 +70,9 @@ def build_log_fields(
     lag_seconds: float | None = None,
     error_type: str | None = None,
     result: str | None = None,
+    attempt: int | None = None,
+    max_attempts: int | None = None,
+    delay_seconds: float | None = None,
 ) -> dict[str, object]:
     return {
         "event": event,
@@ -91,4 +94,7 @@ def build_log_fields(
         "lag_seconds": lag_seconds,
         "error_type": error_type,
         "result": result,
+        "attempt": attempt,
+        "max_attempts": max_attempts,
+        "delay_seconds": delay_seconds,
     }
