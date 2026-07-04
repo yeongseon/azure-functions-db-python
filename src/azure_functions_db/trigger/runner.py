@@ -8,7 +8,6 @@ import logging
 import time
 from typing import Any, Protocol, runtime_checkable
 import uuid
-import warnings
 
 from ..core.errors import CursorSerializationError
 from ..core.serializers import parse_checkpoint_cursor
@@ -124,15 +123,8 @@ class PollRunner:
         self._batch_size = batch_size
         self._max_batches_per_tick = max_batches_per_tick
         self._lease_ttl_seconds = lease_ttl_seconds
-        if retry_policy is not None:
-            warnings.warn(
-                "RetryPolicy is accepted but not yet applied in tick(). "
-                "The parameter is reserved for a future release and currently"
-                " has no effect on handler retry behaviour.",
-                UserWarning,
-                stacklevel=2,
-            )
-        self._retry_policy = retry_policy or RetryPolicy()
+        self._retry_policy = retry_policy
+        self._sleep: Callable[[float], None] = time.sleep
         self._metrics = metrics or NoOpCollector()
         self._handler_arity = _detect_handler_arity(handler)
 
@@ -149,6 +141,63 @@ class PollRunner:
     @property
     def name(self) -> str:
         return self._name
+
+    def _invoke_handler_with_retry(
+        self,
+        events: list[RowChange],
+        context: PollContext,
+        *,
+        batch_id: str,
+        invocation_id: str,
+        source_name: str,
+    ) -> None:
+        """Invoke the handler, applying the retry policy on failure.
+
+        When no ``RetryPolicy`` is configured, the handler is invoked exactly
+        once and any exception propagates to the caller (preserving the
+        historical single-attempt behavior). When a policy is configured,
+        transient exceptions trigger up to ``max_retries`` additional attempts
+        with exponential backoff sourced from :meth:`RetryPolicy.delay_for_attempt`.
+        The final exception is re-raised once attempts are exhausted so the
+        outer batch loop can emit failure metrics and raise ``HandlerError``.
+        """
+        policy = self._retry_policy
+        max_attempts = 1 if policy is None else policy.max_retries + 1
+        for attempt in range(max_attempts):
+            try:
+                if self._handler_arity >= 2:  # noqa: PLR2004
+                    self._handler(events, context)
+                else:
+                    self._handler(events)
+                return
+            except Exception as exc:
+                remaining = max_attempts - attempt - 1
+                if remaining <= 0 or policy is None:
+                    raise
+                delay = policy.delay_for_attempt(attempt)
+                logger.warning(
+                    "Handler attempt %d/%d failed for poller '%s' batch '%s':"
+                    " %s; retrying in %.2fs",
+                    attempt + 1,
+                    max_attempts,
+                    self._name,
+                    batch_id,
+                    type(exc).__name__,
+                    delay,
+                    extra=build_log_fields(
+                        event="handler_retry",
+                        poller_name=self._name,
+                        invocation_id=invocation_id,
+                        batch_id=batch_id,
+                        source=source_name,
+                        attempt=attempt + 1,
+                        max_attempts=max_attempts,
+                        delay_seconds=delay,
+                        error_type=type(exc).__name__,
+                        result="retry",
+                    ),
+                )
+                self._sleep(delay)
 
     def tick(self) -> int:
         invocation_id = uuid.uuid4().hex
@@ -380,10 +429,13 @@ class PollRunner:
 
                 try:
                     handler_started_monotonic = time.monotonic()
-                    if self._handler_arity >= 2:  # noqa: PLR2004
-                        self._handler(events, context)
-                    else:
-                        self._handler(events)
+                    self._invoke_handler_with_retry(
+                        events,
+                        context,
+                        batch_id=batch_id,
+                        invocation_id=invocation_id,
+                        source_name=descriptor.name,
+                    )
                     handler_duration_ms = round(
                         (time.monotonic() - handler_started_monotonic) * 1000, 2
                     )

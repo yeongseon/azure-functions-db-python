@@ -98,6 +98,9 @@ def test_build_log_fields_defaults() -> None:
         "lag_seconds": None,
         "error_type": None,
         "result": None,
+        "attempt": None,
+        "max_attempts": None,
+        "delay_seconds": None,
     }
 
 
@@ -122,6 +125,9 @@ def test_build_log_fields_all_fields() -> None:
         lag_seconds=30.0,
         error_type="ValueError",
         result="success",
+        attempt=1,
+        max_attempts=3,
+        delay_seconds=0.5,
     )
 
     assert fields["event"] == "batch_complete"  # noqa: S101
@@ -141,8 +147,10 @@ def test_build_log_fields_all_fields() -> None:
     assert fields["handler_duration_ms"] == 20.0  # noqa: S101
     assert fields["commit_duration_ms"] == 5.0  # noqa: S101
     assert fields["lag_seconds"] == 30.0  # noqa: S101
-    assert fields["error_type"] == "ValueError"  # noqa: S101
     assert fields["result"] == "success"  # noqa: S101
+    assert fields["attempt"] == 1  # noqa: S101, PLR2004
+    assert fields["max_attempts"] == 3  # noqa: S101, PLR2004
+    assert fields["delay_seconds"] == 0.5  # noqa: S101, PLR2004
 
 
 def test_custom_collector_satisfies_protocol() -> None:

@@ -137,9 +137,24 @@ Functions runtime retry and library-internal retry must not be confused.
 
 Principles:
 - DB fetch / retriable infrastructure errors: library-internal bounded retry is allowed
-- Handler business errors: surfaced as function failure
+- Handler business errors: **opt-in** in-tick retry via `RetryPolicy` (default: no retry, error is surfaced as function failure so Functions runtime / operators can react)
 - Checkpoint commit error: if commit fails, the batch remains unconfirmed
 
+### 8.1 Handler Retry (Opt-in)
+
+Callers may configure per-handler retry by passing a `RetryPolicy` to
+`PollTrigger`. When configured, `PollRunner.tick()` invokes the handler up to
+`max_retries + 1` times, sleeping `RetryPolicy.delay_for_attempt(attempt)`
+between attempts (exponential backoff, capped by `max_delay_seconds`).
+
+Semantics:
+- No `retry_policy` (default): the handler is invoked exactly once per tick. Any exception propagates and the batch is reprocessed on the next tick.
+- With `retry_policy`: retries occur **inside the current tick** while the poller holds its lease. Only after the final attempt fails does the batch surface as a handler failure and stay unacknowledged.
+- The checkpoint advances only when a handler attempt succeeds. Failed attempts do not advance the checkpoint, preserving at-least-once delivery.
+- Every retry emits a `handler_retry` structured log record with `attempt`, `max_attempts`, `delay_seconds`, and the exception type.
+- Retries always sleep synchronously via a swappable `_sleep` hook (defaults to `time.sleep`); tests inject a fake to run in virtual time.
+
+> **Retry vs. reprocessing:** In-tick retries occur within the current lease and do not re-read from the source. Cross-tick reprocessing (Case A / E / F in § 12) still applies when the tick ultimately fails or the process crashes.
 ## 9. Lease Semantics
 
 A lease is the "write authority for the current poller execution."
