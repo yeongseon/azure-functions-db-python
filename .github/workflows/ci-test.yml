@@ -78,4 +78,4 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck examples/postgresql-poll-trigger/smoke.sh
+          shellcheck examples/postgresql-poll-trigger/smoke.sh examples/mysql-poll-trigger/smoke.sh

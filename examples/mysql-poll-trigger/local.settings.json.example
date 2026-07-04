@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "SOURCE_DB_URL": "mysql+pymysql://app:app@localhost:3306/app",
+    "DEST_DB_URL": "mysql+pymysql://app:app@localhost:3306/app"
+  }
+}
