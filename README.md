@@ -61,19 +61,23 @@ Use the **official Azure SQL bindings** when:
 
 ## Compared with official Azure SQL bindings
 
-| Capability                              | Official Azure SQL bindings                       | `azure-functions-db`                              |
-| --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| Azure SQL / SQL Server                  | Native, runtime-managed                           | Supported via SQLAlchemy + pyodbc                 |
-| PostgreSQL                              | Not supported                                     | Built-in extra (`[postgres]`)                     |
-| MySQL                                   | Not supported                                     | Built-in extra (`[mysql]`)                        |
-| SQLite                                  | Not supported                                     | Supported via SQLAlchemy                          |
-| Oracle / DuckDB / CockroachDB           | Not supported                                     | BYOD — install dialect, pass SQLAlchemy URL       |
-| Custom non-SQL source                   | Not supported                                     | Implement `SourceAdapter` for `db.trigger(...)`   |
-| Runtime-native binding registration     | Yes (via Functions host extension)                | No — Python decorator wrapper                     |
-| Trigger mechanism                       | SQL Change Tracking                               | Cursor-column polling on a timer trigger          |
-| Scaling integration                     | Functions extension scale controller              | Driven by your timer trigger schedule             |
-| Delivery guarantee                      | Per official docs                                 | At-least-once (handlers must be idempotent)       |
-| Checkpoint storage                      | Managed by extension                              | Azure Blob Storage (`BlobCheckpointStore`)        |
+**Quick pick:**
+
+- Azure SQL / SQL Server only, and you want the Functions host to manage everything → prefer the [official Azure SQL bindings](https://learn.microsoft.com/azure/azure-functions/functions-bindings-azure-sql).
+- PostgreSQL, MySQL, SQLite, or any other SQLAlchemy dialect → this package.
+- Non-SQL source (Mongo, Kafka, HTTP) via a polling model → this package via [`SourceAdapter`](docs/05-adapter-sdk.md).
+- Native binding metadata visible to Portal / scale controllers → the official extension. This package deliberately does not register with the host — see [ADR-006](docs/27-ADR-006-no-native-extension.md).
+
+| Axis                              | Official Azure SQL bindings                       | `azure-functions-db-python`                                    |
+| --------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
+| Databases                         | Azure SQL Database, SQL Server                    | PostgreSQL, MySQL, SQL Server + any SQLAlchemy dialect (BYOD)  |
+| Trigger mechanism                 | SQL Change Tracking                               | Cursor-column polling on the timer trigger                     |
+| Delivery guarantee                | Exactly-once (per official docs, managed sinks)   | At-least-once — handlers must be idempotent                    |
+| Checkpoint storage                | Leases in the source DB (`az_func` schema)        | Azure Blob Storage via `BlobCheckpointStore`                   |
+| Extension language / distribution | C# / .NET, extension bundle                       | Python, `pip install`                                          |
+| Native binding metadata           | Yes                                               | No — only the underlying timer trigger is visible to the host |
+
+> **Full comparison** — see [`azure-functions-db` vs Official Azure SQL Bindings](docs/28-vs-official-azure-sql-bindings.md) for the axis-by-axis breakdown (supported databases, trigger mechanism, scaling integration, delivery guarantee, checkpoint storage and lifecycle, local testing experience, SQLAlchemy compatibility / BYOD, and production readiness).
 
 ## Choose your integration path
 
