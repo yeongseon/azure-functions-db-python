@@ -1,0 +1,57 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: afdb-mysql
+    # `--default-time-zone=+00:00` is required — see schema.sql for the
+    # rationale. Without it, DATETIME(6) values written by CURRENT_TIMESTAMP(6)
+    # would follow the container's local time zone and the cursor comparison
+    # the framework does on `updated_at` would become non-deterministic.
+    command:
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      TZ: UTC
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysqldata:/var/lib/mysql
+    healthcheck:
+      # `mysqladmin ping` returns success as soon as the server is accepting
+      # TCP connections, so we also authenticate as the app user to make sure
+      # `MYSQL_DATABASE` / `MYSQL_USER` init has finished before dependent
+      # steps run (`docker compose up --wait` blocks on this).
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "app", "--password=app"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: afdb-mysql-azurite
+    command: >
+      azurite
+      --blobHost 0.0.0.0
+      --queueHost 0.0.0.0
+      --tableHost 0.0.0.0
+      --location /data
+      --skipApiVersionCheck
+    ports:
+      - "10000:10000"   # Blob
+      - "10001:10001"   # Queue
+      - "10002:10002"   # Table
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'node -e "require(''net'').createConnection(10000, ''127.0.0.1'').on(''connect'', () => process.exit(0)).on(''error'', () => process.exit(1))"'
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mysqldata:
+  azurite-data:
