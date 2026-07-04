@@ -33,6 +33,8 @@ This package fills a different gap. Python teams on Azure Functions still have t
 - **No SQLAlchemy-native reader/writer injection pattern** for the Python v2 programming model.
 - **No first-class polling primitive** — checkpoint, lease, batching, idempotency, and at-least-once delivery built on top of the existing timer trigger.
 
+> See [ADR-006 — Python Wrapper over Native Azure Functions Extension](docs/27-ADR-006-no-native-extension.md) for the long-form rationale: why this project ships as a Python decorator wrapper on top of the timer trigger instead of a native .NET Azure Functions extension, what native binding metadata and scale-controller integration are traded away, and how the choice interacts with [ADR-001](docs/16-ADR-001-pseudo-trigger-over-native.md), [ADR-002](docs/17-ADR-002-sqlalchemy-centric-adapter.md), and [ADR-004](docs/19-ADR-004-at-least-once-default.md).
+
 ## When to use this
 
 Use **`azure-functions-db`** when:
@@ -508,6 +510,7 @@ trigger = PollTrigger(
 - **Blob checkpoint** — Azure Blob Storage for checkpoint persistence ([ADR-003](docs/18-ADR-003-blob-checkpoint-mvp.md))
 - **At-least-once** — default delivery guarantee with idempotency support ([ADR-004](docs/19-ADR-004-at-least-once-default.md))
 - **Unified package** — trigger + binding in one package ([ADR-005](docs/23-ADR-005-unified-package-design.md))
+- **Python wrapper, not native extension** — Python decorators over the timer trigger instead of a .NET Azure Functions extension ([ADR-006](docs/27-ADR-006-no-native-extension.md))
 
 ## Duplicate Handling
 
