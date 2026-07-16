@@ -12,6 +12,8 @@
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+Read this in: [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
 SQLAlchemy-powered database integration helpers for **Azure Functions Python v2** — binding-style decorators for input/output/client injection and a poll-based pseudo trigger that works with **any database that ships a SQLAlchemy dialect**.
 
 > **Not a native Azure Functions binding extension.**
