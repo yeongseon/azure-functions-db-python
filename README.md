@@ -313,6 +313,38 @@ Notes:
 >
 > Delivery is **at-least-once**. Duplicates may occur during process crashes, lease transitions, or checkpoint commit failures. **Handlers must be idempotent.** See [Polling Runtime & Failure Scenarios](docs/24-polling-runtime-semantics.md) for the full operational reference (tick lifecycle, duplicate windows, lease tuning, recovery procedures), [Production Checklist](docs/26-polling-production-checklist.md) before going to production, and [Semantics — Duplicate Windows](docs/03-semantics.md#13-duplicate-and-reprocessing-windows) for the formal contract.
 
+#### Poll-trigger lifecycle
+
+One `PollRunner.tick()` per timer fire, using the concrete default components (`BlobCheckpointStore` + `SqlAlchemySource`):
+
+```mermaid
+sequenceDiagram
+    participant Timer as Azure Timer Trigger
+    participant PT as PollTrigger
+    participant PR as PollRunner
+    participant CS as BlobCheckpointStore
+    participant SRC as SqlAlchemySource
+    participant DB as Database
+    participant H as Handler
+
+    Timer->>PT: PollTrigger.run(timer, handler)
+    PT->>PR: tick()
+    PR->>CS: acquire_lease() (ETag CAS)
+    CS-->>PR: lease granted
+    PR->>CS: load_checkpoint()
+    CS-->>PR: last cursor
+    PR->>SRC: fetch(cursor, batch_size)
+    SRC->>DB: SELECT ... WHERE cursor_column > :cursor
+    DB-->>SRC: changed rows
+    SRC-->>PR: RowChange events
+    PR->>H: handler(events)
+    H-->>PR: success
+    PR->>CS: commit_checkpoint(new cursor, ETag)
+    Note over PR,CS: at-least-once — commit after handler success;<br/>a crash before commit re-delivers the batch
+```
+
+> The full architecture reference (with `StateStore` / `SourceAdapter` protocol names) lives in [Architecture — Trigger Flow](docs/02-architecture.md#trigger-flow-poll-based-change-detection).
+
 ```python
 import azure.functions as func
 from azure.storage.blob import ContainerClient

@@ -31,3 +31,20 @@ SQLAlchemy Core offers the best balance among the alternatives.
 - RDBMS reach achieved quickly
 - Driver selection possible via package extras
 - Non-SQL stores such as MongoDB maintain separate adapters
+
+## Diagram
+
+A single SQLAlchemy Core layer sits between the bindings/source and every supported
+dialect, so the trigger and binding machinery never depends on a specific driver:
+
+```mermaid
+flowchart TD
+    Bindings["DbBindings / DbReader / DbWriter / SqlAlchemySource"] --> Core[SQLAlchemy Core]
+    Core --> PG[(PostgreSQL)]
+    Core --> MY[(MySQL)]
+    Core --> MS[(SQL Server)]
+    Core --> OT[(Oracle / SQLite / any dialect)]
+```
+
+See the [Poll-trigger lifecycle diagram](02-architecture.md#trigger-flow-poll-based-change-detection)
+for how `SqlAlchemySource.fetch()` fits into the polling loop.
