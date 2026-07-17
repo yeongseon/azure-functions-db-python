@@ -179,10 +179,13 @@ class BlobCheckpointStore:
         state: dict[str, Any],
         owner_id: str,
         fencing_token: int,
+        *,
+        check_expiry: bool = True,
     ) -> None:
         """Verify that the caller is the current lease holder.
 
-        Raises ``LostLeaseError`` on any mismatch or if the lease has expired.
+        Raises ``LostLeaseError`` on any mismatch, or (when ``check_expiry`` is
+        ``True``) if the lease has expired.
         """
         lease = state.get("lease")
         if lease is None:
@@ -200,7 +203,7 @@ class BlobCheckpointStore:
             )
 
         expires_at_str = lease.get("expires_at")
-        if expires_at_str is not None:
+        if check_expiry and expires_at_str is not None:
             expires_at = datetime.fromisoformat(expires_at_str)
             if _now_utc() > expires_at:
                 raise LostLeaseError("Lease has expired")
@@ -359,18 +362,7 @@ class BlobCheckpointStore:
 
         state, etag = result
 
-        lease = state.get("lease")
-        if lease is None:
-            raise LostLeaseError("No lease present in state")
-        if lease.get("owner_id") != owner_id:
-            raise LostLeaseError(
-                f"Lease owner mismatch: expected '{owner_id}', found '{lease.get('owner_id')}'"
-            )
-        if lease.get("fencing_token") != fencing_token:
-            raise LostLeaseError(
-                f"Fencing token mismatch: expected {fencing_token}, "
-                f"found {lease.get('fencing_token')}"
-            )
+        self._verify_lease(state, owner_id, fencing_token, check_expiry=False)
 
         state["lease"]["expires_at"] = _iso(_now_utc())
 
