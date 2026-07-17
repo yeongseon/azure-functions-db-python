@@ -439,6 +439,8 @@ This package does **not** implement a native Azure Functions trigger extension. 
 
 This package does **not** use SQLAlchemy `AsyncEngine` internally. If you need fully native asyncio drivers (e.g. `asyncpg`, `aiomysql`), drive them yourself outside the binding — `azure-functions-db` deliberately exposes a single sync engine path so behavior across dialects stays identical.
 
+> **Exception — `@db.trigger` does not support async handlers.** Because `PollTrigger.run()` is synchronous, the `trigger` decorator rejects an async handler at decoration time by raising `ConfigurationError`; `PollTrigger.run()` additionally raises `TypeError` as a defensive runtime guard if it is ever handed an async callable. Use a synchronous handler for `@db.trigger`.
+
 ### Async writer transactions
 
 The async writer proxy injected by `@db.inject_writer` into `async def` handlers exposes `insert`, `insert_many`, `upsert`, `upsert_many`, and `close` — but **does not** expose a `transaction()` context manager. SQLAlchemy `Connection` / `Transaction` objects are not safe to share across threads, and `asyncio.to_thread` does not pin work to a single OS thread, so a per-call async transaction would silently break atomicity.
@@ -536,6 +538,8 @@ See [Semantics — Duplicate Windows](docs/03-semantics.md#13-duplicate-and-repr
 - [Semantics](docs/03-semantics.md)
 - [Python API Spec](docs/04-python-api-spec.md)
 - [Adapter SDK](docs/05-adapter-sdk.md)
+
+> **Canonical sources.** The numbered specs and ADRs (`docs/00-*` … `docs/28-*`) are canonical for design and the API contract — [`docs/04-python-api-spec.md`](docs/04-python-api-spec.md) is authoritative. The standard site pages and the auto-generated API reference are derivations. When behavior changes, update `04-python-api-spec.md` first, then the user-facing pages.
 
 ## Ecosystem
 

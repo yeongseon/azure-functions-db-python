@@ -162,8 +162,10 @@ def handler(events): ...
 def handler(events, context): ...
 ```
 
-> **Note**: Async handlers are not supported and will raise `TypeError`.
-> Async support may be added in a future version.
+> **Note**: Async handlers are not supported. The `trigger` decorator rejects them
+> at decoration time by raising `ConfigurationError` (`decorator.py`); as a defensive
+> runtime guard, `PollTrigger.run()` also raises `TypeError` if it is ever handed an
+> async callable (`trigger/poll.py`). Async support may be added in a future version.
 
 Rules:
 - `events` may be empty. Default behavior is **empty batch skip**.

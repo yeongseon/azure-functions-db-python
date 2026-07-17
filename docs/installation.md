@@ -32,22 +32,22 @@ Install with the driver extra for your database:
 
 ```bash
 # Pick your database
-pip install azure-functions-db-python[postgres]
-pip install azure-functions-db-python[mysql]
-pip install azure-functions-db-python[mssql]
+pip install azure-functions-db[postgres]
+pip install azure-functions-db[mysql]
+pip install azure-functions-db[mssql]
 
 # Multiple databases
-pip install azure-functions-db-python[postgres,mysql]
+pip install azure-functions-db[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db-python[all]
+pip install azure-functions-db[all]
 ```
 
 Your Function App dependencies should include:
 
 ```text
 azure-functions
-azure-functions-db-python[postgres]
+azure-functions-db[postgres]
 ```
 
 ## Verify Installation
@@ -86,7 +86,7 @@ All project maintenance commands should go through the Makefile.
 Upgrade to the latest published version:
 
 ```bash
-pip install --upgrade azure-functions-db-python[postgres]
+pip install --upgrade azure-functions-db[postgres]
 ```
 
 Recommended upgrade workflow:
@@ -103,12 +103,12 @@ For deterministic deployments, pin an explicit version in your dependency file.
 ### ImportError: No module named `azure_functions_db`
 
 - Confirm installation ran in the correct environment.
-- Run `python -m pip install azure-functions-db-python[postgres]`.
+- Run `python -m pip install azure-functions-db[postgres]`.
 - Verify with `python -c "import azure_functions_db"`.
 
 ### Driver not found (psycopg, pymysql, pyodbc)
 
-- Confirm you installed the correct extra: `pip install azure-functions-db-python[postgres]`.
+- Confirm you installed the correct extra: `pip install azure-functions-db[postgres]`.
 - Run `pip show psycopg` (or `pymysql`, `pyodbc`) to verify the driver is present.
 - SQL Server requires ODBC Driver 17+ installed at the OS level.
 
@@ -120,5 +120,5 @@ For deterministic deployments, pin an explicit version in your dependency file.
 ### Runtime dependency drift in Azure
 
 - Rebuild deployment artifacts from a clean environment.
-- Confirm `requirements.txt` includes both `azure-functions` and `azure-functions-db-python[postgres]`.
+- Confirm `requirements.txt` includes both `azure-functions` and `azure-functions-db[postgres]`.
 - Verify the deployed Python runtime version is compatible with your lockfile.

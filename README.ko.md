@@ -43,22 +43,22 @@ Azure Functions Python v2에는 데이터베이스 통합에 대한 기본 스�
 
 ```bash
 # Core package (pick your database)
-pip install azure-functions-db-python[postgres]
-pip install azure-functions-db-python[mysql]
-pip install azure-functions-db-python[mssql]
+pip install azure-functions-db[postgres]
+pip install azure-functions-db[mysql]
+pip install azure-functions-db[mssql]
 
 # Multiple databases
-pip install azure-functions-db-python[postgres,mysql]
+pip install azure-functions-db[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db-python[all]
+pip install azure-functions-db[all]
 ```
 
 Function App 의존성에는 다음이 포함되어야 합니다.
 
 ```text
 azure-functions
-azure-functions-db-python[postgres]
+azure-functions-db[postgres]
 ```
 
 ## 빠른 시작
@@ -277,9 +277,9 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 | Database | Extra | Driver |
 |----------|-------|--------|
-| PostgreSQL | `azure-functions-db-python[postgres]` | [psycopg](https://www.psycopg.org/) |
-| MySQL | `azure-functions-db-python[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
-| SQL Server | `azure-functions-db-python[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
+| PostgreSQL | `azure-functions-db[postgres]` | [psycopg](https://www.psycopg.org/) |
+| MySQL | `azure-functions-db[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
+| SQL Server | `azure-functions-db[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
 
 ## 범위
 
