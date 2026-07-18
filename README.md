@@ -329,17 +329,18 @@ sequenceDiagram
 
     Timer->>PT: PollTrigger.run(timer, handler)
     PT->>PR: tick()
-    PR->>CS: acquire_lease() (ETag CAS)
-    CS-->>PR: lease granted
+    PR->>CS: acquire_lease()
+    CS-->>PR: lease_id
     PR->>CS: load_checkpoint()
     CS-->>PR: last cursor
     PR->>SRC: fetch(cursor, batch_size)
     SRC->>DB: SELECT ... WHERE cursor_column > :cursor
     DB-->>SRC: changed rows
-    SRC-->>PR: RowChange events
+    SRC-->>PR: raw records (dicts)
+    PR->>PR: normalize records → RowChange events
     PR->>H: handler(events)
     H-->>PR: success
-    PR->>CS: commit_checkpoint(new cursor, ETag)
+    PR->>CS: commit_checkpoint(checkpoint, lease_id)
     Note over PR,CS: at-least-once — commit after handler success;<br/>a crash before commit re-delivers the batch
 ```
 
