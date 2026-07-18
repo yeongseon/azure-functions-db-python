@@ -81,9 +81,9 @@ When handling multiple tenant databases:
 - Pin dependencies in `requirements.txt` or a lock file.
 - Run vulnerability scanning in CI (e.g. `pip-audit`, `safety`).
 - Database drivers are installed as optional extras — only install what you need:
-    - `azure-functions-db-python[postgres]`
-    - `azure-functions-db-python[mysql]`
-    - `azure-functions-db-python[mssql]`
+    - `azure-functions-db[postgres]`
+    - `azure-functions-db[mysql]`
+    - `azure-functions-db[mssql]`
 
 ## Reporting Security Issues
 

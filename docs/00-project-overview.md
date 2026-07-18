@@ -55,7 +55,7 @@ Change detection (trigger), reading (input binding), and writing (output binding
 
 Make Azure Functions developers think:
 
-> "If I need to work with a database, I just install azure-functions-db-python."
+> "If I need to work with a database, I just install azure-functions-db."
 
 ## MVP Scope
 
