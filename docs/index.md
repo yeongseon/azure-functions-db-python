@@ -14,7 +14,7 @@ Unified DB integration (trigger + input/output binding) for Azure Functions Pyth
 ## Quick Start
 
 ```bash
-pip install azure-functions-db-python[postgres]
+pip install azure-functions-db[postgres]
 ```
 
 ```python
@@ -30,3 +30,12 @@ from azure_functions_db import SqlAlchemySource, BlobCheckpointStore, EngineProv
 - [API Reference](api.md) — auto-generated API docs
 - [Troubleshooting](troubleshooting.md) — common issues and solutions
 - [FAQ](faq.md) — frequently asked questions
+
+## Docs ownership & canonical sources
+
+This project maintains two complementary documentation sets:
+
+- **Numbered specs & ADRs** (`00-*` … `28-*`, including the ADRs) are the **canonical source for design and API contract**. `04-python-api-spec.md` is the authoritative API reference; the auto-generated [API Reference](api.md) is derived from source and cross-links back to it.
+- **Standard user-facing pages** (this index, [Installation](installation.md), [Getting Started](getting-started.md), [Troubleshooting](troubleshooting.md), [FAQ](faq.md)) are **derivations** tuned for task-oriented reading.
+
+**When changing behavior, update `04-python-api-spec.md` first, then propagate to the user-facing pages** so the two systems do not drift.

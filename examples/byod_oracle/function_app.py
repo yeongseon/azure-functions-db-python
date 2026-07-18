@@ -8,7 +8,7 @@ applies to CockroachDB, DuckDB, or any other database that has a
 SQLAlchemy dialect — just swap the driver and connection URL.
 
 Prerequisites:
-    pip install azure-functions-db-python oracledb
+    pip install azure-functions-db oracledb
 
 Environment variables:
     ORACLE_DB_URL: Oracle connection string

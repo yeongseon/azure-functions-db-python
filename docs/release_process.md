@@ -133,7 +133,7 @@ make publish-test       # Publish to TestPyPI
 To install from TestPyPI:
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ azure-functions-db-python
+pip install --index-url https://test.pypi.org/simple/ azure-functions-db
 ```
 
 ---

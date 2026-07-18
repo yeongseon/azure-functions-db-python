@@ -49,7 +49,7 @@ trigger (change detection) and binding (read/write) in a single package.
 ## Rationale
 
 1. **Technical synergy**: natural sharing of engine/config/pool
-2. **User convenience**: a single `pip install azure-functions-db-python` covers all DB operations
+2. **User convenience**: a single `pip install azure-functions-db` covers all DB operations
 3. **Scope management**: internal core/trigger/binding separation isolates complexity
 4. **Incremental delivery**: trigger implemented first; binding added in Phase 8+
 5. **Design review**: adopted recommendation of "one package, but not one programming model"

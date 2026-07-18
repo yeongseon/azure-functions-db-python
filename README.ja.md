@@ -44,22 +44,22 @@ Azure Functions Python v2 には、データベース統合の標準的な仕組
 
 ```bash
 # Core package (pick your database)
-pip install azure-functions-db-python[postgres]
-pip install azure-functions-db-python[mysql]
-pip install azure-functions-db-python[mssql]
+pip install azure-functions-db[postgres]
+pip install azure-functions-db[mysql]
+pip install azure-functions-db[mssql]
 
 # Multiple databases
-pip install azure-functions-db-python[postgres,mysql]
+pip install azure-functions-db[postgres,mysql]
 
 # All drivers
-pip install azure-functions-db-python[all]
+pip install azure-functions-db[all]
 ```
 
 Function App の依存関係には次を含めてください。
 
 ```text
 azure-functions
-azure-functions-db-python[postgres]
+azure-functions-db[postgres]
 ```
 
 ## Quick Start
@@ -278,9 +278,9 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 | Database | Extra | Driver |
 |----------|-------|--------|
-| PostgreSQL | `azure-functions-db-python[postgres]` | [psycopg](https://www.psycopg.org/) |
-| MySQL | `azure-functions-db-python[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
-| SQL Server | `azure-functions-db-python[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
+| PostgreSQL | `azure-functions-db[postgres]` | [psycopg](https://www.psycopg.org/) |
+| MySQL | `azure-functions-db[mysql]` | [PyMySQL](https://pymysql.readthedocs.io/) |
+| SQL Server | `azure-functions-db[mssql]` | [pyodbc](https://github.com/mkleehammer/pyodbc) |
 
 ## Scope
 

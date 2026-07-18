@@ -10,8 +10,8 @@ works with any SQLAlchemy dialect:
     Firebird:     firebird+fdb://user:pass@host/db
 
 Prerequisites:
-    pip install azure-functions-db-python <your-driver>
-    # e.g. pip install azure-functions-db-python oracledb
+    pip install azure-functions-db <your-driver>
+    # e.g. pip install azure-functions-db oracledb
 
 Usage:
     ORACLE_DB_URL="oracle+oracledb://user:pass@host:1521/?service_name=XEPDB1"
