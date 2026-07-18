@@ -130,7 +130,7 @@ class TestDbWriterConstructor:
 
     def test_kw_only(self) -> None:
         with pytest.raises(TypeError):
-            DbWriter("sqlite:///:memory:", "users")
+            DbWriter("sqlite:///:memory:", "users")  # type: ignore[call-arg]
 
     def test_env_var_resolution(self) -> None:
         with patch.dict(os.environ, {"TEST_WRITER_URL": "sqlite:///:memory:"}):
