@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 import threading
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -18,6 +18,7 @@ from azure_functions_db.core.engine import EngineProvider
 from azure_functions_db.core.errors import ConfigurationError, CursorSerializationError, DbError
 from azure_functions_db.core.serializers import parse_checkpoint_cursor, serialize_cursor_part
 from azure_functions_db.core.types import RawRecord, Row, RowDict
+from azure_functions_db.core.validation import validate_pk_columns
 from azure_functions_db.state.errors import StateStoreError
 from azure_functions_db.trigger.errors import PollerError
 
@@ -367,3 +368,40 @@ def test_sqlalchemy_source_uses_engine_provider(tmp_path: Path) -> None:
 
     assert count == 2
     provider.dispose_all()
+
+
+def _pk_table(*pk_names: str) -> Table:
+    metadata = MetaData()
+    columns: list[Column[Any]] = [
+        Column(name, Integer, primary_key=True) for name in pk_names
+    ]
+    columns.append(Column("data", String(10)))
+    return Table("widgets", metadata, *columns)
+
+
+class TestValidatePkColumns:
+    """Shared primary-key validation used by both DbReader and DbWriter."""
+
+    def test_valid_single_pk_passes(self) -> None:
+        validate_pk_columns(_pk_table("id"), "widgets", {"id": 1})
+
+    def test_valid_composite_pk_passes(self) -> None:
+        validate_pk_columns(_pk_table("a", "b"), "widgets", {"a": 1, "b": 2})
+
+    def test_empty_pk_raises(self) -> None:
+        with pytest.raises(ConfigurationError, match="pk must not be empty"):
+            validate_pk_columns(_pk_table("id"), "widgets", {})
+
+    def test_no_primary_key_raises(self) -> None:
+        metadata = MetaData()
+        table = Table("widgets", metadata, Column("data", String(10)))
+        with pytest.raises(ConfigurationError, match="has no primary key defined"):
+            validate_pk_columns(table, "widgets", {"data": "x"})
+
+    def test_invalid_columns_raises(self) -> None:
+        with pytest.raises(ConfigurationError, match="are not part of the primary key"):
+            validate_pk_columns(_pk_table("id"), "widgets", {"bogus": 1})
+
+    def test_incomplete_composite_pk_raises(self) -> None:
+        with pytest.raises(ConfigurationError, match="Incomplete primary key"):
+            validate_pk_columns(_pk_table("a", "b"), "widgets", {"a": 1})
