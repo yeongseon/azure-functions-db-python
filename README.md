@@ -4,6 +4,7 @@
 
 
 [![PyPI](https://img.shields.io/pypi/v/azure-functions-db.svg)](https://pypi.org/project/azure-functions-db/)
+[![Downloads](https://static.pepy.tech/badge/azure-functions-db/month)](https://pepy.tech/project/azure-functions-db)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db/)
 [![CI](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml)
 [![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
