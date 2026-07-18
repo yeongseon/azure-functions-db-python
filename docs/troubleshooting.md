@@ -7,16 +7,16 @@ Common issues and solutions for `azure-functions-db-python`.
 ### ImportError: No module named `azure_functions_db`
 
 - Confirm installation ran in the correct virtual environment.
-- Run `python -m pip install azure-functions-db-python[postgres]`.
+- Run `python -m pip install azure-functions-db[postgres]`.
 - Verify with `python -c "import azure_functions_db"`.
 - Check that the active environment matches the one your Function App uses.
 
 ### Driver not found (psycopg, pymysql, pyodbc)
 
 - Confirm you installed the correct database extra:
-    - PostgreSQL: `pip install azure-functions-db-python[postgres]`
-    - MySQL: `pip install azure-functions-db-python[mysql]`
-    - SQL Server: `pip install azure-functions-db-python[mssql]`
+    - PostgreSQL: `pip install azure-functions-db[postgres]`
+    - MySQL: `pip install azure-functions-db[mysql]`
+    - SQL Server: `pip install azure-functions-db[mssql]`
 - Verify the driver is installed: `pip show psycopg` (or `pymysql`, `pyodbc`).
 - SQL Server requires ODBC Driver 17+ installed at the OS level.
 
@@ -101,7 +101,7 @@ Common issues and solutions for `azure-functions-db-python`.
 
 ### Works locally but fails in Azure
 
-- Confirm `requirements.txt` includes the driver extra: `azure-functions-db-python[postgres]`.
+- Confirm `requirements.txt` includes the driver extra: `azure-functions-db[postgres]`.
 - Confirm environment variables are set in Azure Portal > Function App > Configuration.
 - Verify the deployed Python runtime version matches your local version.
 - Rebuild deployment artifacts from a clean environment to avoid stale dependencies.
