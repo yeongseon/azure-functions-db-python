@@ -1,10 +1,63 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.4.4] - 2026-07-18
+
+### Bug Fixes
+
+- *(trigger)* Apply RetryPolicy in tick() (closes #171) (#172) 
+- *(ci)* Replace fragile apt Core Tools install with pinned npm (#170) 
+- *(writer)* Preserve original exception when rollback fails; raise WriteError for unsupported upsert dialect 
+- Emit UserWarning for no-params raw SQL queries and unimplemented RetryPolicy 
+- *(trigger)* Emit debug log when cursor datetime is tz-naive and lag metric is skipped 
+- *(engine)* Register atexit cleanup and harden cache key type discrimination 
+
+### Documentation
+
+- Enable mermaid rendering and add canonical poll-trigger diagram (#194) 
+- Canonicalize pip install token and clarify async-handler semantics (#193) 
+- Add discoverability metadata (pepy badge + llms.txt) (#200) 
+- Add 'For AI Coding Assistants' section pointing to llms.txt (#187) 
+- Add 'Read this in:' translation links to main README (#185) 
+- *(examples)* Add MySQL polling-trigger docker-compose example (#175) 
+- *(comparison)* Add azure-functions-db vs Official Azure SQL Bindings page (#174) 
+- *(adr)* Add ADR-006 — Python wrapper over native Azure Functions extension (#173) 
+
+### Miscellaneous Tasks
+
+- *(deps)* Bump github/codeql-action/analyze from 4.36.2 to 4.37.1 (#176) 
+- *(deps)* Bump github/codeql-action/init from 4.36.2 to 4.37.1 (#178) 
+- *(deps)* Bump mypy from 2.1.0 to 2.3.0 (#183) 
+- *(deps)* Bump softprops/action-gh-release from 3.0.1 to 3.0.2 (#179) 
+- *(deps)* Bump actions/setup-node from 6.4.0 to 7.0.0 (#180) 
+- *(deps)* Bump actions/stale from 10.3.0 to 10.4.0 (#181) 
+- *(deps)* Bump ruff from 0.15.20 to 0.15.22 (#182) 
+- *(test)* Align e2e marker filter and correct Codecov version comment (#195) 
+- *(deps)* Bump ruff from 0.15.16 to 0.15.20 (#169) 
+- *(deps)* Bump softprops/action-gh-release from 3.0.0 to 3.0.1 (#168) 
+- *(deps)* Bump actions/setup-python from 6.2.0 to 6.3.0 (#166) 
+- *(deps)* Bump actions/checkout from 6.0.2 to 7.0.0 (#165) 
+- *(deps)* Bump github/codeql-action from 4.36.1 to 4.36.2 (#147) 
+- *(deps)* Bump codecov/codecov-action from 6.0.1 to 7.0.0 (#148) 
+- *(deps)* Bump ruff from 0.15.15 to 0.15.16 (#149) 
+- *(ci)* Standardize Action pinning to immutable SHAs (#146) 
+- *(deps)* Bump ruff from 0.15.12 to 0.15.15 (#145) 
+- *(deps)* Bump github/codeql-action from 4.35.4 to 4.36.1 (#144) 
+- *(deps)* Bump actions/stale from 10.2.0 to 10.3.0 (#142) 
+- *(deps)* Bump codecov/codecov-action from 6.0.0 to 6.0.1 (#137) 
+
+### Other
+
+- Bump version to 0.4.4 
+
+### Refactor
+
+- *(state)* De-duplicate release_lease via _verify_lease (#198) 
 ## [0.4.3] - 2026-05-14
 
 ### Documentation
 
+- Update changelog 
 - Fix ecosystem table names, badges, and Part of intro line 
 - Mark cookbook as dogfood, fix ecosystem table description 
 
