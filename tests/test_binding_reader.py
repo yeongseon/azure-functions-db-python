@@ -125,7 +125,7 @@ class TestDbReaderConstructor:
 
     def test_kw_only(self) -> None:
         with pytest.raises(TypeError):
-            DbReader("sqlite:///:memory:")  # type: ignore[misc]
+            DbReader("sqlite:///:memory:")  # type: ignore[call-arg]
 
     def test_env_var_resolution(self) -> None:
         with patch.dict(os.environ, {"TEST_READER_URL": "sqlite:///:memory:"}):
