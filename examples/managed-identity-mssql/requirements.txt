@@ -1,0 +1,4 @@
+azure-functions>=1.22.0
+azure-functions-db[mssql]
+azure-identity>=1.17.0
+pyodbc>=5.1
