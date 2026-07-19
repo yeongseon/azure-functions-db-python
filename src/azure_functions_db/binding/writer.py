@@ -15,6 +15,7 @@ from ..core.config import DbConfig, resolve_env_vars
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError, DbConnectionError, WriteError
 from ..core.metadata import get_metadata_cache
+from ..core.validation import validate_pk_columns
 
 logger = logging.getLogger(__name__)
 
@@ -447,34 +448,7 @@ class DbWriter:
     def _validate_pk_columns(self, pk: dict[str, object]) -> None:
         """Validate that *pk* keys exactly match the table's primary key columns."""
         assert self._table is not None  # noqa: S101  # nosec B101
-
-        if not pk:
-            msg = "pk must not be empty"
-            raise ConfigurationError(msg)
-
-        pk_columns = {c.name for c in self._table.primary_key.columns}
-
-        if not pk_columns:
-            msg = f"Table '{self._table_name}' has no primary key defined"
-            raise ConfigurationError(msg)
-
-        provided = set(pk.keys())
-
-        invalid = provided - pk_columns
-        if invalid:
-            msg = (
-                f"Columns {sorted(invalid)} are not part of the primary key. "
-                f"Primary key columns: {sorted(pk_columns)}"
-            )
-            raise ConfigurationError(msg)
-
-        missing = pk_columns - provided
-        if missing:
-            msg = (
-                f"Incomplete primary key: missing columns {sorted(missing)}. "
-                f"All primary key columns required: {sorted(pk_columns)}"
-            )
-            raise ConfigurationError(msg)
+        validate_pk_columns(self._table, self._table_name, pk)
 
     def _validate_conflict_columns(self, conflict_columns: list[str]) -> None:
         assert self._table is not None  # noqa: S101  # nosec B101
