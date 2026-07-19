@@ -26,7 +26,10 @@ _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 #   azure-functions-db, azure_functions_db, azure-functions-db-python
 # optionally followed by an extras group like [postgres] or [postgres,mysql].
 _SELF_TOKEN_RE = re.compile(
-    r"pip install\s+"
+    r"pip install[^\S\n]+"
+    # Skip any leading option tokens or values (e.g. --upgrade, --pre,
+    # --index-url https://..., -U) that are not the target package itself.
+    r"(?:(?!azure[-_]functions[-_]db)\S+[^\S\n]+)*"
     r"(?P<name>azure[-_]functions[-_]db[-_a-z]*)"
     r"(?P<extras>\[[a-z0-9,\-_ ]*\])?",
     re.IGNORECASE,
@@ -74,3 +77,26 @@ def test_guard_sees_at_least_one_self_reference() -> None:
         for match in _SELF_TOKEN_RE.finditer(path.read_text(encoding="utf-8"))
     )
     assert found, "No `pip install azure-functions-db` reference found in docs/READMEs."
+
+
+def test_self_token_re_matches_option_prefixed_forms() -> None:
+    # The reviewer noted the guard must catch install commands where the
+    # target package is preceded by option tokens/values or `python -m`.
+    samples = [
+        "pip install azure-functions-db",
+        "pip install --upgrade azure-functions-db",
+        "pip install -U azure-functions-db",
+        "pip install --pre azure-functions-db[postgres]",
+        "pip install --index-url https://example.test/simple azure-functions-db",
+        "python -m pip install azure-functions-db",
+    ]
+    for sample in samples:
+        match = _SELF_TOKEN_RE.search(sample)
+        assert match is not None, f"guard failed to match: {sample!r}"
+        assert match.group("name") == "azure-functions-db"
+
+
+def test_self_token_re_ignores_third_party_installs() -> None:
+    # Option-skipping must not accidentally swallow a following third-party
+    # package as if it were the self-reference.
+    assert _SELF_TOKEN_RE.search("pip install --upgrade pytest build") is None
