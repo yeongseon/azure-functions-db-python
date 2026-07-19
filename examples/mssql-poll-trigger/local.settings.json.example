@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "SOURCE_DB_URL": "mssql+pyodbc://sa:Str0ng_Passw0rd1@localhost:1433/app?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes",
+    "DEST_DB_URL": "mssql+pyodbc://sa:Str0ng_Passw0rd1@localhost:1433/app?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes"
+  }
+}
