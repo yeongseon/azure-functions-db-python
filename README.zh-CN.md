@@ -274,6 +274,12 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 完整可运行示例见 [`examples/trigger_with_binding/`](examples/trigger_with_binding/)。
 
+## 异步处理器
+
+支持 `async def` 处理器。`azure-functions-db` 内部的 SQLAlchemy 操作以同步方式运行；当 `async` 处理器调用绑定（输入获取、`DbOut.set(...)`、轮询提交等）时，该包会通过 `asyncio.to_thread` 将阻塞调用卸载到工作线程，因此事件循环不会被阻塞。
+
+> **例外 —— `@db.trigger` 不支持异步处理器。** 由于 `PollTrigger.run()` 是同步的，`trigger` 装饰器会在装饰时抛出 `ConfigurationError` 以拒绝异步处理器；此外 `PollTrigger.run()` 作为防御性运行时保护，在被传入异步可调用对象时会抛出 `TypeError`。请为 `@db.trigger` 使用同步处理器。
+
 ## Supported Databases
 
 | Database | Extra | Driver |

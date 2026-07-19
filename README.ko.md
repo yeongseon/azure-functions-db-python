@@ -274,6 +274,12 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 전체 실행 예제는 [`examples/trigger_with_binding/`](examples/trigger_with_binding/)를 참고하세요.
 
+## 비동기 핸들러
+
+`async def` 핸들러가 지원됩니다. `azure-functions-db` 내부의 SQLAlchemy 작업은 동기 방식으로 실행되며, `async` 핸들러가 바인딩(입력 조회, `DbOut.set(...)`, 폴링 커밋 등)을 호출하면 패키지가 `asyncio.to_thread`를 통해 블로킹 호출을 워커 스레드로 오프로드하므로 이벤트 루프가 막히지 않습니다.
+
+> **예외 — `@db.trigger`는 비동기 핸들러를 지원하지 않습니다.** `PollTrigger.run()`이 동기 방식으로 동작하기 때문에, `trigger` 데코레이터는 데코레이션 시점에 `ConfigurationError`를 발생시켜 비동기 핸들러를 거부합니다. 또한 `PollTrigger.run()`은 방어적 런타임 가드로서 비동기 콜러블이 전달되면 `TypeError`를 발생시킵니다. `@db.trigger`에는 동기 핸들러를 사용하세요.
+
 ## 지원 데이터베이스
 
 | Database | Extra | Driver |
