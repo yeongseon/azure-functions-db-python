@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 import pytest
@@ -1049,6 +1049,199 @@ def test_inject_writer_async_proxy_upsert(tmp_path: Path) -> None:
     asyncio.run(handler())
 
     assert _read_orders(url) == [{"id": 1, "status": "processed"}]
+
+
+def test_inject_writer_async_transaction_commit(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-tx-commit.db")
+    _create_orders_table(url)
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: Any) -> None:
+        async with writer.transaction() as tx:
+            await tx.insert(data={"id": 1, "status": "pending"})
+            await tx.update(data={"status": "shipped"}, pk={"id": 1})
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [{"id": 1, "status": "shipped"}]
+
+
+def test_inject_writer_async_transaction_rollback_on_error(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-tx-rollback.db")
+    _create_orders_table(url)
+
+    class _Boom(RuntimeError):
+        pass
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: Any) -> None:
+        async with writer.transaction() as tx:
+            await tx.insert(data={"id": 1, "status": "pending"})
+            raise _Boom
+
+    with pytest.raises(_Boom):
+        asyncio.run(handler())
+
+    # The insert must have been rolled back — no rows persisted.
+    assert _read_orders(url) == []
+
+
+def test_inject_writer_async_transaction_delete(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-tx-delete.db")
+    _create_orders_table(url)
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: Any) -> None:
+        async with writer.transaction() as tx:
+            await tx.insert(data={"id": 1, "status": "pending"})
+            await tx.insert(data={"id": 2, "status": "pending"})
+            await tx.delete(pk={"id": 1})
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [{"id": 2, "status": "pending"}]
+
+
+def test_inject_writer_async_transaction_concurrent_writes_serialized(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-tx-gather.db")
+    _create_orders_table(url)
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: Any) -> None:
+        async with writer.transaction() as tx:
+            await asyncio.gather(
+                tx.insert(data={"id": 1, "status": "a"}),
+                tx.insert(data={"id": 2, "status": "b"}),
+                tx.insert(data={"id": 3, "status": "c"}),
+            )
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [
+        {"id": 1, "status": "a"},
+        {"id": 2, "status": "b"},
+        {"id": 3, "status": "c"},
+    ]
+
+class _FakeTxCM:
+    """Minimal context manager to drive _AsyncDbWriterProxy error paths."""
+
+    def __init__(self, enter_exc: BaseException | None = None,
+                 exit_exc: BaseException | None = None) -> None:
+        self._enter_exc = enter_exc
+        self._exit_exc = exit_exc
+        self.exit_calls: list[tuple[Any, Any, Any]] = []
+
+    def __enter__(self) -> _FakeTxCM:
+        if self._enter_exc is not None:
+            raise self._enter_exc
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
+        self.exit_calls.append((exc_type, exc, tb))
+        if self._exit_exc is not None:
+            raise self._exit_exc
+        return False
+
+
+class _FakeTxWriter:
+    def __init__(self, cm: Any) -> None:
+        self._cm = cm
+
+    def transaction(self) -> Any:
+        return self._cm
+
+
+def test_async_transaction_enter_failure_propagates() -> None:
+    cm = _FakeTxCM(enter_exc=RuntimeError("connect fail"))
+    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
+
+    async def run() -> None:
+        async with proxy.transaction():
+            pass  # pragma: no cover - __enter__ raises first
+
+    with pytest.raises(RuntimeError, match="connect fail"):
+        asyncio.run(run())
+
+
+def test_async_transaction_commit_error_propagates() -> None:
+    from azure_functions_db import WriteError
+
+    cm = _FakeTxCM(exit_exc=WriteError("commit fail"))
+    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
+
+    async def run() -> None:
+        async with proxy.transaction():
+            pass  # success -> commit -> __exit__ raises
+
+    with pytest.raises(WriteError, match="commit fail"):
+        asyncio.run(run())
+    # Commit path passes no exception info to __exit__.
+    assert cm.exit_calls == [(None, None, None)]
+
+
+def test_async_transaction_rollback_error_is_swallowed() -> None:
+    class _Boom(RuntimeError):
+        pass
+
+    cm = _FakeTxCM(exit_exc=RuntimeError("rollback fail"))
+    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
+
+    async def run() -> None:
+        async with proxy.transaction():
+            raise _Boom("original")
+
+    # The original error propagates; the rollback failure is logged, not raised.
+    with pytest.raises(_Boom, match="original"):
+        asyncio.run(run())
+    assert cm.exit_calls[0][0] is _Boom
+
+
+class _CancelOnExitCM:
+    """__exit__ raises CancelledError once, then succeeds/fails on retry."""
+
+    def __init__(self, *, fallback_exc: BaseException | None = None) -> None:
+        self.calls = 0
+        self._fallback_exc = fallback_exc
+
+    def __enter__(self) -> _CancelOnExitCM:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
+        self.calls += 1
+        if self.calls == 1:
+            raise asyncio.CancelledError
+        if self._fallback_exc is not None:
+            raise self._fallback_exc
+        return False
+
+
+def test_async_transaction_exit_cancellation_forces_sync_cleanup() -> None:
+    cm = _CancelOnExitCM()
+    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
+
+    async def run() -> None:
+        async with proxy.transaction():
+            pass
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(run())
+    # Cleanup was retried synchronously on the worker thread.
+    assert cm.calls == 2
+
+
+def test_async_transaction_exit_cancellation_fallback_failure_logged() -> None:
+    cm = _CancelOnExitCM(fallback_exc=RuntimeError("fallback fail"))
+    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
+
+    async def run() -> None:
+        async with proxy.transaction():
+            pass
+
+    # CancelledError still propagates even when the forced cleanup also fails.
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(run())
+    assert cm.calls == 2
 
 
 # =====================================================================

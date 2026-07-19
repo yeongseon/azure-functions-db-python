@@ -477,30 +477,28 @@ This package does **not** use SQLAlchemy `AsyncEngine` internally. If you need f
 
 ### Async writer transactions
 
-The async writer proxy injected by `@db.inject_writer` into `async def` handlers exposes `insert`, `insert_many`, `upsert`, `upsert_many`, and `close` — but **does not** expose a `transaction()` context manager. SQLAlchemy `Connection` / `Transaction` objects are not safe to share across threads, and `asyncio.to_thread` does not pin work to a single OS thread, so a per-call async transaction would silently break atomicity.
+The async writer proxy injected by `@db.inject_writer` into `async def` handlers exposes `insert`, `insert_many`, `upsert`, `upsert_many`, `update`, `delete`, `close`, and a `transaction()` async context manager for multi-statement atomicity.
 
-If you need multi-statement atomicity from an async handler, wrap the entire transactional unit in a single `asyncio.to_thread` call that drives a synchronous `DbWriter` end-to-end:
+Because SQLAlchemy `Connection` / `Transaction` objects are not safe to share across threads — and `asyncio.to_thread` does not pin work to a single OS thread — `transaction()` pins the **entire** transaction to one dedicated worker thread for the duration of the `async with` block. Every write issued through the yielded proxy is routed to that thread, so the underlying connection is only ever touched by a single thread. The transaction commits on normal exit and rolls back if the block raises:
 
 ```python
-import asyncio
-from azure_functions_db import DbWriter
+from azure_functions_db import DbBindings
+
+db = DbBindings()
 
 
-def _transfer(url: str) -> None:
-    writer = DbWriter(url=url, table="orders")
-    try:
-        with writer.transaction():
-            writer.insert(data={"id": 1, "status": "pending"})
-            writer.update(data={"status": "shipped"}, pk={"id": 1})
-    finally:
-        writer.close()
-
-
-async def handler() -> None:
-    await asyncio.to_thread(_transfer, "%DB_URL%")
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
+async def transfer(writer) -> None:
+    async with writer.transaction() as tx:
+        await tx.insert(data={"id": 1, "status": "pending"})
+        await tx.update(data={"status": "shipped"}, pk={"id": 1})
 ```
 
-A native async transaction context manager may be added in a future release.
+Notes:
+
+- Concurrent writes inside the block (e.g. via `asyncio.gather`) are **serialized** onto the pinned thread; a SQLAlchemy connection cannot be used concurrently even on one thread.
+- A commit failure surfaces as `WriteError`; a failure during rollback is logged and the original exception is preserved.
+- If you prefer to keep everything on a synchronous `DbWriter`, you can still wrap the whole unit in a single `asyncio.to_thread` call that drives `DbWriter.transaction()` end-to-end.
 
 ## `engine_kwargs` flow-through
 
@@ -553,6 +551,7 @@ trigger = PollTrigger(
 - **At-least-once** — default delivery guarantee with idempotency support ([ADR-004](docs/19-ADR-004-at-least-once-default.md))
 - **Unified package** — trigger + binding in one package ([ADR-005](docs/23-ADR-005-unified-package-design.md))
 - **Python wrapper, not native extension** — Python decorators over the timer trigger instead of a .NET Azure Functions extension ([ADR-006](docs/27-ADR-006-no-native-extension.md))
+- **Async transaction via pinned worker thread** — `async with writer.transaction()` pins the transaction to a single worker thread instead of adding native async drivers ([ADR-007](docs/29-ADR-007-async-writer-transaction.md))
 
 ## Duplicate Handling
 
