@@ -559,6 +559,93 @@ def _normalize_output_row(row: dict[str, object] | BaseModel) -> dict[str, objec
     return row
 
 
+def _finalize_wrapper(
+    wrapper: Callable[..., Any],
+    *,
+    fn: Callable[..., Any],
+    arg_name: str,
+    kind: str,
+    metadata: dict[str, Any],
+) -> Callable[..., Any]:
+    """Attach the host signature and toolkit metadata shared by every decorator."""
+    setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
+    _mark_decorator(wrapper, kind)
+    _merge_toolkit_metadata(wrapper, "db", metadata)
+    return wrapper
+
+
+def _wrap_handler(
+    fn: Callable[..., Any],
+    *,
+    kind: str,
+    arg_name: str,
+    metadata: dict[str, Any],
+    acquire: Callable[[], Any],
+    to_async_arg: Callable[[Any], Any],
+    to_sync_arg: Callable[[Any], Any],
+    release: Callable[[Any], None] | None = None,
+) -> Callable[..., Any]:
+    """Build a sync or async handler wrapper with uniform resource injection.
+
+    Detects ``inspect.iscoroutinefunction`` once and returns the matching
+    wrapper.  ``acquire`` runs per invocation to obtain the resource,
+    ``to_async_arg`` / ``to_sync_arg`` map it to the injected argument, and
+    ``release`` (when given) tears it down in a ``finally`` block.  When
+    ``release is None`` the ``try/finally`` is omitted so exception tracebacks
+    stay identical to a plain wrapper.
+    """
+    is_async = inspect.iscoroutinefunction(fn)
+
+    if release is None:
+        if is_async:
+
+            @functools.wraps(fn)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                kwargs[arg_name] = to_async_arg(acquire())
+                return await fn(*args, **kwargs)
+
+            return _finalize_wrapper(
+                async_wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
+            )
+
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            kwargs[arg_name] = to_sync_arg(acquire())
+            return fn(*args, **kwargs)
+
+        return _finalize_wrapper(
+            wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
+        )
+
+    if is_async:
+
+        @functools.wraps(fn)
+        async def async_wrapper_rel(*args: Any, **kwargs: Any) -> Any:
+            resource = acquire()
+            try:
+                kwargs[arg_name] = to_async_arg(resource)
+                return await fn(*args, **kwargs)
+            finally:
+                release(resource)
+
+        return _finalize_wrapper(
+            async_wrapper_rel, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
+        )
+
+    @functools.wraps(fn)
+    def wrapper_rel(*args: Any, **kwargs: Any) -> Any:
+        resource = acquire()
+        try:
+            kwargs[arg_name] = to_sync_arg(resource)
+            return fn(*args, **kwargs)
+        finally:
+            release(resource)
+
+    return _finalize_wrapper(
+        wrapper_rel, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
+    )
+
+
 class DbBindings:
     """Azure Functions-style decorator API for database integration.
 
@@ -902,6 +989,12 @@ class DbBindings:
                 finally:
                     reader.close()
 
+            input_metadata: dict[str, Any] = {
+                "version": 1,
+                "bindings": [binding_info],
+                "injections": [],
+            }
+
             if is_async:
 
                 @functools.wraps(fn)
@@ -911,18 +1004,13 @@ class DbBindings:
                     kwargs[arg_name] = _apply_input_model(data, model)
                     return await fn(*args, **kwargs)
 
-                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-                _mark_decorator(async_wrapper, "input")
-                _merge_toolkit_metadata(
+                return _finalize_wrapper(
                     async_wrapper,
-                    "db",
-                    {
-                        "version": 1,
-                        "bindings": [binding_info],
-                        "injections": [],
-                    },
+                    fn=fn,
+                    arg_name=arg_name,
+                    kind="input",
+                    metadata=input_metadata,
                 )
-                return async_wrapper
 
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -931,18 +1019,13 @@ class DbBindings:
                 kwargs[arg_name] = _apply_input_model(data, model)
                 return fn(*args, **kwargs)
 
-            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-            _mark_decorator(wrapper, "input")
-            _merge_toolkit_metadata(
+            return _finalize_wrapper(
                 wrapper,
-                "db",
-                {
-                    "version": 1,
-                    "bindings": [binding_info],
-                    "injections": [],
-                },
+                fn=fn,
+                arg_name=arg_name,
+                kind="input",
+                metadata=input_metadata,
             )
-            return wrapper
 
         return decorator
 
@@ -998,8 +1081,6 @@ class DbBindings:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _check_composition(fn, "output")
             _validate_arg_name(arg_name, fn, "output")
-            is_async = inspect.iscoroutinefunction(fn)
-
             out = DbOut(
                 url=url,
                 table=table,
@@ -1008,46 +1089,13 @@ class DbBindings:
                 conflict_columns=conflict_columns,
                 engine_provider=engine_provider,
             )
+            proxy = _AsyncDbOutProxy(out)
 
-            if is_async:
-                proxy = _AsyncDbOutProxy(out)
-
-                @functools.wraps(fn)
-                async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    kwargs[arg_name] = proxy
-                    return await fn(*args, **kwargs)
-
-                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-                _mark_decorator(async_wrapper, "output")
-                _merge_toolkit_metadata(
-                    async_wrapper,
-                    "db",
-                    {
-                        "version": 1,
-                        "bindings": [
-                            {
-                                "kind": "output",
-                                "parameter": arg_name,
-                                "connection_setting": url,
-                                "resource": {"table": table},
-                            }
-                        ],
-                        "injections": [],
-                    },
-                )
-                return async_wrapper
-
-            @functools.wraps(fn)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                kwargs[arg_name] = out
-                return fn(*args, **kwargs)
-
-            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-            _mark_decorator(wrapper, "output")
-            _merge_toolkit_metadata(
-                wrapper,
-                "db",
-                {
+            return _wrap_handler(
+                fn,
+                kind="output",
+                arg_name=arg_name,
+                metadata={
                     "version": 1,
                     "bindings": [
                         {
@@ -1059,8 +1107,10 @@ class DbBindings:
                     ],
                     "injections": [],
                 },
+                acquire=lambda: None,
+                to_async_arg=lambda _resource: proxy,
+                to_sync_arg=lambda _resource: out,
             )
-            return wrapper
 
         return decorator
 
@@ -1107,64 +1157,28 @@ class DbBindings:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _check_composition(fn, "inject_reader")
             _validate_arg_name(arg_name, fn, "inject_reader")
-            is_async = inspect.iscoroutinefunction(fn)
-
-            if is_async:
-
-                @functools.wraps(fn)
-                async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    reader = DbReader(
-                        url=url,
-                        table=table,
-                        schema=schema,
-                        engine_provider=engine_provider,
-                    )
-                    proxy = _AsyncDbReaderProxy(reader)
-                    try:
-                        kwargs[arg_name] = proxy
-                        return await fn(*args, **kwargs)
-                    finally:
-                        reader.close()
-
-                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-                _mark_decorator(async_wrapper, "inject_reader")
-                _merge_toolkit_metadata(
-                    async_wrapper,
-                    "db",
-                    {
-                        "version": 1,
-                        "bindings": [],
-                        "injections": [{"kind": "reader", "parameter": arg_name}],
-                    },
-                )
-                return async_wrapper
-
-            @functools.wraps(fn)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                reader = DbReader(
+            def _acquire() -> DbReader:
+                return DbReader(
                     url=url,
                     table=table,
                     schema=schema,
                     engine_provider=engine_provider,
                 )
-                try:
-                    kwargs[arg_name] = reader
-                    return fn(*args, **kwargs)
-                finally:
-                    reader.close()
 
-            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-            _mark_decorator(wrapper, "inject_reader")
-            _merge_toolkit_metadata(
-                wrapper,
-                "db",
-                {
+            return _wrap_handler(
+                fn,
+                kind="inject_reader",
+                arg_name=arg_name,
+                metadata={
                     "version": 1,
                     "bindings": [],
                     "injections": [{"kind": "reader", "parameter": arg_name}],
                 },
+                acquire=_acquire,
+                to_async_arg=lambda reader: _AsyncDbReaderProxy(reader),
+                to_sync_arg=lambda reader: reader,
+                release=lambda reader: reader.close(),
             )
-            return wrapper
 
         return decorator
 
@@ -1207,64 +1221,28 @@ class DbBindings:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _check_composition(fn, "inject_writer")
             _validate_arg_name(arg_name, fn, "inject_writer")
-            is_async = inspect.iscoroutinefunction(fn)
-
-            if is_async:
-
-                @functools.wraps(fn)
-                async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    writer = DbWriter(
-                        url=url,
-                        table=table,
-                        schema=schema,
-                        engine_provider=engine_provider,
-                    )
-                    proxy = _AsyncDbWriterProxy(writer)
-                    try:
-                        kwargs[arg_name] = proxy
-                        return await fn(*args, **kwargs)
-                    finally:
-                        writer.close()
-
-                setattr(async_wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-                _mark_decorator(async_wrapper, "inject_writer")
-                _merge_toolkit_metadata(
-                    async_wrapper,
-                    "db",
-                    {
-                        "version": 1,
-                        "bindings": [],
-                        "injections": [{"kind": "writer", "parameter": arg_name}],
-                    },
-                )
-                return async_wrapper
-
-            @functools.wraps(fn)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                writer = DbWriter(
+            def _acquire() -> DbWriter:
+                return DbWriter(
                     url=url,
                     table=table,
                     schema=schema,
                     engine_provider=engine_provider,
                 )
-                try:
-                    kwargs[arg_name] = writer
-                    return fn(*args, **kwargs)
-                finally:
-                    writer.close()
 
-            setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-            _mark_decorator(wrapper, "inject_writer")
-            _merge_toolkit_metadata(
-                wrapper,
-                "db",
-                {
+            return _wrap_handler(
+                fn,
+                kind="inject_writer",
+                arg_name=arg_name,
+                metadata={
                     "version": 1,
                     "bindings": [],
                     "injections": [{"kind": "writer", "parameter": arg_name}],
                 },
+                acquire=_acquire,
+                to_async_arg=lambda writer: _AsyncDbWriterProxy(writer),
+                to_sync_arg=lambda writer: writer,
+                release=lambda writer: writer.close(),
             )
-            return wrapper
 
         return decorator
 
