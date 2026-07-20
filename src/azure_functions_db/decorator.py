@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import functools
 import inspect
 import logging
-from typing import Any, Literal, cast
+from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -144,15 +144,36 @@ class DbOut:
             writer.close()
 
 
-class _AsyncDbOutProxy:
+_ProxyTargetT = TypeVar("_ProxyTargetT")
+_ProxyResultT = TypeVar("_ProxyResultT")
+
+
+class _AsyncProxyBase(Generic[_ProxyTargetT]):
+    """Base for async proxies that offload blocking calls to a worker thread.
+
+    Subclasses declare explicit, fully-typed async methods and delegate their
+    bodies to :meth:`_offload`.  This keeps each proxy's public surface and
+    method signatures intact (unlike a generic ``__getattr__`` proxy, which
+    would erase typing and leak withheld methods) while sharing the
+    construction and ``asyncio.to_thread`` offload boilerplate.
+    """
+
+    def __init__(self, target: _ProxyTargetT) -> None:
+        self._target = target
+
+    @staticmethod
+    async def _offload(
+        func: Callable[..., _ProxyResultT], /, *args: Any, **kwargs: Any
+    ) -> _ProxyResultT:
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+
+class _AsyncDbOutProxy(_AsyncProxyBase[DbOut]):
     """Async wrapper for :class:`DbOut` used in async handlers.
 
     Delegates ``.set()`` to a worker thread via ``asyncio.to_thread()``
     so the event loop stays free.
     """
-
-    def __init__(self, out: DbOut) -> None:
-        self._out = out
 
     async def set(
         self,
@@ -165,7 +186,7 @@ class _AsyncDbOutProxy:
         ),
     ) -> None:
         """Async version of :meth:`DbOut.set`."""
-        await asyncio.to_thread(self._out.set, data)
+        await self._offload(self._target.set, data)
 
 
 def _get_db_decorators(fn: Callable[..., Any]) -> frozenset[str]:
@@ -228,12 +249,9 @@ def _check_composition(fn: Callable[..., Any], name: str) -> None:
         raise ConfigurationError(msg)
 
 
-class _AsyncDbReaderProxy:
-    def __init__(self, reader: DbReader) -> None:
-        self._reader = reader
-
+class _AsyncDbReaderProxy(_AsyncProxyBase[DbReader]):
     async def get(self, *, pk: dict[str, object]) -> dict[str, object] | None:
-        return await asyncio.to_thread(self._reader.get, pk=pk)
+        return await self._offload(self._target.get, pk=pk)
 
     async def query(
         self,
@@ -241,7 +259,7 @@ class _AsyncDbReaderProxy:
         *,
         params: dict[str, object] | None = None,
     ) -> list[dict[str, object]]:
-        return await asyncio.to_thread(self._reader.query, sql, params=params)
+        return await self._offload(self._target.query, sql, params=params)
 
     async def scalar(
         self,
@@ -249,7 +267,7 @@ class _AsyncDbReaderProxy:
         *,
         params: dict[str, object] | None = None,
     ) -> object | None:
-        return await asyncio.to_thread(self._reader.scalar, sql, params=params)
+        return await self._offload(self._target.scalar, sql, params=params)
 
     async def one(
         self,
@@ -257,7 +275,7 @@ class _AsyncDbReaderProxy:
         *,
         params: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        return await asyncio.to_thread(self._reader.one, sql, params=params)
+        return await self._offload(self._target.one, sql, params=params)
 
     async def one_or_none(
         self,
@@ -265,13 +283,13 @@ class _AsyncDbReaderProxy:
         *,
         params: dict[str, object] | None = None,
     ) -> dict[str, object] | None:
-        return await asyncio.to_thread(self._reader.one_or_none, sql, params=params)
+        return await self._offload(self._target.one_or_none, sql, params=params)
 
     def close(self) -> None:
-        self._reader.close()
+        self._target.close()
 
 
-class _AsyncDbWriterProxy:
+class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
     """Async wrapper around :class:`DbWriter` for async handlers.
 
     Each write call is offloaded to a worker thread via
@@ -288,17 +306,14 @@ class _AsyncDbWriterProxy:
             await tx.update(data={...}, pk={...})
     """
 
-    def __init__(self, writer: DbWriter) -> None:
-        self._writer = writer
-
     async def insert(self, *, data: dict[str, object]) -> None:
-        await asyncio.to_thread(self._writer.insert, data=data)
+        await self._offload(self._target.insert, data=data)
 
     async def insert_many(self, *, rows: list[dict[str, object]]) -> None:
-        await asyncio.to_thread(self._writer.insert_many, rows=rows)
+        await self._offload(self._target.insert_many, rows=rows)
 
     async def upsert(self, *, data: dict[str, object], conflict_columns: list[str]) -> None:
-        await asyncio.to_thread(self._writer.upsert, data=data, conflict_columns=conflict_columns)
+        await self._offload(self._target.upsert, data=data, conflict_columns=conflict_columns)
 
     async def upsert_many(
         self,
@@ -306,12 +321,12 @@ class _AsyncDbWriterProxy:
         rows: list[dict[str, object]],
         conflict_columns: list[str],
     ) -> None:
-        await asyncio.to_thread(
-            self._writer.upsert_many, rows=rows, conflict_columns=conflict_columns
+        await self._offload(
+            self._target.upsert_many, rows=rows, conflict_columns=conflict_columns
         )
 
     def close(self) -> None:
-        self._writer.close()
+        self._target.close()
 
     @asynccontextmanager
     async def transaction(self) -> "AsyncIterator[_AsyncTxWriterProxy]":
@@ -338,7 +353,7 @@ class _AsyncDbWriterProxy:
         """
         loop = asyncio.get_running_loop()
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="db-tx")
-        cm = self._writer.transaction()
+        cm = self._target.transaction()
         try:
             await loop.run_in_executor(executor, cm.__enter__)
         except BaseException:
@@ -347,7 +362,7 @@ class _AsyncDbWriterProxy:
 
         try:
             try:
-                yield _AsyncTxWriterProxy(self._writer, loop, executor)
+                yield _AsyncTxWriterProxy(self._target, loop, executor)
             except BaseException as exc:
                 # Roll back on the pinned thread; preserve the original error.
                 await self._async_exit(
