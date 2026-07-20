@@ -7,10 +7,17 @@ from contextlib import asynccontextmanager
 import functools
 import inspect
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 
+from ._metadata import (
+    METADATA_ATTR,
+    NAMESPACE,
+    DbMetadata,
+    merge_db_metadata,
+    read_db_metadata,
+)
 from .binding.reader import DbReader
 from .binding.writer import DbWriter
 from .core.engine import EngineProvider
@@ -26,7 +33,7 @@ logger = logging.getLogger(__name__)
 # Parameter names reserved by Azure Functions runtime.
 _RESERVED_ARGS = frozenset({"timer", "req", "context", "msg", "input", "output"})
 _DB_DECORATOR_ATTR = "_db_decorators"
-_TOOLKIT_META_ATTR = "_azure_functions_metadata"
+_TOOLKIT_META_ATTR = METADATA_ATTR
 
 
 class DbOut:
@@ -175,23 +182,20 @@ def _mark_decorator(fn: Callable[..., Any], name: str) -> None:
 def _merge_toolkit_metadata(
     fn: Callable[..., Any], namespace: str, payload: dict[str, Any],
 ) -> None:
-    """Merge toolkit metadata into the convention attribute, preserving other namespaces."""
-    existing: dict[str, Any] = getattr(fn, _TOOLKIT_META_ATTR, {})
+    """Merge toolkit metadata into the convention attribute, preserving other namespaces.
+
+    Backward-compatible shim delegating to the typed :func:`merge_db_metadata`
+    for the ``db`` namespace.
+    """
+    if namespace == NAMESPACE:
+        merge_db_metadata(fn, cast(DbMetadata, payload))
+        return
+
+    existing: dict[str, Any] = getattr(fn, METADATA_ATTR, {})
     if not isinstance(existing, dict):
         existing = {}
-
-    if namespace in existing and isinstance(existing[namespace], dict):
-        old = existing[namespace]
-        merged_payload = {**payload}
-        if "bindings" in old and "bindings" in payload:
-            merged_payload["bindings"] = old["bindings"] + payload["bindings"]
-        if "injections" in old and "injections" in payload:
-            merged_payload["injections"] = old["injections"] + payload["injections"]
-        existing = {**existing, namespace: merged_payload}
-    else:
-        existing = {**existing, namespace: payload}
-
-    setattr(fn, _TOOLKIT_META_ATTR, existing)
+    existing = {**existing, namespace: payload}
+    setattr(fn, METADATA_ATTR, existing)
 
 
 def _check_composition(fn: Callable[..., Any], name: str) -> None:
@@ -1270,9 +1274,5 @@ def get_db_metadata(func: Any) -> dict[str, Any] | None:
 
     Returns None if the function has no db metadata attached.
     """
-    toolkit_meta = getattr(func, _TOOLKIT_META_ATTR, None)
-    if isinstance(toolkit_meta, dict):
-        db_meta = toolkit_meta.get("db")
-        if isinstance(db_meta, dict):
-            return db_meta
-    return None
+    meta = read_db_metadata(func)
+    return dict(meta) if meta is not None else None
