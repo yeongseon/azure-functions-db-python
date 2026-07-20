@@ -97,7 +97,6 @@ class _TickState:
     lease_id: str = ""
     checkpoint: dict[str, object] = field(default_factory=dict)
     cursor: CursorValue | None = None
-    descriptor: SourceDescriptor | None = None
     base_labels: dict[str, str] = field(default_factory=dict)
     total_processed: int = 0
     batch_idx: int = 0
@@ -355,8 +354,9 @@ class PollRunner:
             },
         )
 
-    def _fetch_batch(self, ctx: _TickState) -> Sequence[RawRecord] | None:
-        assert ctx.descriptor is not None
+    def _fetch_batch(
+        self, ctx: _TickState, descriptor: SourceDescriptor
+    ) -> Sequence[RawRecord] | None:
 
         def _fetch() -> Sequence[RawRecord]:
             fetch_started_monotonic = time.monotonic()
@@ -374,12 +374,12 @@ class PollRunner:
             invocation_id=ctx.invocation_id,
             extra_fields={
                 "batch_id": ctx.batch_id,
-                "source": ctx.descriptor.name,
+                "source": descriptor.name,
                 "batch_size": self._batch_size,
                 "checkpoint_before": ctx.checkpoint,
                 "lease_owner": ctx.lease_id,
             },
-            source=ctx.descriptor.name,
+            source=descriptor.name,
         )
         if not raw_records:
             logger.debug(
@@ -391,7 +391,7 @@ class PollRunner:
                     poller_name=self._name,
                     invocation_id=ctx.invocation_id,
                     batch_id=ctx.batch_id,
-                    source=ctx.descriptor.name,
+                    source=descriptor.name,
                     fetched_count=0,
                 ),
             )
@@ -399,10 +399,11 @@ class PollRunner:
         return raw_records
 
     def _normalize_batch(
-        self, ctx: _TickState, raw_records: Sequence[RawRecord]
+        self,
+        ctx: _TickState,
+        descriptor: SourceDescriptor,
+        raw_records: Sequence[RawRecord],
     ) -> list[RowChange]:
-        descriptor = ctx.descriptor
-        assert descriptor is not None
         return self._run_stage(
             lambda: [
                 self._normalizer(record, descriptor) for record in raw_records
@@ -426,12 +427,11 @@ class PollRunner:
     def _invoke_handler_stage(
         self,
         ctx: _TickState,
+        descriptor: SourceDescriptor,
         events: list[RowChange],
         context: PollContext,
         new_checkpoint: dict[str, object],
     ) -> None:
-        descriptor = ctx.descriptor
-        assert descriptor is not None
 
         def _invoke() -> None:
             handler_started_monotonic = time.monotonic()
@@ -471,17 +471,17 @@ class PollRunner:
     def _commit_log_extra(
         self,
         ctx: _TickState,
+        descriptor: SourceDescriptor,
         events: list[RowChange],
         new_checkpoint: dict[str, object],
         error_type: str,
     ) -> dict[str, object]:
-        assert ctx.descriptor is not None
         return build_log_fields(
             event="commit_failed",
             poller_name=self._name,
             invocation_id=ctx.invocation_id,
             batch_id=ctx.batch_id,
-            source=ctx.descriptor.name,
+            source=descriptor.name,
             fetched_count=len(events),
             batch_size=self._batch_size,
             committed=False,
@@ -497,10 +497,10 @@ class PollRunner:
     def _commit_checkpoint(
         self,
         ctx: _TickState,
+        descriptor: SourceDescriptor,
         events: list[RowChange],
         new_checkpoint: dict[str, object],
     ) -> None:
-        assert ctx.descriptor is not None
         try:
             commit_started_monotonic = time.monotonic()
             self._state_store.commit_checkpoint(
@@ -515,12 +515,12 @@ class PollRunner:
                 self._name,
                 ctx.batch_id,
                 extra=self._commit_log_extra(
-                    ctx, events, new_checkpoint, "LostLeaseError"
+                    ctx, descriptor, events, new_checkpoint, "LostLeaseError"
                 ),
             )
             self._emit_failure_metrics(
                 LostLeaseError("Lost lease during commit"),
-                source=ctx.descriptor.name,
+                source=descriptor.name,
             )
             raise
         except Exception as exc:
@@ -529,10 +529,10 @@ class PollRunner:
                 self._name,
                 ctx.batch_id,
                 extra=self._commit_log_extra(
-                    ctx, events, new_checkpoint, type(exc).__name__
+                    ctx, descriptor, events, new_checkpoint, type(exc).__name__
                 ),
             )
-            self._emit_failure_metrics(exc, source=ctx.descriptor.name)
+            self._emit_failure_metrics(exc, source=descriptor.name)
             raise CommitError(
                 f"Checkpoint commit failed for poller '{self._name}'"
                 f" batch '{ctx.batch_id}'"
@@ -630,16 +630,17 @@ class PollRunner:
                     pass
         return lag_seconds
 
-    def _process_batch(self, ctx: _TickState) -> bool:
+    def _process_batch(
+        self, ctx: _TickState, descriptor: SourceDescriptor
+    ) -> bool:
         """Process a single batch. Returns ``False`` to stop the tick loop."""
-        assert ctx.descriptor is not None
         ctx.batch_id = f"{ctx.invocation_id}-{ctx.batch_idx}"
 
-        raw_records = self._fetch_batch(ctx)
+        raw_records = self._fetch_batch(ctx, descriptor)
         if raw_records is None:
             return False
 
-        events = self._normalize_batch(ctx, raw_records)
+        events = self._normalize_batch(ctx, descriptor, raw_records)
 
         last_event = events[-1]
         new_checkpoint: dict[str, object] = {
@@ -655,11 +656,11 @@ class PollRunner:
             checkpoint_before=ctx.checkpoint,
             checkpoint_after_candidate=new_checkpoint,
             tick_started_at=ctx.tick_started_at,
-            source_name=ctx.descriptor.name,
+            source_name=descriptor.name,
         )
 
-        self._invoke_handler_stage(ctx, events, context, new_checkpoint)
-        self._commit_checkpoint(ctx, events, new_checkpoint)
+        self._invoke_handler_stage(ctx, descriptor, events, context, new_checkpoint)
+        self._commit_checkpoint(ctx, descriptor, events, new_checkpoint)
         self._emit_success_metrics(ctx, events)
         lag_seconds = self._compute_lag(ctx, new_checkpoint)
 
@@ -678,7 +679,7 @@ class PollRunner:
                 poller_name=self._name,
                 invocation_id=ctx.invocation_id,
                 batch_id=ctx.batch_id,
-                source=ctx.descriptor.name,
+                source=descriptor.name,
                 fetched_count=len(events),
                 committed=True,
                 checkpoint_before=old_checkpoint,
@@ -719,15 +720,15 @@ class PollRunner:
         try:
             ctx.checkpoint = self._load_checkpoint(ctx)
             ctx.cursor = _extract_cursor(ctx.checkpoint)
-            ctx.descriptor = self._resolve_source_descriptor(ctx)
+            descriptor = self._resolve_source_descriptor(ctx)
             ctx.base_labels = {
                 "poller_name": self._name,
-                "source": ctx.descriptor.name,
+                "source": descriptor.name,
             }
 
             for batch_idx in range(self._max_batches_per_tick):
                 ctx.batch_idx = batch_idx
-                if not self._process_batch(ctx):
+                if not self._process_batch(ctx, descriptor):
                     break
 
             tick_duration_ms = round(
