@@ -8,6 +8,39 @@ from sqlalchemy.schema import MetaData, Table
 from .config import resolve_env_vars
 
 
+def reflect_table(
+    *,
+    engine: Engine,
+    url: str,
+    schema: str | None,
+    table_name: str,
+    error_cls: type[Exception],
+) -> Table:
+    """Reflect *table_name* through the shared metadata cache and return it.
+
+    Shared by ``DbReader``, ``DbWriter``, and ``SqlAlchemySource``.  Raises an
+    instance of *error_cls* when reflection fails or the table is not found so
+    each caller keeps its domain-specific error type.
+    """
+    cache = get_metadata_cache()
+    try:
+        table = cache.get_or_reflect(
+            engine=engine,
+            url=url,
+            schema=schema,
+            table_name=table_name,
+        )
+    except Exception as exc:
+        msg = f"Failed to reflect table '{table_name}'"
+        raise error_cls(msg) from exc
+
+    key = f"{schema}.{table_name}" if schema else table_name
+    if table is None:
+        msg = f"Table '{key}' not found in database"
+        raise error_cls(msg)
+    return table
+
+
 class MetadataCache:
     def __init__(self) -> None:
         self._lock: threading.Lock = threading.Lock()

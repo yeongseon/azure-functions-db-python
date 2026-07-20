@@ -15,7 +15,7 @@ from sqlalchemy.sql import and_, literal_column, or_, select, text
 from ..core.config import DbConfig, resolve_env_vars
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError
-from ..core.metadata import get_metadata_cache
+from ..core.metadata import reflect_table
 from ..core.types import CursorValue, RawRecord, SourceDescriptor
 from ..trigger.errors import FetchError, SourceConfigurationError
 
@@ -198,24 +198,15 @@ class SqlAlchemySource:
         assert self._engine is not None  # noqa: S101  # nosec B101
         assert self._table_name is not None  # noqa: S101  # nosec B101
 
-        cache = get_metadata_cache()
-        try:
-            table = cache.get_or_reflect(
-                engine=self._engine,
-                url=self._url,
-                schema=self._schema,
-                table_name=self._table_name,
-            )
-        except Exception as exc:
-            msg = f"Failed to reflect table '{self._table_name}'"
-            raise SourceConfigurationError(msg) from exc
+        self._table = reflect_table(
+            engine=self._engine,
+            url=self._url,
+            schema=self._schema,
+            table_name=self._table_name,
+            error_cls=SourceConfigurationError,
+        )
 
         key = f"{self._schema}.{self._table_name}" if self._schema else self._table_name
-        if table is None:
-            msg = f"Table '{key}' not found in database"
-            raise SourceConfigurationError(msg)
-
-        self._table = table
         assert self._table is not None  # noqa: S101  # nosec B101
 
         table_columns = {c.name for c in self._table.columns}

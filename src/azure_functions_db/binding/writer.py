@@ -14,7 +14,7 @@ from sqlalchemy.sql import and_, delete, update
 from ..core.config import DbConfig, resolve_env_vars
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError, DbConnectionError, WriteError
-from ..core.metadata import get_metadata_cache
+from ..core.metadata import reflect_table
 from ..core.validation import validate_pk_columns
 
 logger = logging.getLogger(__name__)
@@ -258,7 +258,7 @@ class DbWriter:
         assert self._table is not None  # noqa: S101  # nosec B101
 
         self._validate_data_columns(data)
-        self._validate_pk_columns(pk)
+        validate_pk_columns(self._table, self._table_name, pk)
 
         try:
             conditions = [self._table.c[col] == val for col, val in pk.items()]
@@ -280,7 +280,7 @@ class DbWriter:
         assert self._engine is not None  # noqa: S101  # nosec B101
         assert self._table is not None  # noqa: S101  # nosec B101
 
-        self._validate_pk_columns(pk)
+        validate_pk_columns(self._table, self._table_name, pk)
 
         try:
             conditions = [self._table.c[col] == val for col, val in pk.items()]
@@ -412,25 +412,13 @@ class DbWriter:
 
     def _reflect_table(self) -> None:
         assert self._engine is not None  # noqa: S101  # nosec B101
-
-        cache = get_metadata_cache()
-        try:
-            table = cache.get_or_reflect(
-                engine=self._engine,
-                url=self._url,
-                schema=self._schema,
-                table_name=self._table_name,
-            )
-        except Exception as exc:
-            msg = f"Failed to reflect table '{self._table_name}'"
-            raise ConfigurationError(msg) from exc
-
-        key = f"{self._schema}.{self._table_name}" if self._schema else self._table_name
-        if table is None:
-            msg = f"Table '{key}' not found in database"
-            raise ConfigurationError(msg)
-
-        self._table = table
+        self._table = reflect_table(
+            engine=self._engine,
+            url=self._url,
+            schema=self._schema,
+            table_name=self._table_name,
+            error_cls=ConfigurationError,
+        )
 
     def _validate_data_columns(self, data: dict[str, object]) -> None:
         assert self._table is not None  # noqa: S101  # nosec B101
@@ -444,11 +432,6 @@ class DbWriter:
         if unknown:
             msg = f"Unknown columns in data: {sorted(unknown)}"
             raise ConfigurationError(msg)
-
-    def _validate_pk_columns(self, pk: dict[str, object]) -> None:
-        """Validate that *pk* keys exactly match the table's primary key columns."""
-        assert self._table is not None  # noqa: S101  # nosec B101
-        validate_pk_columns(self._table, self._table_name, pk)
 
     def _validate_conflict_columns(self, conflict_columns: list[str]) -> None:
         assert self._table is not None  # noqa: S101  # nosec B101
