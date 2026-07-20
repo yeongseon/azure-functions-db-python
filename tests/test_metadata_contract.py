@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from azure_functions_db import _metadata
 from azure_functions_db._metadata import (
     DB_METADATA_VERSION,
@@ -12,7 +14,7 @@ from azure_functions_db._metadata import (
 )
 
 
-def _handler() -> object:
+def _handler() -> Any:
     def fn() -> None: ...
 
     return fn
