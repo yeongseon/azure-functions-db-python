@@ -2,12 +2,12 @@
 
 > Part of the **Azure Functions Python DX Toolkit** — dogfood-tested by [azure-functions-cookbook-python](https://github.com/yeongseon/azure-functions-cookbook-python).
 
-
 [![PyPI](https://img.shields.io/pypi/v/azure-functions-db.svg)](https://pypi.org/project/azure-functions-db/)
 [![Downloads](https://static.pepy.tech/badge/azure-functions-db/month)](https://pepy.tech/project/azure-functions-db)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db/)
 [![CI](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/ci-test.yml)
 [![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
+[![Security Scans](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/security.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/security.yml)
 [![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
@@ -90,6 +90,9 @@ Use the **official Azure SQL bindings** when:
 | **Bring your own SQLAlchemy database** | Oracle, CockroachDB, DuckDB, or any other RDBMS with a SQLAlchemy dialect | Install the driver, use the SQLAlchemy connection URL |
 | **Custom trigger source** *(triggers only)* | Non-SQL sources (MongoDB, Kafka, REST APIs) | Implement the `SourceAdapter` Protocol for `db.trigger()` |
 
+<details>
+<summary><strong>Bring your own database &amp; custom trigger sources</strong></summary>
+
 ### Bring your own database
 
 The bindings and `SqlAlchemySource` are designed to work with **any database that has a SQLAlchemy dialect**. The built-in extras just bundle common drivers for convenience.
@@ -134,9 +137,9 @@ source = SqlAlchemySource(
 
 If your data source has no SQLAlchemy dialect, implement the [`SourceAdapter`](docs/05-adapter-sdk.md) protocol and pass it directly to `db.trigger(source=...)`. This applies only to the trigger feature. See the [Adapter SDK](docs/05-adapter-sdk.md) for the full contract.
 
-## Shared Core
+</details>
 
-`azure-functions-db-python` now exposes shared infrastructure for upcoming bindings. Use `DbConfig` for normalized connection settings and `EngineProvider` when multiple components should reuse the same lazily created SQLAlchemy engine.
+
 
 ## Installation
 
@@ -162,6 +165,30 @@ azure-functions-db[postgres]
 
 ## Quick Start
 
+The fastest path — read rows with `@db.input`, write rows with `@db.output`:
+
+```python
+from azure_functions_db import DbBindings, DbOut
+
+db = DbBindings()
+
+# Read: inject query results straight into your handler
+@db.input("users", url="%DB_URL%",
+          query="SELECT * FROM users WHERE active = :active",
+          params={"active": True})
+def list_active_users(users: list[dict]) -> None:
+    for user in users:
+        print(user["email"])
+
+# Write: call .set() on the injected DbOut writer
+@db.output("out", url="%DB_URL%", table="orders")
+def create_order(out: DbOut) -> str:
+    out.set({"id": 1, "status": "pending", "total": 99.99})
+    return "Created"
+```
+
+> New here? The snippet above is the 80% case. The reference below breaks down every decorator, plus plumbing and advanced patterns.
+
 ### Which decorator to use?
 
 | Need | Decorator | Mode |
@@ -173,6 +200,28 @@ azure-functions-db[postgres]
 | React to DB changes | `trigger` | Poll-based pseudo trigger |
 
 > All decorators are Python function wrappers. They are **not** registered as native Azure Functions bindings with the host.
+
+<details>
+<summary><strong>Plumbing: attaching to an Azure Functions handler</strong></summary>
+
+The decorator snippets below show only the binding decorator. In a real Function App you stack them on top of a native Azure Functions trigger (`@app.route`, `@app.schedule`, …):
+
+```python
+import azure.functions as func
+from azure_functions_db import DbBindings, DbOut
+
+app = func.FunctionApp()
+db = DbBindings()
+
+@app.function_name(name="create_order")
+@app.route(route="orders", auth_level=func.AuthLevel.FUNCTION)
+@db.output("out", url="%DB_URL%", table="orders")
+def create_order(req: func.HttpRequest, out: DbOut) -> func.HttpResponse:
+    out.set({"id": 1, "status": "pending"})
+    return func.HttpResponse("Created", status_code=201)
+```
+
+</details>
 
 ### Input-style data injection
 
@@ -316,36 +365,7 @@ Notes:
 
 #### Poll-trigger lifecycle
 
-One `PollRunner.tick()` per timer fire, using the concrete default components (`BlobCheckpointStore` + `SqlAlchemySource`):
-
-```mermaid
-sequenceDiagram
-    participant Timer as Azure Timer Trigger
-    participant PT as PollTrigger
-    participant PR as PollRunner
-    participant CS as BlobCheckpointStore
-    participant SRC as SqlAlchemySource
-    participant DB as Database
-    participant H as Handler
-
-    Timer->>PT: PollTrigger.run(timer, handler)
-    PT->>PR: tick()
-    PR->>CS: acquire_lease()
-    CS-->>PR: lease_id
-    PR->>CS: load_checkpoint()
-    CS-->>PR: last cursor
-    PR->>SRC: fetch(cursor, batch_size)
-    SRC->>DB: SELECT ... WHERE cursor_column > :cursor
-    DB-->>SRC: changed rows
-    SRC-->>PR: raw records (dicts)
-    PR->>PR: normalize records → RowChange events
-    PR->>H: handler(events)
-    H-->>PR: success
-    PR->>CS: commit_checkpoint(checkpoint, lease_id)
-    Note over PR,CS: at-least-once — commit after handler success;<br/>a crash before commit re-delivers the batch
-```
-
-> The full architecture reference (with `StateStore` / `SourceAdapter` protocol names) lives in [Architecture — Trigger Flow](docs/02-architecture.md#trigger-flow-poll-based-change-detection).
+One `PollRunner.tick()` runs per timer fire, using the concrete default components (`BlobCheckpointStore` + `SqlAlchemySource`). The step-by-step sequence diagram — plus the `StateStore` / `SourceAdapter` protocol names — lives in [Architecture — Trigger Flow](docs/02-architecture.md#trigger-flow-poll-based-change-detection).
 
 ```python
 import azure.functions as func
@@ -381,6 +401,8 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
 ```
 
 > See [Python API Spec](docs/04-python-api-spec.md) for the full API reference.
+
+## Advanced
 
 ### Combined: Trigger + writer injection
 
