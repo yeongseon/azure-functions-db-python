@@ -23,6 +23,8 @@ classifiers = [
 ]
 
 dependencies = [
+    # Cap below 2.0.0: azure-functions v2 may change worker function-indexing
+    # behavior the toolkit relies on. See knowledge#46 / dx#8.
     "azure-functions>=1.22.0,<2.0.0",
     "sqlalchemy>=2.0",
     "azure-storage-blob>=12.21.0",
