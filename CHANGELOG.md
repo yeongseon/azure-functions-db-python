@@ -1,6 +1,48 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.5.0] - 2026-08-09
+
+### Documentation
+
+- Require translation sync in the same PR as English changes (Closes #219) (#220) 
+- Lead Quick Start with runnable snippet, fold prose, add Security Scans badge (#217) (#218) 
+- Add positioning blog draft (Closes #107) (#206) 
+- Add SQL Server poll-trigger docker-compose example (#205) 
+- Add managed-identity Azure SQL example (#204) 
+- Sync async-handler rejection wording to i18n READMEs (#203) 
+
+### Features
+
+- *(async)* Native async writer transaction context manager (#207) 
+
+### Miscellaneous Tasks
+
+- *(deps)* Cap azure-functions below 2.0.0 (#227) 
+- *(deps)* Bump codeql-action init+analyze to 4.37.4 atomically 
+- *(deps)* Bump actions/stale from 10.4.0 to 11.0.0 (#221) 
+- *(deps)* Bump ruff from 0.15.22 to 0.16.1 (#224) 
+- Track issue priority via priority:* labels instead of body line (#223) 
+- *(deps)* Bump github/codeql-action/init from 4.37.1 to 4.37.3 (#214) 
+- *(deps)* Bump actions/checkout from 7.0.0 to 7.0.1 (#216) 
+- *(deps)* Bump actions/setup-python from 6.3.0 to 7.0.0 (#215) 
+
+### Other
+
+- Bump version to 0.5.0 
+
+### Refactor
+
+- *(decorator)* Collapse async proxy classes (#196) (#212) 
+- *(binding)* Extract shared reflect_table helper (#196) (#211) 
+- *(decorator)* Collapse sync/async wrapper duplication (#196) (#210) 
+- *(runner)* Decompose PollRunner.tick() into per-stage methods (#209) 
+- *(metadata)* Type the db cross-package metadata contract (#208) 
+- *(binding)* Extract shared validate_pk_columns helper (#202) 
+
+### Testing
+
+- *(docs)* Guard pip install token against canonical project name (#201) 
 ## [0.4.4] - 2026-07-18
 
 ### Bug Fixes
@@ -14,6 +56,7 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
+- Update changelog 
 - Enable mermaid rendering and add canonical poll-trigger diagram (#194) 
 - Canonicalize pip install token and clarify async-handler semantics (#193) 
 - Add discoverability metadata (pepy badge + llms.txt) (#200) 
