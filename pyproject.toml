@@ -23,7 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "azure-functions>=1.22.0",
+    "azure-functions>=1.22.0,<2.0.0",
     "sqlalchemy>=2.0",
     "azure-storage-blob>=12.21.0",
     "pydantic>=2.7",
