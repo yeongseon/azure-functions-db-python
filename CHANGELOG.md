@@ -1,10 +1,20 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.5.1] - 2026-08-11
+
+### Documentation
+
+- *(release)* Require cookbook dogfood verification after publish 
+
+### Other
+
+- Bump version to 0.5.1 
 ## [0.5.0] - 2026-08-09
 
 ### Documentation
 
+- Update changelog 
 - Require translation sync in the same PR as English changes (Closes #219) (#220) 
 - Lead Quick Start with runnable snippet, fold prose, add Security Scans badge (#217) (#218) 
 - Add positioning blog draft (Closes #107) (#206) 
