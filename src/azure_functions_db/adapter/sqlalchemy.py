@@ -126,7 +126,7 @@ class SqlAlchemySource:
     def _compute_name(self) -> str:
         if self._table_name:
             return self._table_name
-        assert self._query is not None  # noqa: S101  # nosec B101
+        assert self._query is not None  # nosec B101
         query_hash = hashlib.sha256(self._query.encode()).hexdigest()[:12]
         return f"query_{query_hash}"
 
@@ -195,8 +195,8 @@ class SqlAlchemySource:
 
     def _reflect_table(self) -> None:
         """Reflect table metadata and validate that required columns exist."""
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table_name is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table_name is not None  # nosec B101
 
         self._table = reflect_table(
             engine=self._engine,
@@ -207,7 +207,7 @@ class SqlAlchemySource:
         )
 
         key = f"{self._schema}.{self._table_name}" if self._schema else self._table_name
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         table_columns = {c.name for c in self._table.columns}
         required = {self._cursor_column, *self._pk_columns}
@@ -244,7 +244,7 @@ class SqlAlchemySource:
         Returns an empty sequence when no new records are available.
         """
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
 
         try:
             stmt = self._build_query(cursor, batch_size)
@@ -264,7 +264,7 @@ class SqlAlchemySource:
         return self._build_raw_query(cursor, batch_size)
 
     def _build_table_query(self, cursor: CursorValue | None, batch_size: int) -> Any:
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         stmt = select(self._table)
 
@@ -287,7 +287,7 @@ class SqlAlchemySource:
         return stmt
 
     def _build_raw_query(self, cursor: CursorValue | None, batch_size: int) -> Any:
-        assert self._query is not None  # noqa: S101  # nosec B101
+        assert self._query is not None  # nosec B101
 
         subq = text(self._query).columns().subquery("source")
 
@@ -313,7 +313,7 @@ class SqlAlchemySource:
 
     def _build_cursor_filter_table(self, cursor: CursorValue) -> Any:
         """Build lexicographic cursor predicate for table mode."""
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         cols_values = self._cursor_cols_values(cursor)
         col_exprs = [self._table.c[name] for name, _ in cols_values]

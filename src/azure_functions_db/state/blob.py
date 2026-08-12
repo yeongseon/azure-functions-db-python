@@ -39,7 +39,7 @@ def _effective_grace(ttl_seconds: int) -> float:
 def _parse_lease_id(lease_id: str) -> tuple[str, int]:
     """Split ``owner_id:fencing_token`` into its parts."""
     parts = lease_id.rsplit(":", maxsplit=1)
-    if len(parts) != 2:  # noqa: PLR2004
+    if len(parts) != 2:
         msg = f"Invalid lease_id format: {lease_id!r}"
         raise ValueError(msg)
     owner_id, token_str = parts
@@ -301,7 +301,7 @@ class BlobCheckpointStore:
         try:
             self._write_state_conditional(poller_name, state, etag)
         except HttpResponseError as exc:
-            if exc.status_code == 412:  # noqa: PLR2004
+            if exc.status_code == 412:
                 raise LeaseConflictError(
                     f"CAS conflict acquiring lease for poller '{poller_name}'"
                 ) from exc
@@ -338,7 +338,7 @@ class BlobCheckpointStore:
         try:
             self._write_state_conditional(poller_name, state, etag)
         except HttpResponseError as exc:
-            if exc.status_code == 412:  # noqa: PLR2004
+            if exc.status_code == 412:
                 raise LostLeaseError(
                     f"CAS conflict renewing lease for poller '{poller_name}'"
                 ) from exc
@@ -369,7 +369,7 @@ class BlobCheckpointStore:
         try:
             self._write_state_conditional(poller_name, state, etag)
         except HttpResponseError as exc:
-            if exc.status_code == 412:  # noqa: PLR2004
+            if exc.status_code == 412:
                 raise LostLeaseError(
                     f"CAS conflict releasing lease for poller '{poller_name}'"
                 ) from exc
@@ -413,7 +413,7 @@ class BlobCheckpointStore:
         try:
             self._write_state_conditional(poller_name, state, etag)
         except HttpResponseError as exc:
-            if exc.status_code == 412:  # noqa: PLR2004
+            if exc.status_code == 412:
                 raise LostLeaseError(
                     f"CAS conflict committing checkpoint for poller '{poller_name}'"
                 ) from exc
