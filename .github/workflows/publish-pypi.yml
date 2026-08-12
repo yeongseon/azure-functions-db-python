@@ -59,6 +59,22 @@ jobs:
           pip install hatch
           hatch build --clean
 
+      - name: Verify built wheel is non-empty and importable
+        run: |
+          set -euo pipefail
+          WHEEL=$(ls dist/*.whl)
+          echo "Inspecting $WHEEL"
+          MODCOUNT=$(python -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(len([n for n in z.namelist() if n.endswith('.py')]))" "$WHEEL")
+          echo "Wheel contains $MODCOUNT .py modules"
+          if [ "$MODCOUNT" -eq 0 ]; then
+            echo "::error ::Built wheel is EMPTY (0 .py modules) — refusing to publish"
+            exit 1
+          fi
+          python -m venv /tmp/verify-wheel
+          /tmp/verify-wheel/bin/pip install --upgrade pip
+          /tmp/verify-wheel/bin/pip install "$WHEEL"
+          /tmp/verify-wheel/bin/python -c "import azure_functions_db; print('import OK', azure_functions_db.__version__)"
+
       - name: Publish to PyPI
         # Documented exception to the SHA-pinning policy: PyPA officially
         # recommends pinning to the rolling `release/v1` branch. See
