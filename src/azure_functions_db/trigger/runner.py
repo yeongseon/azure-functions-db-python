@@ -187,7 +187,7 @@ class PollRunner:
         max_attempts = 1 if policy is None else policy.max_retries + 1
         for attempt in range(max_attempts):
             try:
-                if self._handler_arity >= 2:  # noqa: PLR2004
+                if self._handler_arity >= 2:
                     self._handler(events, context)
                 else:
                     self._handler(events)

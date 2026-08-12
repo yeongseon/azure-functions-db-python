@@ -100,8 +100,8 @@ class DbReader:
             raise ConfigurationError(msg)
 
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         validate_pk_columns(self._table, self._table_name, pk)
 
@@ -165,7 +165,7 @@ class DbReader:
                 stacklevel=2,
             )
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
 
         try:
             stmt = text(sql)
@@ -222,7 +222,7 @@ class DbReader:
                 stacklevel=2,
             )
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
 
         try:
             stmt = text(sql)
@@ -339,7 +339,7 @@ class DbReader:
     ) -> list[dict[str, object]]:
         """Execute *sql* and return up to two rows as dicts."""
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
 
         try:
             stmt = text(sql)
@@ -418,8 +418,8 @@ class DbReader:
 
     def _reflect_table(self) -> None:
         """Reflect table metadata and cache the Table object."""
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table_name is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table_name is not None  # nosec B101
         self._table = reflect_table(
             engine=self._engine,
             url=self._url,

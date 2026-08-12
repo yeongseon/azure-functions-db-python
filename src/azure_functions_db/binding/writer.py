@@ -104,7 +104,7 @@ class DbWriter:
             raise WriteError(msg)
 
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
 
         try:
             conn = self._engine.connect()
@@ -156,8 +156,8 @@ class DbWriter:
         database errors.
         """
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         self._validate_data_columns(data)
 
@@ -176,8 +176,8 @@ class DbWriter:
             return
 
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         for row in rows:
             self._validate_data_columns(row)
@@ -203,8 +203,8 @@ class DbWriter:
         raise :class:`ConfigurationError`.
         """
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         self._validate_data_columns(data)
         self._validate_conflict_columns(conflict_columns)
@@ -230,8 +230,8 @@ class DbWriter:
             return
 
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         for row in rows:
             self._validate_data_columns(row)
@@ -254,8 +254,8 @@ class DbWriter:
         This is a no-op if no row matches the given *pk* (idempotent).
         """
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         self._validate_data_columns(data)
         validate_pk_columns(self._table, self._table_name, pk)
@@ -277,8 +277,8 @@ class DbWriter:
         This is a no-op if no row matches the given *pk* (idempotent).
         """
         self._ensure_initialized()
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         validate_pk_columns(self._table, self._table_name, pk)
 
@@ -367,7 +367,7 @@ class DbWriter:
         Outside, each operation gets its own short-lived ``engine.begin()``
         transaction, preserving the previous behavior.
         """
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
 
         if self._tx_conn is not None:
             yield self._tx_conn
@@ -411,7 +411,7 @@ class DbWriter:
         self._initialized = True
 
     def _reflect_table(self) -> None:
-        assert self._engine is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
         self._table = reflect_table(
             engine=self._engine,
             url=self._url,
@@ -421,7 +421,7 @@ class DbWriter:
         )
 
     def _validate_data_columns(self, data: dict[str, object]) -> None:
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         if not data:
             msg = "data must not be empty"
@@ -434,7 +434,7 @@ class DbWriter:
             raise ConfigurationError(msg)
 
     def _validate_conflict_columns(self, conflict_columns: list[str]) -> None:
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         if not conflict_columns:
             msg = "conflict_columns must not be empty"
@@ -451,8 +451,8 @@ class DbWriter:
         data: dict[str, object],
         conflict_columns: list[str],
     ) -> Any:
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         dialect = self._engine.dialect.name
         update_columns = {k: v for k, v in data.items() if k not in conflict_columns}
@@ -474,8 +474,8 @@ class DbWriter:
         conflict_columns: list[str],
         update_columns: dict[str, object],
     ) -> Any:
-        assert self._engine is not None  # noqa: S101  # nosec B101
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._engine is not None  # nosec B101
+        assert self._table is not None  # nosec B101
 
         dialect = self._engine.dialect.name
         if dialect == "postgresql":
@@ -488,7 +488,7 @@ class DbWriter:
         conflict_columns: list[str],
         update_columns: dict[str, object],
     ) -> Any:
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -508,7 +508,7 @@ class DbWriter:
         conflict_columns: list[str],
         update_columns: dict[str, object],
     ) -> Any:
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -527,7 +527,7 @@ class DbWriter:
         data: dict[str, object],
         update_columns: dict[str, object],
     ) -> Any:
-        assert self._table is not None  # noqa: S101  # nosec B101
+        assert self._table is not None  # nosec B101
 
         from sqlalchemy.dialects.mysql import insert as mysql_insert
 
