@@ -33,8 +33,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://yeongseon.github.io/azure-functions-db-python/"
-Documentation = "https://yeongseon.github.io/azure-functions-db-python/"
+Homepage = "https://yeongseon.dev/azure-functions-python/db/"
+Documentation = "https://yeongseon.dev/azure-functions-python/db/"
 Repository = "https://github.com/yeongseon/azure-functions-db-python"
 Issues = "https://github.com/yeongseon/azure-functions-db-python/issues"
 

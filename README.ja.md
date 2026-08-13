@@ -9,7 +9,7 @@
 [![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
 [![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
-[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
+[![Docs](https://img.shields.io/badge/docs-yeongseon.dev-blue)](https://yeongseon.dev/azure-functions-python/db/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Read this in: [English](README.md) | [한국어](README.ko.md) | [简体中文](README.zh-CN.md)
@@ -351,7 +351,7 @@ trigger = PollTrigger(
 
 ## Documentation
 
-- Full docs: [yeongseon.github.io/azure-functions-db-python](https://yeongseon.github.io/azure-functions-db-python/)
+- Full docs: [yeongseon.dev/azure-functions-python/db](https://yeongseon.dev/azure-functions-python/db/)
 - Examples: `examples/`
 - [Architecture](docs/02-architecture.md)
 - [Semantics](docs/03-semantics.md)
