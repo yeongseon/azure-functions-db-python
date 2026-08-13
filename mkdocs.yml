@@ -1,6 +1,7 @@
 site_name: Azure Functions DB
 site_description: Unified DB integration (trigger + input/output binding) for Azure Functions Python v2
 site_author: Yeongseon Choe
+site_url: https://yeongseon.dev/azure-functions-python/db/
 repo_url: https://github.com/yeongseon/azure-functions-db-python
 edit_uri: edit/main/docs/
 
