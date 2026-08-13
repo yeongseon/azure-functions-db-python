@@ -14,6 +14,8 @@
 
 Read this in: [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
+> ℹ️ 이 번역은 커뮤니티가 관리하는 참고용 문서로, 최신 [English README](README.md)보다 뒤처질 수 있습니다. 정확한 최신 정보는 영어 원문을 기준으로 하세요.
+
 **Azure Functions Python v2**를 위한 데이터베이스 통합 라이브러리로, SQLAlchemy 기반의 폴링 변경 감지 트리거와 입력/출력 바인딩을 제공합니다.
 
 ---
