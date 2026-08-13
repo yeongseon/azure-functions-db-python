@@ -1,5 +1,7 @@
 # Azure Functions DB
 
+> ⚠️ **Experimental** — pattern exploration. APIs and behavior may change. Not recommended as a production dependency yet.
+
 > Part of the **Azure Functions Python DX Toolkit** — dogfood-tested by [azure-functions-cookbook-python](https://github.com/yeongseon/azure-functions-cookbook-python).
 
 [![PyPI](https://img.shields.io/pypi/v/azure-functions-db.svg)](https://pypi.org/project/azure-functions-db/)
