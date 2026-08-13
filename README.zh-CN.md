@@ -12,6 +12,8 @@
 
 Read this in: [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md)
 
+> ℹ️ 本翻译由社区维护，仅供参考，可能落后于最新的 [English README](README.md)。请以英文版为准。
+
 面向 **Azure Functions Python v2** 的数据库集成库，提供基于轮询的变更检测触发器，以及基于 SQLAlchemy 的输入/输出绑定。
 
 ---
