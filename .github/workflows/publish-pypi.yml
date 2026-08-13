@@ -2,27 +2,46 @@ name: Publish to PyPI
 
 on:
   push:
+    # Trigger the workflow on tag pushes matching v* (e.g., v1.0.0)
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: Git tag to publish (for example v0.1.0)
+        description: Git tag to publish (for example v0.5.1)
         required: true
         type: string
 
 permissions:
   contents: read
-  id-token: write
 
+# Verify-before-publish gate (see AGENTS.md):
+#   build -> lib-tests -> db-runtime-gate -> verify-azure-certification -> publish
+# Tiered runtime verification before any PyPI upload:
+#   * lib-tests             : the library's own unit suite (no external services).
+#   * db-runtime-gate       : install the candidate wheel, assert the installed version
+#                             matches the release, then run the live checkpoint-store
+#                             integration test against a real Azurite Blob endpoint.
+#                             Unlike a host-boot smoke, this imports and exercises this
+#                             package's primary runtime surface (the blob-backed
+#                             checkpoint store) end to end from the installed wheel.
+#   * verify-azure-certification : requires the EXACT release commit to have passed a
+#                             real-Azure deploy+live-e2e certification (e2e-azure.yml)
+#                             that is fresh and version/SHA-matched. Real Azure is
+#                             certified per release, not per publish.
+# The publish job uploads the EXACT artifact that was tested; it never rebuilds.
+# A tag whose gate fails is a failed release candidate: the version stays
+# unpublished. Recover by fixing forward and cutting the next patch tag
+# (never move a tag that may already have been consumed).
 jobs:
-  build-and-publish:
+  build:
+    name: Build & verify version
     runs-on: ubuntu-latest
-    environment: pypi
-
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
@@ -34,14 +53,10 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-
-      - name: Run lightweight tests
-        run: |
-          pip install hatch
-          pip install -e ".[dev]"
-          pytest -v -m "not integration and not azurite and not host_e2e and not azure_e2e" --no-cov --maxfail=3 --disable-warnings
+          pip install build
 
       - name: Check if tag matches __version__
+        id: version
         run: |
           TAG_NAME="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
           VERSION_FROM_FILE=$(grep -Po '(?<=__version__ = ")[^"]*' src/azure_functions_db/__init__.py)
@@ -53,14 +68,213 @@ jobs:
             echo "::error ::Version in __init__.py ($VERSION_FROM_FILE) does not match git tag ($TAG_VERSION)"
             exit 1
           fi
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build distribution packages
+        run: python -m build
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 5
+
+  lib-tests:
+    name: Library tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install package with dev extras
         run: |
           pip install hatch
-          hatch build --clean
+          pip install -e ".[dev]"
+
+      - name: Run unit test suite (no external services)
+        run: pytest -v -m "not integration and not azurite and not host_e2e and not azure_e2e" --no-cov --disable-warnings
+
+  db-runtime-gate:
+    name: Package runtime gate (live checkpoint store against Azurite, candidate wheel)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Start Azurite (Blob endpoint)
+        run: |
+          npm install -g azurite
+          azurite --skipApiVersionCheck --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 &
+          sleep 3
+
+      - name: Install package with test extras (source, for deps)
+        run: |
+          pip install hatch
+          pip install -e ".[all,dev]"
+
+      - name: Download candidate wheel
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: candidate-dist
+
+      - name: Install candidate wheel over source (candidate under test)
+        run: |
+          WHEEL=$(ls candidate-dist/*.whl | head -n1)
+          echo "Installing candidate wheel: $WHEEL"
+          pip install --force-reinstall --no-deps "$WHEEL"
+
+      - name: Verify candidate version is under test
+        run: |
+          EXPECTED="${{ needs.build.outputs.version }}"
+          ACTUAL=$(python -c "import importlib.metadata as m; print(m.version('azure-functions-db'))")
+          echo "Expected candidate version: $EXPECTED"
+          echo "Installed version:          $ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error ::Runtime gate is not exercising the candidate wheel ($ACTUAL != $EXPECTED)"
+            exit 1
+          fi
+
+      - name: Set Azurite connection string
+        run: |
+          echo "TEST_AZURITE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;" >> "$GITHUB_ENV"
+
+      - name: Run live checkpoint-store test against candidate wheel (fail-closed)
+        run: |
+          # Exercises the package's primary runtime surface (the blob-backed
+          # checkpoint store) from the installed wheel - not the source tree.
+          # Fail closed: the gate must actually RUN the live test and never pass
+          # by silently skipping (a missing dep or unset conn str would skip).
+          pytest tests/integration/test_checkpoint_store_live.py -m "azurite" \
+            -v --no-cov --tb=short -o addopts="" --junitxml=runtime-gate.xml
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET, sys
+          root = ET.parse("runtime-gate.xml").getroot()
+          suites = root.findall("testsuite") or [root]
+          tests = sum(int(s.get("tests", 0)) for s in suites)
+          skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          failures = sum(int(s.get("failures", 0)) for s in suites)
+          errors = sum(int(s.get("errors", 0)) for s in suites)
+          print(f"runtime-gate: tests={tests} skipped={skipped} failures={failures} errors={errors}")
+          if tests == 0:
+              print("::error ::runtime gate collected 0 tests"); sys.exit(1)
+          if skipped:
+              print("::error ::runtime gate SKIPPED tests (must run live, not skip)"); sys.exit(1)
+          if failures or errors:
+              print("::error ::runtime gate had failures/errors"); sys.exit(1)
+          PY
+
+  verify-azure-certification:
+    name: Verify Azure release certification
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Resolve release commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Locate successful Azure certification for this commit
+        id: cert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ steps.commit.outputs.sha }}
+        run: |
+          # A release may only publish if the EXACT commit was certified against
+          # real Azure by the trusted certification workflow (see e2e-azure.yml).
+          RUN_ID=$(gh run list \
+            --workflow e2e-azure.yml \
+            --json databaseId,headSha,conclusion \
+            --limit 50 \
+            --jq "[.[] | select(.headSha==\"$COMMIT\" and .conclusion==\"success\")] | first | .databaseId")
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error ::No successful Azure certification run found for commit $COMMIT. Dispatch the 'e2e-azure' workflow on this release commit before publishing."
+            exit 1
+          fi
+          echo "Found certification run: $RUN_ID"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download certification record
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: azure-cert
+          path: cert
+          run-id: ${{ steps.cert.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Assert certification matches this release
+        env:
+          COMMIT: ${{ steps.commit.outputs.sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          FRESHNESS_DAYS: "14"
+        run: |
+          python3 - "$COMMIT" "$VERSION" "$FRESHNESS_DAYS" <<'PY'
+          import json, sys, datetime, pathlib
+          commit, version, fresh_days = sys.argv[1], sys.argv[2], int(sys.argv[3])
+          cert = json.loads(pathlib.Path("cert/certification.json").read_text())
+          def fail(m):
+              print(f"::error ::{m}")
+              sys.exit(1)
+          if cert.get("result") != "success":
+              fail("certification result is not success")
+          if cert.get("package") != "azure-functions-db":
+              fail(f"cert package {cert.get('package')} != azure-functions-db")
+          if cert.get("commit") != commit:
+              fail(f"cert commit {cert.get('commit')} != release commit {commit}")
+          if cert.get("version") != version:
+              fail(f"cert version {cert.get('version')} != release version {version}")
+          ts = cert.get("certified_at")
+          if not ts:
+              fail("cert missing certified_at")
+          certified = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+          age = datetime.datetime.now(datetime.timezone.utc) - certified
+          if age > datetime.timedelta(days=fresh_days):
+              fail(f"certification is stale: {age.days}d > {fresh_days}d")
+          print(f"Azure certification verified: {version}@{commit[:12]} certified {age.days}d ago")
+          PY
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, lib-tests, db-runtime-gate, verify-azure-certification]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download tested distribution artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist
 
       - name: Publish to PyPI
         # Documented exception to the SHA-pinning policy: PyPA officially
         # recommends pinning to the rolling `release/v1` branch. See
         # CONTRIBUTING.md "GitHub Actions Pinning" for rationale.
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@release/v1 # pin-exempt: PyPA official publisher (trusted-publisher OIDC); tracks release/v1 by design
