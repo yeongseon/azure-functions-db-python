@@ -5,23 +5,23 @@
 Part of the **Azure Functions Python DX Toolkit**. SQLAlchemy-backed database bindings and a pseudo-trigger for Azure Functions Python v2 — read, write, and react to database changes with a decorator-based API. Install from PyPI with `pip install azure-functions-db`.
 
 ## Getting Started
-- [Installation](https://yeongseon.github.io/azure-functions-db-python/installation/): Install the package.
-- [Quickstart](https://yeongseon.github.io/azure-functions-db-python/getting-started/): Minimal end-to-end example.
+- [Installation](https://yeongseon.dev/azure-functions-python/db/installation/): Install the package.
+- [Quickstart](https://yeongseon.dev/azure-functions-python/db/getting-started/): Minimal end-to-end example.
 
 ## User Guide
-- [Architecture](https://yeongseon.github.io/azure-functions-db-python/02-architecture/): How the bindings and runtime fit together.
-- [Binding Semantics](https://yeongseon.github.io/azure-functions-db-python/22-binding-semantics/): Input/output binding behavior.
-- [Polling Runtime & Failure Scenarios](https://yeongseon.github.io/azure-functions-db-python/24-polling-runtime-semantics/): Trigger runtime semantics.
-- [EngineProvider & Pooling](https://yeongseon.github.io/azure-functions-db-python/25-engine-provider-pooling/): Connection pooling.
-- [Python API Spec](https://yeongseon.github.io/azure-functions-db-python/04-python-api-spec/): Public API.
+- [Architecture](https://yeongseon.dev/azure-functions-python/db/02-architecture/): How the bindings and runtime fit together.
+- [Binding Semantics](https://yeongseon.dev/azure-functions-python/db/22-binding-semantics/): Input/output binding behavior.
+- [Polling Runtime & Failure Scenarios](https://yeongseon.dev/azure-functions-python/db/24-polling-runtime-semantics/): Trigger runtime semantics.
+- [EngineProvider & Pooling](https://yeongseon.dev/azure-functions-python/db/25-engine-provider-pooling/): Connection pooling.
+- [Python API Spec](https://yeongseon.dev/azure-functions-python/db/04-python-api-spec/): Public API.
 
 ## Examples
-- [Input Binding](https://yeongseon.github.io/azure-functions-db-python/examples/input_binding/): Read rows.
-- [Output Binding](https://yeongseon.github.io/azure-functions-db-python/examples/output_binding/): Write rows.
-- [Trigger](https://yeongseon.github.io/azure-functions-db-python/examples/trigger/): React to changes.
-- [Client Injection](https://yeongseon.github.io/azure-functions-db-python/examples/client_injection/): Imperative access.
+- [Input Binding](https://yeongseon.dev/azure-functions-python/db/examples/input_binding/): Read rows.
+- [Output Binding](https://yeongseon.dev/azure-functions-python/db/examples/output_binding/): Write rows.
+- [Trigger](https://yeongseon.dev/azure-functions-python/db/examples/trigger/): React to changes.
+- [Client Injection](https://yeongseon.dev/azure-functions-python/db/examples/client_injection/): Imperative access.
 
 ## Reference
-- [API Reference](https://yeongseon.github.io/azure-functions-db-python/api/): Public API surface.
-- [FAQ](https://yeongseon.github.io/azure-functions-db-python/faq/): Frequently asked questions.
-- [Troubleshooting](https://yeongseon.github.io/azure-functions-db-python/troubleshooting/): Common issues and fixes.
+- [API Reference](https://yeongseon.dev/azure-functions-python/db/api/): Public API surface.
+- [FAQ](https://yeongseon.dev/azure-functions-python/db/faq/): Frequently asked questions.
+- [Troubleshooting](https://yeongseon.dev/azure-functions-python/db/troubleshooting/): Common issues and fixes.

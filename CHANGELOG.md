@@ -1,10 +1,35 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.5.2] - 2026-08-14
+
+### Documentation
+
+- Consolidate official documentation URL onto yeongseon.dev (#254) 
+- Mark package Experimental in README (en/ko/ja/zh-CN) (#237) 
+- *(i18n)* Adopt best-effort translation policy with staleness banners (#246) 
+- Add Branch Hygiene section to AGENTS.md 
+
+### Miscellaneous Tasks
+
+- Stop auto-deploying docs to GitHub Pages (#256) 
+- Adopt Renovate for GitHub Actions bumps (#252) 
+- Ignore agent orchestration state (.sisyphus/, .omc/) (#231) 
+- *(ci)* Normalize action version-comment labels (#250) 
+- Add workflow pin-hygiene lint (#248) 
+- Add release-gate workflow drift lint (#244) 
+- Normalize release-gate action pins to canonical SHAs (#242) 
+- Add tiered pre-publish verification gate (#240) 
+- Drop stale noqa directives (#228) 
+
+### Other
+
+- Bump version to 0.5.2 
 ## [0.5.1] - 2026-08-11
 
 ### Documentation
 
+- Update changelog 
 - *(release)* Require cookbook dogfood verification after publish 
 
 ### Other

@@ -1,5 +1,7 @@
 # Azure Functions DB
 
+> ⚠️ **실험적(Experimental)** — 패턴 탐색 단계입니다. API와 동작이 변경될 수 있으며, 아직 프로덕션 의존성으로 권장되지 않습니다.
+
 [![PyPI](https://img.shields.io/pypi/v/azure-functions-db-python.svg)](https://pypi.org/project/azure-functions-db-python/)
 [![Downloads](https://static.pepy.tech/badge/azure-functions-db/month)](https://pepy.tech/project/azure-functions-db)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db-python/)
@@ -7,10 +9,12 @@
 [![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
 [![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
-[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
+[![Docs](https://img.shields.io/badge/docs-yeongseon.dev-blue)](https://yeongseon.dev/azure-functions-python/db/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Read this in: [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
+> ℹ️ 이 번역은 커뮤니티가 관리하는 참고용 문서로, 최신 [English README](README.md)보다 뒤처질 수 있습니다. 정확한 최신 정보는 영어 원문을 기준으로 하세요.
 
 **Azure Functions Python v2**를 위한 데이터베이스 통합 라이브러리로, SQLAlchemy 기반의 폴링 변경 감지 트리거와 입력/출력 바인딩을 제공합니다.
 
@@ -347,7 +351,7 @@ trigger = PollTrigger(
 
 ## 문서
 
-- 전체 문서: [yeongseon.github.io/azure-functions-db-python](https://yeongseon.github.io/azure-functions-db-python/)
+- 전체 문서: [yeongseon.dev/azure-functions-python/db](https://yeongseon.dev/azure-functions-python/db/)
 - 예제: `examples/`
 - [Architecture](docs/02-architecture.md)
 - [Semantics](docs/03-semantics.md)

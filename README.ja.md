@@ -1,5 +1,7 @@
 # Azure Functions DB
 
+> ⚠️ **実験的（Experimental）** — パターン探索の段階です。API と振る舞いは変更される可能性があり、まだ本番環境の依存関係として推奨されません。
+
 [![PyPI](https://img.shields.io/pypi/v/azure-functions-db-python.svg)](https://pypi.org/project/azure-functions-db-python/)
 [![Downloads](https://static.pepy.tech/badge/azure-functions-db/month)](https://pepy.tech/project/azure-functions-db)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/azure-functions-db-python/)
@@ -7,10 +9,12 @@
 [![Release](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/yeongseon/azure-functions-db-python/actions/workflows/publish-pypi.yml)
 [![codecov](https://codecov.io/gh/yeongseon/azure-functions-db-python/branch/main/graph/badge.svg)](https://codecov.io/gh/yeongseon/azure-functions-db-python)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
-[![Docs](https://img.shields.io/badge/docs-gh--pages-blue)](https://yeongseon.github.io/azure-functions-db-python/)
+[![Docs](https://img.shields.io/badge/docs-yeongseon.dev-blue)](https://yeongseon.dev/azure-functions-python/db/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Read this in: [English](README.md) | [한국어](README.ko.md) | [简体中文](README.zh-CN.md)
+
+> ℹ️ この翻訳はコミュニティによる参考用であり、最新の [English README](README.md) より古い場合があります。正確な最新情報は英語版を参照してください。
 
 **Azure Functions Python v2** 向けのデータベース統合ライブラリです。SQLAlchemy を使ったポーリング型変更検知トリガーと入出力バインディングを提供します。
 
@@ -347,7 +351,7 @@ trigger = PollTrigger(
 
 ## Documentation
 
-- Full docs: [yeongseon.github.io/azure-functions-db-python](https://yeongseon.github.io/azure-functions-db-python/)
+- Full docs: [yeongseon.dev/azure-functions-python/db](https://yeongseon.dev/azure-functions-python/db/)
 - Examples: `examples/`
 - [Architecture](docs/02-architecture.md)
 - [Semantics](docs/03-semantics.md)

@@ -39,7 +39,7 @@ trigger that works with **any database that ships a SQLAlchemy dialect**.
 > For the full axis-by-axis breakdown (databases, trigger mechanism, scaling,
 > delivery guarantee, checkpoint storage, local testing, SQLAlchemy/BYOD,
 > production readiness), see the
-> [comparison page](https://yeongseon.github.io/azure-functions-db-python/) _(verify link)_
+> [comparison page](https://yeongseon.dev/azure-functions-python/db/) _(verify link)_
 > and [ADR-006 — Python Wrapper over Native Extension](https://github.com/yeongseon/azure-functions-db/blob/main/docs/27-ADR-006-no-native-extension.md).
 
 ## Not a native binding — and that's a deliberate choice
@@ -177,7 +177,7 @@ pip install azure-functions-db[postgres]
 ```
 
 - Package: <https://pypi.org/project/azure-functions-db/>
-- Docs: <https://yeongseon.github.io/azure-functions-db-python/>
+- Docs: <https://yeongseon.dev/azure-functions-python/db/>
 - Source & examples: <https://github.com/yeongseon/azure-functions-db>
 
 *This is an independent community project and is not affiliated with, endorsed
