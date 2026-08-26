@@ -208,6 +208,8 @@ def create_order(out: DbOut) -> str:
 
 The decorator snippets below show only the binding decorator. In a real Function App you stack them on top of a native Azure Functions trigger (`@app.route`, `@app.schedule`, …):
 
+> Decorator **order** matters here because of how the Azure Functions Python worker binds handler parameters by name. See [How the worker binds handlers](https://yeongseon.dev/azure-functions-python/platform/how-the-worker-binds-handlers/) for the underlying mechanics.
+
 ```python
 import azure.functions as func
 from azure_functions_db import DbBindings, DbOut
