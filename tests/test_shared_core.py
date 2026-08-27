@@ -215,6 +215,53 @@ class TestEngineProvider:
         with pytest.raises(ConfigurationError, match="connect_args"):
             provider.get_engine(config)
 
+    def test_engine_creation_never_logs_connection_secret(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A connection URL embeds credentials; engine construction must never
+        emit them to logs (regression guard for accidental credential leakage)."""
+        import logging
+
+        secret = "s3cr3t-P@ssw0rd-DO-NOT-LOG"  # noqa: S105 - test fixture, not a real secret
+        config = DbConfig(
+            connection_url=f"postgresql+psycopg2://user:{secret}@dbhost:5432/appdb"
+        )
+        provider = EngineProvider()
+        # Whether the psycopg2 driver is installed (engine builds lazily) or
+        # absent (create_engine raises ModuleNotFoundError), the embedded
+        # credential must never reach log output.
+        with caplog.at_level(logging.DEBUG):
+            try:
+                provider.get_engine(config)
+            except Exception:
+                pass
+        try:
+            assert secret not in caplog.text
+            for record in caplog.records:
+                assert secret not in record.getMessage()
+        finally:
+            provider.dispose_all()
+
+    def test_engine_creation_failure_never_logs_connection_secret(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Even when engine construction fails on a malformed URL, the embedded
+        credential must not surface in log output."""
+        import logging
+
+        secret = "s3cr3t-P@ssw0rd-DO-NOT-LOG"  # noqa: S105 - test fixture, not a real secret
+        config = DbConfig(
+            connection_url=f"no-such-dialect://user:{secret}@dbhost:5432/appdb"
+        )
+        provider = EngineProvider()
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(Exception):  # noqa: B017 - SQLAlchemy plugin-load error
+                provider.get_engine(config)
+        assert secret not in caplog.text
+        for record in caplog.records:
+            assert secret not in record.getMessage()
+        provider.dispose_all()
+
     def test_connect_args_error_message_directs_to_dbconfig_connect_args(
         self, tmp_path: Path
     ) -> None:
