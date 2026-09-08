@@ -25,6 +25,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Assert the runtime interpreter matches the matrix cell
+        # Tests run through the Python-3.10-pinned hatch env, so without this
+        # guard every matrix cell would silently execute on 3.10 and the
+        # 3.11-3.14 cells would never actually run. Fail loudly on drift.
+        env:
+          EXPECTED: ${{ matrix.python-version }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          expected = tuple(int(p) for p in os.environ["EXPECTED"].split("."))
+          actual = sys.version_info[: len(expected)]
+          assert actual == expected, f"interpreter {actual} != matrix {expected}"
+          print(f"interpreter OK: {sys.version.split()[0]}")
+          PY
+
       - name: Install Hatch and dependencies via Makefile
         run: |
           pip install hatch
