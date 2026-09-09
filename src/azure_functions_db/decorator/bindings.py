@@ -1,664 +1,44 @@
+"""The public :class:`DbBindings` decorator API."""
+
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from collections.abc import Callable
 import functools
 import inspect
-import logging
-from typing import Any, Generic, Literal, TypeVar, cast
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from ._metadata import (
-    METADATA_ATTR,
-    NAMESPACE,
-    DbMetadata,
-    merge_db_metadata,
-    read_db_metadata,
+from ..binding.reader import DbReader
+from ..binding.writer import DbWriter
+from ..core.engine import EngineProvider
+from ..core.errors import ConfigurationError
+from ..observability import MetricsCollector
+from ..trigger.normalizers import EventNormalizer
+from ..trigger.poll import PollTrigger
+from ..trigger.retry import RetryPolicy
+from ..trigger.runner import SourceAdapter, StateStore
+from .async_proxies import (
+    _AsyncDbOutProxy,
+    _AsyncDbReaderProxy,
+    _AsyncDbWriterProxy,
 )
-from .binding.reader import DbReader
-from .binding.writer import DbWriter
-from .core.engine import EngineProvider
-from .core.errors import ConfigurationError
-from .observability import MetricsCollector
-from .trigger.normalizers import EventNormalizer
-from .trigger.poll import PollTrigger
-from .trigger.retry import RetryPolicy
-from .trigger.runner import SourceAdapter, StateStore
-
-logger = logging.getLogger(__name__)
-
-# Parameter names reserved by Azure Functions runtime.
-_RESERVED_ARGS = frozenset({"timer", "req", "context", "msg", "input", "output"})
-_DB_DECORATOR_ATTR = "_db_decorators"
-_TOOLKIT_META_ATTR = METADATA_ATTR
-
-
-class DbOut:
-    """Output binding parameter injected by the ``output`` decorator.
-
-    Mirrors the native Azure Functions ``func.Out[T]`` pattern.
-    The handler calls ``.set()`` to write data to the database explicitly,
-    leaving the handler's return value free for other purposes (e.g.
-    ``HttpResponse``).
-
-    Example::
-
-        @db.output("order", url="%DB_URL%", table="orders")
-        def create_order(req, order: DbOut) -> func.HttpResponse:
-            order.set({"id": 1, "status": "pending"})
-            return func.HttpResponse("Created", status_code=201)
-
-    Accepted types for ``.set()``:
-        - ``dict`` — single-row write
-        - ``list[dict]`` — batch write
-        - ``BaseModel`` / ``list[BaseModel]`` — auto-dumped to dict
-        - ``None`` — no-op (skip write)
-    """
-
-    def __init__(
-        self,
-        *,
-        url: str,
-        table: str,
-        schema: str | None,
-        action: Literal["insert", "upsert"],
-        conflict_columns: list[str] | None,
-        engine_provider: EngineProvider | None,
-    ) -> None:
-        self._url = url
-        self._table = table
-        self._schema = schema
-        self._action = action
-        self._conflict_columns = conflict_columns
-        self._engine_provider = engine_provider
-
-    def set(
-        self,
-        data: (
-            dict[str, object]
-            | Sequence[dict[str, object]]
-            | BaseModel
-            | Sequence[BaseModel]
-            | None
-        ),
-    ) -> None:
-        """Write *data* to the configured table.
-
-        Parameters
-        ----------
-        data:
-            ``dict`` for single row, ``list[dict]`` for batch,
-            ``BaseModel`` / ``list[BaseModel]`` for Pydantic models,
-            or ``None`` to skip. Tuples and other non-``list`` sequences
-            are rejected with :class:`ConfigurationError`.
-        """
-        if data is None:
-            return
-
-        writer = DbWriter(
-            url=self._url,
-            table=self._table,
-            schema=self._schema,
-            engine_provider=self._engine_provider,
-        )
-        try:
-            if isinstance(data, (dict, BaseModel)):
-                row = _normalize_output_row(data)
-                if self._action == "upsert":
-                    if self._conflict_columns is None:
-                        msg = "output: unreachable – upsert without conflict_columns"
-                        raise ConfigurationError(msg)
-                    writer.upsert(data=row, conflict_columns=self._conflict_columns)
-                else:
-                    writer.insert(data=row)
-            elif isinstance(data, list):
-                bad = next(
-                    (i for i, row in enumerate(data) if not isinstance(row, (dict, BaseModel))),
-                    None,
-                )
-                if bad is not None:
-                    bad_type = type(data[bad]).__name__
-                    msg = (
-                        f"output: DbOut.set() received list with non-dict element "
-                        f"at index {bad} ({bad_type}); expected list[dict | BaseModel]"
-                    )
-                    raise ConfigurationError(msg)
-                rows = [_normalize_output_row(row) for row in data]
-                if self._action == "upsert":
-                    if self._conflict_columns is None:
-                        msg = "output: unreachable – upsert without conflict_columns"
-                        raise ConfigurationError(msg)
-                    writer.upsert_many(rows=rows, conflict_columns=self._conflict_columns)
-                else:
-                    writer.insert_many(rows=rows)
-            else:
-                msg = (
-                    f"output: DbOut.set() received {type(data).__name__}, "
-                    f"expected dict, list[dict], BaseModel, list[BaseModel], or None"
-                )
-                raise ConfigurationError(msg)
-        finally:
-            writer.close()
-
-
-_ProxyTargetT = TypeVar("_ProxyTargetT")
-_ProxyResultT = TypeVar("_ProxyResultT")
-
-
-class _AsyncProxyBase(Generic[_ProxyTargetT]):
-    """Base for async proxies that offload blocking calls to a worker thread.
-
-    Subclasses declare explicit, fully-typed async methods and delegate their
-    bodies to :meth:`_offload`.  This keeps each proxy's public surface and
-    method signatures intact (unlike a generic ``__getattr__`` proxy, which
-    would erase typing and leak withheld methods) while sharing the
-    construction and ``asyncio.to_thread`` offload boilerplate.
-    """
-
-    def __init__(self, target: _ProxyTargetT) -> None:
-        self._target = target
-
-    @staticmethod
-    async def _offload(
-        func: Callable[..., _ProxyResultT], /, *args: Any, **kwargs: Any
-    ) -> _ProxyResultT:
-        return await asyncio.to_thread(func, *args, **kwargs)
-
-
-class _AsyncDbOutProxy(_AsyncProxyBase[DbOut]):
-    """Async wrapper for :class:`DbOut` used in async handlers.
-
-    Delegates ``.set()`` to a worker thread via ``asyncio.to_thread()``
-    so the event loop stays free.
-    """
-
-    async def set(
-        self,
-        data: (
-            dict[str, object]
-            | Sequence[dict[str, object]]
-            | BaseModel
-            | Sequence[BaseModel]
-            | None
-        ),
-    ) -> None:
-        """Async version of :meth:`DbOut.set`."""
-        await self._offload(self._target.set, data)
-
-
-def _get_db_decorators(fn: Callable[..., Any]) -> frozenset[str]:
-    existing: object = getattr(fn, _DB_DECORATOR_ATTR, frozenset())
-    if not isinstance(existing, frozenset):
-        return frozenset()
-    return existing
-
-
-def _mark_decorator(fn: Callable[..., Any], name: str) -> None:
-    setattr(fn, _DB_DECORATOR_ATTR, _get_db_decorators(fn) | {name})
-
-
-def _merge_toolkit_metadata(
-    fn: Callable[..., Any], namespace: str, payload: dict[str, Any],
-) -> None:
-    """Merge toolkit metadata into the convention attribute, preserving other namespaces.
-
-    Backward-compatible shim delegating to the typed :func:`merge_db_metadata`
-    for the ``db`` namespace.
-    """
-    if namespace == NAMESPACE:
-        merge_db_metadata(fn, cast(DbMetadata, payload))
-        return
-
-    existing: dict[str, Any] = getattr(fn, METADATA_ATTR, {})
-    if not isinstance(existing, dict):
-        existing = {}
-    existing = {**existing, namespace: payload}
-    setattr(fn, METADATA_ATTR, existing)
-
-
-def _check_composition(fn: Callable[..., Any], name: str) -> None:
-    existing = _get_db_decorators(fn)
-
-    if name in existing:
-        msg = f"Decorator '{name}' cannot be applied twice to the same handler"
-        raise ConfigurationError(msg)
-
-    if name == "input" and "inject_reader" in existing:
-        msg = (
-            "Cannot combine 'input' and 'inject_reader' on the same handler — use one or the other"
-        )
-        raise ConfigurationError(msg)
-    if name == "inject_reader" and "input" in existing:
-        msg = (
-            "Cannot combine 'inject_reader' and 'input' on the same handler — use one or the other"
-        )
-        raise ConfigurationError(msg)
-
-    if name == "output" and "inject_writer" in existing:
-        msg = (
-            "Cannot combine 'output' and 'inject_writer' on the same handler — use one or the other"
-        )
-        raise ConfigurationError(msg)
-    if name == "inject_writer" and "output" in existing:
-        msg = (
-            "Cannot combine 'inject_writer' and 'output' on the same handler — use one or the other"
-        )
-        raise ConfigurationError(msg)
-
-
-class _AsyncDbReaderProxy(_AsyncProxyBase[DbReader]):
-    async def get(self, *, pk: dict[str, object]) -> dict[str, object] | None:
-        return await self._offload(self._target.get, pk=pk)
-
-    async def query(
-        self,
-        sql: str,
-        *,
-        params: dict[str, object] | None = None,
-    ) -> list[dict[str, object]]:
-        return await self._offload(self._target.query, sql, params=params)
-
-    async def scalar(
-        self,
-        sql: str,
-        *,
-        params: dict[str, object] | None = None,
-    ) -> object | None:
-        return await self._offload(self._target.scalar, sql, params=params)
-
-    async def one(
-        self,
-        sql: str,
-        *,
-        params: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        return await self._offload(self._target.one, sql, params=params)
-
-    async def one_or_none(
-        self,
-        sql: str,
-        *,
-        params: dict[str, object] | None = None,
-    ) -> dict[str, object] | None:
-        return await self._offload(self._target.one_or_none, sql, params=params)
-
-    def close(self) -> None:
-        self._target.close()
-
-
-class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
-    """Async wrapper around :class:`DbWriter` for async handlers.
-
-    Each write call is offloaded to a worker thread via
-    :func:`asyncio.to_thread` so the event loop is not blocked.
-
-    For multi-statement atomicity, use :meth:`transaction` as an async
-    context manager.  It pins the whole transaction to a single dedicated
-    worker thread (SQLAlchemy ``Connection`` / ``Transaction`` objects are
-    not safe to share across threads), committing on success and rolling
-    back on error::
-
-        async with writer.transaction() as tx:
-            await tx.insert(data={...})
-            await tx.update(data={...}, pk={...})
-    """
-
-    async def insert(self, *, data: dict[str, object]) -> None:
-        await self._offload(self._target.insert, data=data)
-
-    async def insert_many(self, *, rows: list[dict[str, object]]) -> None:
-        await self._offload(self._target.insert_many, rows=rows)
-
-    async def upsert(self, *, data: dict[str, object], conflict_columns: list[str]) -> None:
-        await self._offload(self._target.upsert, data=data, conflict_columns=conflict_columns)
-
-    async def upsert_many(
-        self,
-        *,
-        rows: list[dict[str, object]],
-        conflict_columns: list[str],
-    ) -> None:
-        await self._offload(
-            self._target.upsert_many, rows=rows, conflict_columns=conflict_columns
-        )
-
-    def close(self) -> None:
-        self._target.close()
-
-    @asynccontextmanager
-    async def transaction(self) -> "AsyncIterator[_AsyncTxWriterProxy]":
-        """Group multiple async writes into a single SQL transaction.
-
-        Because SQLAlchemy ``Connection`` / ``Transaction`` objects are not
-        safe to share across threads, this context manager pins the entire
-        transaction to a single dedicated worker thread for the duration of
-        the ``async with`` block.  Every write issued through the yielded
-        proxy is routed to that one thread, so the underlying connection is
-        only ever touched by a single thread.  The transaction is committed
-        on normal exit and rolled back if the block raises.
-
-        Concurrent writes issued inside the block (e.g. via
-        :func:`asyncio.gather`) are **serialized** onto the pinned thread;
-        a SQLAlchemy connection cannot be used concurrently even on one
-        thread.
-
-        Example::
-
-            async with writer.transaction() as tx:
-                await tx.insert(data={"id": 1, "status": "pending"})
-                await tx.update(data={"status": "shipped"}, pk={"id": 1})
-        """
-        loop = asyncio.get_running_loop()
-        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="db-tx")
-        cm = self._target.transaction()
-        try:
-            await loop.run_in_executor(executor, cm.__enter__)
-        except BaseException:
-            executor.shutdown(wait=False)
-            raise
-
-        try:
-            try:
-                yield _AsyncTxWriterProxy(self._target, loop, executor)
-            except BaseException as exc:
-                # Roll back on the pinned thread; preserve the original error.
-                await self._async_exit(
-                    loop, executor, cm, type(exc), exc, exc.__traceback__, swallow=True
-                )
-                raise
-            else:
-                # Commit on the pinned thread; let commit failures propagate.
-                await self._async_exit(loop, executor, cm, None, None, None, swallow=False)
-        finally:
-            executor.shutdown(wait=True)
-
-    @staticmethod
-    async def _async_exit(
-        loop: asyncio.AbstractEventLoop,
-        executor: ThreadPoolExecutor,
-        cm: Any,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: Any,
-        *,
-        swallow: bool,
-    ) -> None:
-        """Drive the sync transaction ``__exit__`` on the pinned thread.
-
-        Shields the cleanup from cancellation so commit/rollback still runs.
-        When *swallow* is true (rollback path) errors raised by ``__exit__``
-        are logged and suppressed so the original exception is preserved;
-        otherwise (commit path) they propagate.
-        """
-        call = functools.partial(cm.__exit__, exc_type, exc, tb)
-        try:
-            await asyncio.shield(loop.run_in_executor(executor, call))
-        except asyncio.CancelledError:
-            # Cleanup was cancelled: force synchronous completion on the
-            # still-alive worker thread so the transaction is not left open.
-            future = executor.submit(call)
-            try:
-                future.result(timeout=5.0)
-            except Exception:
-                logger.warning(
-                    "async transaction cleanup failed after cancellation",
-                    exc_info=True,
-                )
-            raise
-        except BaseException:
-            if not swallow:
-                raise
-            logger.warning(
-                "async transaction rollback raised; original exception preserved",
-                exc_info=True,
-            )
-
-
-class _AsyncTxWriterProxy:
-    """Transactional async writer proxy bound to a single pinned thread.
-
-    Yielded by :meth:`_AsyncDbWriterProxy.transaction`.  Every write is
-    routed through *executor* (a single-worker thread pool) so the
-    underlying SQLAlchemy connection is only ever used by one thread.
-    """
-
-    def __init__(
-        self,
-        writer: DbWriter,
-        loop: asyncio.AbstractEventLoop,
-        executor: ThreadPoolExecutor,
-    ) -> None:
-        self._writer = writer
-        self._loop = loop
-        self._executor = executor
-
-    async def _run(self, func: Callable[..., Any], /, **kwargs: Any) -> None:
-        await self._loop.run_in_executor(
-            self._executor, functools.partial(func, **kwargs)
-        )
-
-    async def insert(self, *, data: dict[str, object]) -> None:
-        await self._run(self._writer.insert, data=data)
-
-    async def insert_many(self, *, rows: list[dict[str, object]]) -> None:
-        await self._run(self._writer.insert_many, rows=rows)
-
-    async def upsert(self, *, data: dict[str, object], conflict_columns: list[str]) -> None:
-        await self._run(
-            self._writer.upsert, data=data, conflict_columns=conflict_columns
-        )
-
-    async def upsert_many(
-        self, *, rows: list[dict[str, object]], conflict_columns: list[str]
-    ) -> None:
-        await self._run(
-            self._writer.upsert_many, rows=rows, conflict_columns=conflict_columns
-        )
-
-    async def update(self, *, data: dict[str, object], pk: dict[str, object]) -> None:
-        await self._run(self._writer.update, data=data, pk=pk)
-
-    async def delete(self, *, pk: dict[str, object]) -> None:
-        await self._run(self._writer.delete, pk=pk)
-
-
-def _validate_arg_name(arg_name: str, fn: Callable[..., Any], decorator_name: str) -> None:
-    """Validate that *arg_name* exists in *fn*'s signature and does not collide."""
-    sig = inspect.signature(fn, follow_wrapped=False)
-    if arg_name not in sig.parameters:
-        msg = (
-            f"{decorator_name} arg_name='{arg_name}' not found in "
-            f"function '{fn.__name__}' parameters"
-        )
-        raise ConfigurationError(msg)
-
-    if arg_name in _RESERVED_ARGS:
-        msg = (
-            f"{decorator_name} arg_name='{arg_name}' conflicts with Azure Functions "
-            f"reserved parameter name. Avoid: {sorted(_RESERVED_ARGS)}"
-        )
-        raise ConfigurationError(msg)
-
-
-def _build_host_signature(
-    fn: Callable[..., Any],
-    injected: set[str],
-) -> inspect.Signature:
-    """Return a signature hiding *injected* params from Azure runtime."""
-    sig = inspect.signature(fn, follow_wrapped=False)
-    params = [p for name, p in sig.parameters.items() if name not in injected]
-    return sig.replace(parameters=params)
-
-
-def _validate_resolver(
-    resolver: Callable[..., dict[str, object]],
-    fn: Callable[..., Any],
-    injected_args: set[str],
-    param_label: str,
-    decorator_name: str,
-) -> list[str]:
-    """Validate a resolver callable at decoration time.
-
-    Ensures the resolver's parameter names are a subset of the handler's
-    non-injected parameters and that it does not use ``*args`` or ``**kwargs``.
-
-    Returns the list of parameter names the resolver expects.
-    """
-    resolver_sig = inspect.signature(resolver)
-    for p in resolver_sig.parameters.values():
-        if p.kind in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        ):
-            msg = f"{decorator_name} {param_label} callable must not use *args or **kwargs"
-            raise ConfigurationError(msg)
-        if p.kind == inspect.Parameter.POSITIONAL_ONLY:
-            msg = (
-                f"{decorator_name} {param_label} callable must not use positional-only "
-                f"parameters ('{p.name}'). Use keyword-compatible parameters instead."
-            )
-            raise ConfigurationError(msg)
-
-    handler_sig = inspect.signature(fn, follow_wrapped=False)
-    handler_params = {name for name in handler_sig.parameters if name not in injected_args}
-    resolver_params = list(resolver_sig.parameters.keys())
-    unknown = set(resolver_params) - handler_params
-    if unknown:
-        msg = (
-            f"{decorator_name} {param_label} callable references parameters "
-            f"{sorted(unknown)} not found in handler '{fn.__name__}'. "
-            f"Available: {sorted(handler_params)}"
-        )
-        raise ConfigurationError(msg)
-    return resolver_params
-
-
-def _resolve_callable(
-    resolver: Callable[..., dict[str, object]],
-    resolver_params: list[str],
-    all_kwargs: dict[str, Any],
-) -> dict[str, object]:
-    """Call a resolver with matching kwargs extracted from the handler invocation."""
-    call_kwargs = {name: all_kwargs[name] for name in resolver_params if name in all_kwargs}
-    return resolver(**call_kwargs)
-
-
-def _validate_model_type(model: object | None) -> None:
-    if model is None:
-        return
-    if not isinstance(model, type) or not issubclass(model, BaseModel):
-        model_name = model.__name__ if isinstance(model, type) else type(model).__name__
-        msg = f"input model must be a subclass of BaseModel, got '{model_name}'"
-        raise ConfigurationError(msg)
-
-
-def _apply_input_model(
-    result: dict[str, object] | list[dict[str, object]] | None,
-    model: type[BaseModel] | None,
-) -> dict[str, object] | list[dict[str, object]] | BaseModel | list[BaseModel] | None:
-    if model is None:
-        return result
-    if result is None:
-        return None
-    if isinstance(result, list):
-        return [model.model_validate(row) for row in result]
-    return model.model_validate(result)
-
-
-def _normalize_output_row(row: dict[str, object] | BaseModel) -> dict[str, object]:
-    if isinstance(row, BaseModel):
-        return row.model_dump()
-    return row
-
-
-def _finalize_wrapper(
-    wrapper: Callable[..., Any],
-    *,
-    fn: Callable[..., Any],
-    arg_name: str,
-    kind: str,
-    metadata: dict[str, Any],
-) -> Callable[..., Any]:
-    """Attach the host signature and toolkit metadata shared by every decorator."""
-    setattr(wrapper, "__signature__", _build_host_signature(fn, {arg_name}))
-    _mark_decorator(wrapper, kind)
-    _merge_toolkit_metadata(wrapper, "db", metadata)
-    return wrapper
-
-
-def _wrap_handler(
-    fn: Callable[..., Any],
-    *,
-    kind: str,
-    arg_name: str,
-    metadata: dict[str, Any],
-    acquire: Callable[[], Any],
-    to_async_arg: Callable[[Any], Any],
-    to_sync_arg: Callable[[Any], Any],
-    release: Callable[[Any], None] | None = None,
-) -> Callable[..., Any]:
-    """Build a sync or async handler wrapper with uniform resource injection.
-
-    Detects ``inspect.iscoroutinefunction`` once and returns the matching
-    wrapper.  ``acquire`` runs per invocation to obtain the resource,
-    ``to_async_arg`` / ``to_sync_arg`` map it to the injected argument, and
-    ``release`` (when given) tears it down in a ``finally`` block.  When
-    ``release is None`` the ``try/finally`` is omitted so exception tracebacks
-    stay identical to a plain wrapper.
-    """
-    is_async = inspect.iscoroutinefunction(fn)
-
-    if release is None:
-        if is_async:
-
-            @functools.wraps(fn)
-            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                kwargs[arg_name] = to_async_arg(acquire())
-                return await fn(*args, **kwargs)
-
-            return _finalize_wrapper(
-                async_wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
-            )
-
-        @functools.wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            kwargs[arg_name] = to_sync_arg(acquire())
-            return fn(*args, **kwargs)
-
-        return _finalize_wrapper(
-            wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
-        )
-
-    if is_async:
-
-        @functools.wraps(fn)
-        async def async_wrapper_rel(*args: Any, **kwargs: Any) -> Any:
-            resource = acquire()
-            try:
-                kwargs[arg_name] = to_async_arg(resource)
-                return await fn(*args, **kwargs)
-            finally:
-                release(resource)
-
-        return _finalize_wrapper(
-            async_wrapper_rel, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
-        )
-
-    @functools.wraps(fn)
-    def wrapper_rel(*args: Any, **kwargs: Any) -> Any:
-        resource = acquire()
-        try:
-            kwargs[arg_name] = to_sync_arg(resource)
-            return fn(*args, **kwargs)
-        finally:
-            release(resource)
-
-    return _finalize_wrapper(
-        wrapper_rel, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
-    )
+from .composition import (
+    _check_composition,
+    _mark_decorator,
+    _merge_toolkit_metadata,
+)
+from .out import DbOut
+from .validation import (
+    _apply_input_model,
+    _build_host_signature,
+    _resolve_callable,
+    _validate_arg_name,
+    _validate_model_type,
+    _validate_resolver,
+)
+from .wrapper import _finalize_wrapper, _wrap_handler
 
 
 class DbBindings:
@@ -991,7 +371,7 @@ class DbBindings:
                             raise ConfigurationError(msg)
                         result = reader.get(pk=resolved_pk)
                         if result is None and on_not_found == "raise":
-                            from .core.errors import NotFoundError
+                            from ..core.errors import NotFoundError
 
                             msg = f"input: no row found for pk={resolved_pk} in table '{table}'"
                             raise NotFoundError(msg)
@@ -1172,6 +552,7 @@ class DbBindings:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _check_composition(fn, "inject_reader")
             _validate_arg_name(arg_name, fn, "inject_reader")
+
             def _acquire() -> DbReader:
                 return DbReader(
                     url=url,
@@ -1236,6 +617,7 @@ class DbBindings:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _check_composition(fn, "inject_writer")
             _validate_arg_name(arg_name, fn, "inject_writer")
+
             def _acquire() -> DbWriter:
                 return DbWriter(
                     url=url,
@@ -1262,10 +644,4 @@ class DbBindings:
         return decorator
 
 
-def get_db_metadata(func: Any) -> dict[str, Any] | None:
-    """Return db metadata if the function was decorated with DbBindings decorators.
-
-    Returns None if the function has no db metadata attached.
-    """
-    meta = read_db_metadata(func)
-    return dict(meta) if meta is not None else None
+__all__ = ["DbBindings"]
