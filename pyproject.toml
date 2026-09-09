@@ -24,7 +24,11 @@ classifiers = [
 
 dependencies = [
     # Cap below 2.0.0: azure-functions v2 may change worker function-indexing
-    # behavior the toolkit relies on. See knowledge#46 / dx#8.
+    # behavior the toolkit relies on, and 2.x drops Python < 3.13. See
+    # knowledge#46 / dx#8. Cap-lift criteria (issue #287): (1) the non-blocking
+    # "azure-functions 2.x compat (Py 3.13)" lane in ci-test.yml is green, and
+    # (2) 2.x is certified on real Azure via e2e-azure.yml. Lifting the cap is a
+    # separate follow-up; do not raise it here.
     "azure-functions>=1.22.0,<2.0.0",
     "sqlalchemy>=2.0",
     "azure-storage-blob>=12.21.0",
