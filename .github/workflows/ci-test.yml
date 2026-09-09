@@ -26,9 +26,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Assert the runtime interpreter matches the matrix cell
-        # Tests run through the Python-3.10-pinned hatch env, so without this
-        # guard every matrix cell would silently execute on 3.10 and the
-        # 3.11-3.14 cells would never actually run. Fail loudly on drift.
+        # Belt-and-braces: the tests below run *directly* on this interpreter
+        # via `python -m pytest` (NOT through the Python-3.10-pinned hatch env),
+        # so every matrix cell genuinely exercises its advertised interpreter.
         env:
           EXPECTED: ${{ matrix.python-version }}
         run: |
@@ -40,13 +40,17 @@ jobs:
           print(f"interpreter OK: {sys.version.split()[0]}")
           PY
 
-      - name: Install Hatch and dependencies via Makefile
+      - name: Install package with dev extras on the matrix interpreter
+        # Editable install builds the package from source on each matrix
+        # interpreter (the 3.13/3.14 wheel/build lane) and pulls the dev extra
+        # (pytest, pytest-cov) so tests run on the real interpreter.
         run: |
-          pip install hatch
-          make install
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
 
-      - name: Run full quality checks
-        run: make check-all
+      - name: Run tests on the matrix interpreter
+        # coverage.xml is emitted automatically via pytest addopts (--cov ...).
+        run: python -m pytest tests
 
       - name: Verify coverage output
         run: ls -lh coverage.xml
@@ -61,6 +65,34 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_RETRIES: 3
+
+  quality:
+    # Lint, type-check, workflow-lint and security run once on the single
+    # pinned interpreter (3.10) through Hatch -- these are interpreter-agnostic
+    # gates, so running them per matrix cell would only duplicate reporting.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+
+      - name: Install Hatch and dependencies via Makefile
+        run: |
+          pip install hatch
+          make install
+
+      - name: Lint release, pin and hatch-matrix workflow guards
+        run: make lint-workflows
+
+      - name: Lint and type check
+        run: make check
+
+      - name: Security scan
+        run: make security
 
   benchmark:
     runs-on: ubuntu-latest
