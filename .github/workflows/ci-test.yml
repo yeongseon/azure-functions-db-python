@@ -126,3 +126,65 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
           shellcheck examples/postgresql-poll-trigger/smoke.sh examples/mysql-poll-trigger/smoke.sh
+
+  # azure-functions 2.x compatibility proof lane (issue #287), following the
+  # sibling proof-lane pattern (azure-functions-openapi #508/#525,
+  # azure-functions-langgraph #350, azure-functions-validation #348). This is a
+  # SINGLE representative 2.x lane, not a matrix: it builds a WHEEL, installs it,
+  # then deliberately overrides the pyproject `<2.0.0` cap to pull
+  # `azure-functions>=2,<3` on Python 3.13 and runs the full suite against the
+  # 2.x SDK. This package is a runtime consumer of `azure-functions`
+  # (input/output/client injection, poll-based pseudo trigger), so binding-type
+  # behaviour under the 2.x worker is the risk surface this lane exercises.
+  #
+  # Gating decision: this lane runs on every PR as a VISIBLE compatibility
+  # signal, but it is intentionally NOT a required check -- the runtime cap stays
+  # `<2.0.0` until 2.x is certified on real Azure via e2e-azure.yml, so making
+  # this blocking before that certification would gate merges on an uncertified
+  # runtime. Promote it to a required check via branch protection once the cap is
+  # lifted. azure-functions 2.x declares Requires-Python >=3.13, so this lane
+  # pins Python 3.13.
+  azure-functions-2x:
+    name: azure-functions 2.x compat (Py 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Build wheel
+        # Prove 2.x against a WHEEL-installed build, not an editable/source tree,
+        # mirroring the sibling proof lanes. Building the distribution artifact
+        # also avoids Hatch's default env, which is pinned to Python 3.10 in
+        # pyproject and cannot install azure-functions 2.x (Requires-Python
+        # >=3.13).
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist
+
+      - name: Install wheel with dev extras
+        run: pip install "$(ls dist/azure_functions_db-*.whl)[dev]"
+
+      - name: Upgrade azure-functions to the 2.x line
+        # pyproject caps azure-functions <2.0.0 until 2.x is certified on real
+        # Azure. This lane deliberately overrides that cap to PROVE the package
+        # (binding decorators, poll trigger, writer injection) still builds and
+        # passes its suite under 2.x. pip warns about the intentional override;
+        # that is expected.
+        run: pip install "azure-functions>=2,<3"
+
+      - name: Show resolved versions
+        run: pip show azure-functions sqlalchemy pydantic | grep -E '^(Name|Version):'
+
+      - name: Run compat suite against the wheel + azure-functions 2.x
+        # Compatibility smoke only: `--no-cov` disables the coverage gate for this
+        # pinned run (a separate job from the coverage-enforcing matrix). The repo
+        # pytest config sets `pythonpath = ["src", "."]`, which would shadow the
+        # installed wheel with the source tree. We drop `src` (so the
+        # wheel-installed package is genuinely exercised) but keep the repo root
+        # `.` on the path for conftest/fixtures.
+        run: pytest tests/ --no-cov -q -o "pythonpath=."
