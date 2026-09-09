@@ -483,6 +483,17 @@ These databases have pre-packaged driver dependencies. Install the matching extr
 
 Any other database with a [SQLAlchemy dialect](https://docs.sqlalchemy.org/en/20/dialects/) works too — just install the driver yourself. See [Choose your integration path](#choose-your-integration-path).
 
+### Support tiers
+
+Database support falls into two explicit tiers:
+
+| Tier | Databases | What it means |
+|------|-----------|---------------|
+| **Tier 1 — Supported** | PostgreSQL, MySQL, SQL Server | Shipped as built-in extras and exercised by this project's test suite and release certification. This is the tested, recommended path. |
+| **Tier 2 — Community / BYOD** | Oracle, CockroachDB, DuckDB, SQLite, and [any other SQLAlchemy dialect](https://docs.sqlalchemy.org/en/20/dialects/) | Works through SQLAlchemy compatibility by bringing your own driver and connection URL. Not explicitly tested here; connection-URL syntax and dialect quirks are the driver's responsibility. |
+
+Both tiers use the identical decorator and `SqlAlchemySource` API — the only difference is which drivers are bundled and which paths are covered by this project's tests. See [Choose your integration path](#choose-your-integration-path) for the BYOD walkthrough.
+
 ## Scope
 
 - Azure Functions Python **v2 programming model**
