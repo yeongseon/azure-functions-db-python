@@ -37,6 +37,22 @@ param instanceMemoryMB int = 2048
 @description('Maximum number of instances the app can scale out to (Flex minimum is 40).')
 param maximumInstanceCount int = 40
 
+@description('Provision a PostgreSQL Flexible Server as the e2e test database.')
+param enablePostgres bool = false
+
+@description('Name of the e2e PostgreSQL Flexible Server (globally unique, 3-63 lowercase).')
+param postgresServerName string = '${functionAppName}-pg'
+
+@description('Admin login for the e2e PostgreSQL Flexible Server.')
+param postgresAdminLogin string = 'e2eadmin'
+
+@description('Admin password for the e2e PostgreSQL Flexible Server (required when enablePostgres=true).')
+@secure()
+param postgresAdminPassword string = ''
+
+@description('Name of the e2e database created on the Flexible Server.')
+param postgresDatabaseName string = 'e2edb'
+
 // Name of the blob container that holds the deployment (.zip) package.
 var deploymentContainerName = 'app-package'
 
@@ -138,9 +154,57 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   }
 }
 
+// ── PostgreSQL Flexible Server (optional e2e database) ──────────────────────
+// Burstable B1ms / PG 16, with a firewall rule that allows access from Azure
+// services (the 0.0.0.0 sentinel rule) so the Flex Consumption Function App —
+// whose outbound IPs are dynamic — can reach it. SSL is required by default;
+// clients must connect with sslmode=require.
+resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' = if (enablePostgres) {
+  name: postgresServerName
+  location: location
+  sku: {
+    name: 'Standard_B1ms'
+    tier: 'Burstable'
+  }
+  properties: {
+    version: '16'
+    administratorLogin: postgresAdminLogin
+    administratorLoginPassword: postgresAdminPassword
+    storage: {
+      storageSizeGB: 32
+    }
+    backup: {
+      backupRetentionDays: 7
+      geoRedundantBackup: 'Disabled'
+    }
+    highAvailability: {
+      mode: 'Disabled'
+    }
+  }
+}
+
+resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = if (enablePostgres) {
+  parent: postgres
+  name: postgresDatabaseName
+}
+
+resource postgresAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = if (enablePostgres) {
+  parent: postgres
+  name: 'AllowAllAzureServices'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
 // ── Outputs ────────────────────────────────────────────────────────────────
 output functionAppName string = functionApp.name
 output defaultHostName string = functionApp.properties.defaultHostName
 output appInsightsConnectionString string = enableAppInsights
   ? appInsights.properties.ConnectionString
   : ''
+
+output postgresFqdn string = enablePostgres
+  ? postgres.properties.fullyQualifiedDomainName
+  : ''
+output postgresDatabaseName string = enablePostgres ? postgresDatabaseName : ''
