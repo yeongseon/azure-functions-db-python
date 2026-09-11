@@ -2,6 +2,15 @@ name: e2e-azure
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Release commit SHA (or ref) to certify
+        required: false
+        type: string
+      version:
+        description: Expected package version (must match source __version__)
+        required: false
+        type: string
   schedule:
     - cron: "0 6 * * 1"  # Weekly on Monday 6:00 UTC
   push:
@@ -46,6 +55,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Certify the exact release commit when dispatched with `ref`; fall back
+          # to the triggering ref for tag pushes / scheduled runs.
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Compute resource names
         id: names
@@ -126,6 +139,44 @@ jobs:
         run: pytest tests/e2e -v -m azure_e2e --no-cov --html=e2e-report/report.html --self-contained-html
         env:
           E2E_BASE_URL: https://${{ steps.names.outputs.app }}.azurewebsites.net
+
+      - name: Record certification
+        # Produce the SHA+version-matched certification record that
+        # publish-pypi.yml's verify-azure-certification gate requires. Mirrors the
+        # sibling pattern in azure-functions-openapi's e2e-azure.yml. Runs only
+        # after the live e2e suite above has passed, so the record attests a real
+        # deploy + live-e2e success for this exact commit.
+        run: |
+          SHA=$(git rev-parse HEAD)
+          FILE_VERSION=$(grep -Po '(?<=__version__ = ")[^"]*' src/azure_functions_db/__init__.py)
+          REQ_VERSION="${{ inputs.version }}"
+          if [ -n "$REQ_VERSION" ] && [ "$REQ_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error ::Requested certification version ($REQ_VERSION) != source version ($FILE_VERSION)"
+            exit 1
+          fi
+          VERSION="${REQ_VERSION:-$FILE_VERSION}"
+          mkdir -p cert
+          cat > cert/certification.json <<EOF
+          {
+            "package": "azure-functions-db",
+            "version": "$VERSION",
+            "commit": "$SHA",
+            "ref": "${{ inputs.ref || github.ref }}",
+            "workflow": "e2e-azure.yml",
+            "run_id": "${{ github.run_id }}",
+            "result": "success",
+            "certified_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat cert/certification.json
+
+      - name: Upload certification record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: azure-cert
+          path: cert/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload e2e report
         if: always()

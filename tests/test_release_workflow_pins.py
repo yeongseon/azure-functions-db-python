@@ -87,3 +87,49 @@ def test_parses_block_style_needs() -> None:
         body += f"      - {item}\n"
     body += "    runs-on: ubuntu-latest\n"
     assert lint_mod.check_publish_needs(body, "publish-pypi.yml") == []
+
+
+# --- e2e-azure certification-artifact guards -------------------------------
+#
+# publish-pypi.yml's verify-azure-certification gate downloads the `azure-cert`
+# artifact and asserts cert/certification.json matches the release commit +
+# version. Nothing else guards that e2e-azure.yml actually PRODUCES that
+# artifact, so a well-meaning edit could silently break every release. These
+# text-based checks (dependency-free, mirroring the lint's style) keep the
+# producer and consumer in lockstep.
+
+_E2E_AZURE = _REPO_ROOT / ".github" / "workflows" / "e2e-azure.yml"
+
+
+def _e2e_azure_text() -> str:
+    return _E2E_AZURE.read_text(encoding="utf-8")
+
+
+def test_e2e_azure_uploads_azure_cert_artifact() -> None:
+    """The cert consumer (publish gate) needs e2e-azure to upload `azure-cert`."""
+    text = _e2e_azure_text()
+    assert "name: azure-cert" in text, (
+        "e2e-azure.yml must upload an `azure-cert` artifact; "
+        "publish-pypi.yml's verify-azure-certification gate depends on it."
+    )
+    assert "cert/certification.json" in text, (
+        "e2e-azure.yml must write cert/certification.json (the record the "
+        "publish gate parses)."
+    )
+
+
+def test_e2e_azure_exposes_ref_and_version_inputs() -> None:
+    """AGENTS.md dispatches `-f ref=... -f version=...`; the inputs must exist."""
+    text = _e2e_azure_text()
+    for token in ("workflow_dispatch:", "      ref:", "      version:"):
+        assert token in text, f"e2e-azure.yml is missing dispatch input marker: {token!r}"
+
+
+def test_e2e_azure_certification_records_required_fields() -> None:
+    """The record must carry the fields the publish gate asserts on."""
+    text = _e2e_azure_text()
+    for field in ('"commit":', '"version":', '"result":'):
+        assert field in text, (
+            f"cert/certification.json is missing required field {field!r} "
+            "asserted by publish-pypi.yml verify-azure-certification."
+        )
