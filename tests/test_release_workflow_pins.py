@@ -133,3 +133,18 @@ def test_e2e_azure_certification_records_required_fields() -> None:
             f"cert/certification.json is missing required field {field!r} "
             "asserted by publish-pypi.yml verify-azure-certification."
         )
+
+
+def test_e2e_azure_bicep_template_exists() -> None:
+    """The deploy step runs `az deployment group create --template-file
+    infra/main.bicep`; that file must exist and be referenced, or the real-Azure
+    deploy (and thus certification) fails before it can produce `azure-cert`."""
+    text = _e2e_azure_text()
+    assert "--template-file infra/main.bicep" in text, (
+        "e2e-azure.yml must deploy infra via `--template-file infra/main.bicep`."
+    )
+    bicep = _REPO_ROOT / "infra" / "main.bicep"
+    assert bicep.is_file(), (
+        "infra/main.bicep is referenced by e2e-azure.yml's Deploy infra step "
+        "but is missing; the real-Azure deploy cannot run without it."
+    )
