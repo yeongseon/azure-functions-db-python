@@ -1,10 +1,51 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.5.3] - 2026-09-11
+
+### Bug Fixes
+
+- Remove fragile hatch sources config and gate publish on wheel import (#239) 
+
+### Documentation
+
+- Codify issue-based project management convention in AGENTS.md (#282) 
+- Cross-link to central worker-binding docs (#273) 
+
+### Miscellaneous Tasks
+
+- *(e2e)* Add missing infra/main.bicep for real-Azure deploy (#295) 
+- *(release)* Produce SHA+version-matched azure-cert artifact in e2e-azure (#294) 
+- *(deps)* Bump ruff in the python-dependencies group (#292) 
+- *(deps)* Add non-blocking azure-functions 2.x compat lane (#291) 
+- Run matrix tests on the real interpreter, not the hatch pin (#288) 
+- *(deps)* Bump dependabot/fetch-metadata from 2.5.0 to 3.1.0 (#269) 
+- Add hatch-matrix hygiene lint and guard ci-test matrix (#286) 
+- *(deps)* Bump ruff in the python-dependencies group (#279) 
+- *(deps)* Bump ruff (#267) 
+- Notify cookbook to re-run e2e after PyPI release (#271) 
+- *(deps)* Bump the github-actions group with 2 updates (#268) 
+- *(ci)* Group dependabot updates + auto-merge patch/minor (#264) 
+- *(deps)* Bump mypy from 2.3.0 to 2.3.1 (#259) 
+- *(deps)* Bump ruff from 0.16.1 to 0.16.3 (#260) 
+
+### Other
+
+- Bump version to 0.5.3 
+- *(deps)* Add Dependabot cooldown to age new releases (#284) 
+
+### Refactor
+
+- Split decorator.py into cohesive decorator package (#290) 
+
+### Testing
+
+- *(security)* Assert connection strings are never logged (#277) 
 ## [0.5.2] - 2026-08-14
 
 ### Documentation
 
+- Update changelog 
 - Consolidate official documentation URL onto yeongseon.dev (#254) 
 - Mark package Experimental in README (en/ko/ja/zh-CN) (#237) 
 - *(i18n)* Adopt best-effort translation policy with staleness banners (#246) 
