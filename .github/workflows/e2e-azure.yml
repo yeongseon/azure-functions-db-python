@@ -71,6 +71,9 @@ jobs:
           echo "rg=${RG}"   >> "$GITHUB_OUTPUT"
           echo "app=${APP}" >> "$GITHUB_OUTPUT"
           echo "st=${ST}"   >> "$GITHUB_OUTPUT"
+          PG="pg-af-e2e-${REPO_SHORT}-${RUN}"
+          PG="${PG:0:63}"
+          echo "pg=${PG}"   >> "$GITHUB_OUTPUT"
 
       - name: Azure login (OIDC)
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
@@ -86,6 +89,15 @@ jobs:
             --location "$AZURE_LOCATION" \
             --tags purpose=e2e repo=azure-functions-db-python run="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
+      - name: Generate Postgres password
+        id: pgpw
+        run: |
+          # 3 character classes (upper, lower, digit) + URL-safe (alphanumeric only)
+          # so it can be embedded in the SQLAlchemy connection URL without escaping.
+          PW="Pg$(openssl rand -hex 16)Az9"
+          echo "::add-mask::$PW"
+          echo "password=$PW" >> "$GITHUB_OUTPUT"
+
       - name: Deploy infra (Bicep)
         run: |
           az deployment group create \
@@ -95,7 +107,23 @@ jobs:
                 location="$AZURE_LOCATION" \
                 functionAppName="${{ steps.names.outputs.app }}" \
                 storageName="${{ steps.names.outputs.st }}" \
-                enableAppInsights=false
+                enableAppInsights=false \
+                enablePostgres=true \
+                postgresServerName="${{ steps.names.outputs.pg }}" \
+                postgresAdminPassword="${{ steps.pgpw.outputs.password }}"
+
+      - name: Configure database connection (E2E_DB_URL)
+        run: |
+          FQDN=$(az deployment group show \
+            --resource-group "${{ steps.names.outputs.rg }}" \
+            --name main \
+            --query properties.outputs.postgresFqdn.value -o tsv)
+          URL="postgresql+psycopg://e2eadmin:${{ steps.pgpw.outputs.password }}@${FQDN}:5432/e2edb?sslmode=require"
+          echo "::add-mask::$URL"
+          az functionapp config appsettings set \
+            --resource-group "${{ steps.names.outputs.rg }}" \
+            --name "${{ steps.names.outputs.app }}" \
+            --settings E2E_DB_URL="$URL" -o none
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
