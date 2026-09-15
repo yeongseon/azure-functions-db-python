@@ -23,8 +23,11 @@ classifiers = [
 ]
 
 dependencies = [
-    # Cap below 2.0.0: azure-functions v2 may change worker function-indexing
-    # behavior the toolkit relies on. See knowledge#46 / dx#8.
+    # Cap-lift criteria: keep <2.0.0 until the advisory `worker-compat-2x`
+    # lane is green AND a real-Azure certification passes, then lift in a
+    # separate PR. azure-functions 2.x requires Python >= 3.13, so the lane
+    # runs only on 3.13/3.14. Original concern: AF2 may change worker
+    # function-indexing behavior the toolkit relies on. See knowledge#46 / dx#8.
     "azure-functions>=1.22.0,<2.0.0",
     "sqlalchemy>=2.0",
     "azure-storage-blob>=12.21.0",
@@ -131,7 +134,7 @@ module = "examples.*"
 follow_imports = "skip"
 
 [tool.pytest.ini_options]
-addopts = '--cov=src/azure_functions_db --cov-report=xml --cov-report=term-missing -ra -q -m "not host_e2e and not azure_e2e"'
+addopts = '--cov=src/azure_functions_db --cov-report=xml --cov-report=term-missing -ra -q -m "not host_e2e and not azure_e2e and not compat2x"'
 testpaths = ["tests"]
 pythonpath = ["src", "."]
 markers = [
@@ -143,6 +146,7 @@ markers = [
     "mssql: tests that require SQL Server",
     "sqlite: tests that use SQLite",
     "azurite: tests that require Azurite storage emulator",
+    "compat2x: opt-in azure-functions 2.x compatibility spike (require AZFUNC_2X_SPIKE=1)",
 ]
 
 [tool.coverage.run]
