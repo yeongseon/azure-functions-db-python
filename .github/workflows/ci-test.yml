@@ -182,7 +182,7 @@ jobs:
         run: pip install "$(ls dist/azure_functions_db-*.whl)[dev]"
 
       - name: Upgrade azure-functions to the 2.x line
-        # pyproject caps azure-functions below 2.0.0 only under Python 3.13; on
+        # pyproject caps azure-functions below 2.0.0 only on Python <3.13; on
         # the 3.13 interpreter this lane runs, the 2.x line is already
         # permitted. Pinning >=2,<3 explicitly fixes the line under test to
         # PROVE the package (binding decorators, poll trigger, writer
