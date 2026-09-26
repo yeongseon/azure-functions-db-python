@@ -149,12 +149,13 @@ jobs:
   # behaviour under the 2.x worker is the risk surface this lane exercises.
   #
   # Gating decision: this lane runs on every PR as a VISIBLE compatibility
-  # signal, but it is intentionally NOT a required check -- the runtime cap stays
-  # `<2.0.0` until 2.x is certified on real Azure via e2e-azure.yml, so making
-  # this blocking before that certification would gate merges on an uncertified
-  # runtime. Promote it to a required check via branch protection once the cap is
-  # lifted. azure-functions 2.x declares Requires-Python >=3.13, so this lane
-  # pins Python 3.13.
+  # signal, but it is intentionally NOT a required check -- pyproject already
+  # permits the 2.x line on Python 3.13+, yet this package's own real-Azure
+  # certification via e2e-azure.yml is still a follow-up, so making this lane
+  # blocking would gate merges on a runtime this repository has not certified.
+  # Promote it to a required check via branch protection once that
+  # certification lands. azure-functions 2.x declares Requires-Python >=3.13,
+  # so this lane pins Python 3.13.
   azure-functions-2x:
     name: azure-functions 2.x compat (Py 3.13)
     runs-on: ubuntu-latest
@@ -181,11 +182,12 @@ jobs:
         run: pip install "$(ls dist/azure_functions_db-*.whl)[dev]"
 
       - name: Upgrade azure-functions to the 2.x line
-        # pyproject caps azure-functions <2.0.0 until 2.x is certified on real
-        # Azure. This lane deliberately overrides that cap to PROVE the package
-        # (binding decorators, poll trigger, writer injection) still builds and
-        # passes its suite under 2.x. pip warns about the intentional override;
-        # that is expected.
+        # pyproject caps azure-functions below 2.0.0 only under Python 3.13; on
+        # the 3.13 interpreter this lane runs, the 2.x line is already
+        # permitted. Pinning >=2,<3 explicitly fixes the line under test to
+        # PROVE the package (binding decorators, poll trigger, writer
+        # injection) still builds and passes its suite under 2.x. pip may warn
+        # about resolving to 2.x; that is expected.
         run: pip install "azure-functions>=2,<3"
 
       - name: Show resolved versions
