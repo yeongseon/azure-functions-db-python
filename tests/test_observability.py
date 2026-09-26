@@ -24,9 +24,7 @@ class CustomCollector:
     ) -> None:
         del name, value, labels
 
-    def observe(
-        self, name: str, value: float, *, labels: Mapping[str, str] | None = None
-    ) -> None:
+    def observe(self, name: str, value: float, *, labels: Mapping[str, str] | None = None) -> None:
         del name, value, labels
 
     def set_gauge(

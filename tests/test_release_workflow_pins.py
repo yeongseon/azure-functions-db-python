@@ -113,8 +113,7 @@ def test_e2e_azure_uploads_azure_cert_artifact() -> None:
         "publish-pypi.yml's verify-azure-certification gate depends on it."
     )
     assert "cert/certification.json" in text, (
-        "e2e-azure.yml must write cert/certification.json (the record the "
-        "publish gate parses)."
+        "e2e-azure.yml must write cert/certification.json (the record the publish gate parses)."
     )
 
 

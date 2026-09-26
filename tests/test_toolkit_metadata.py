@@ -230,8 +230,10 @@ def test_decorator_order_independent() -> None:
 
 def test_get_db_metadata_returns_none_for_undecorated() -> None:
     """Test that get_db_metadata returns None for undecorated function."""
+
     def undecorated() -> None:
         pass
+
     result = get_db_metadata(undecorated)
     assert result is None
 
