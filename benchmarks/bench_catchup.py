@@ -65,10 +65,7 @@ def main() -> None:
     with engine.begin() as connection:
         connection.execute(
             insert(events),
-            [
-                {"id": idx, "updated_at": idx, "payload": idx}
-                for idx in range(1, row_count + 1)
-            ],
+            [{"id": idx, "updated_at": idx, "payload": idx} for idx in range(1, row_count + 1)],
         )
 
     source = SqlAlchemySource(
