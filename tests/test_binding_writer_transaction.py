@@ -94,9 +94,9 @@ class TestTransactionRollback:
                         raise RuntimeError("the original error")
 
         assert any(
-            "Failed to roll back transaction on exception" in r.message
-            for r in caplog.records
+            "Failed to roll back transaction on exception" in r.message for r in caplog.records
         ), "Expected rollback-failure warning in log"
+
 
 class TestTransactionNesting:
     def test_nested_transaction_raises(self, users_url: str) -> None:
@@ -107,9 +107,7 @@ class TestTransactionNesting:
                         pass
         assert _row_count(users_url) == 0
 
-    def test_can_open_new_transaction_after_previous_completes(
-        self, users_url: str
-    ) -> None:
+    def test_can_open_new_transaction_after_previous_completes(self, users_url: str) -> None:
         with DbWriter(url=users_url, table="users") as writer:
             with writer.transaction():
                 writer.insert(data={"id": 1, "name": "Alice"})

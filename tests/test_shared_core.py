@@ -223,9 +223,7 @@ class TestEngineProvider:
         import logging
 
         secret = "s3cr3t-P@ssw0rd-DO-NOT-LOG"  # noqa: S105 - test fixture, not a real secret
-        config = DbConfig(
-            connection_url=f"postgresql+psycopg2://user:{secret}@dbhost:5432/appdb"
-        )
+        config = DbConfig(connection_url=f"postgresql+psycopg2://user:{secret}@dbhost:5432/appdb")
         provider = EngineProvider()
         # Whether the psycopg2 driver is installed (engine builds lazily) or
         # absent (create_engine raises ModuleNotFoundError), the embedded
@@ -250,9 +248,7 @@ class TestEngineProvider:
         import logging
 
         secret = "s3cr3t-P@ssw0rd-DO-NOT-LOG"  # noqa: S105 - test fixture, not a real secret
-        config = DbConfig(
-            connection_url=f"no-such-dialect://user:{secret}@dbhost:5432/appdb"
-        )
+        config = DbConfig(connection_url=f"no-such-dialect://user:{secret}@dbhost:5432/appdb")
         provider = EngineProvider()
         with caplog.at_level(logging.DEBUG):
             with pytest.raises(Exception):  # noqa: B017 - SQLAlchemy plugin-load error
@@ -419,9 +415,7 @@ def test_sqlalchemy_source_uses_engine_provider(tmp_path: Path) -> None:
 
 def _pk_table(*pk_names: str) -> Table:
     metadata = MetaData()
-    columns: list[Column[Any]] = [
-        Column(name, Integer, primary_key=True) for name in pk_names
-    ]
+    columns: list[Column[Any]] = [Column(name, Integer, primary_key=True) for name in pk_names]
     columns.append(Column("data", String(10)))
     return Table("widgets", metadata, *columns)
 

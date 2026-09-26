@@ -63,17 +63,13 @@ class StateStore(Protocol):
 class SourceAdapter(Protocol):
     @property
     def source_descriptor(self) -> SourceDescriptor: ...
-    def fetch(
-        self, cursor: CursorValue | None, batch_size: int
-    ) -> Sequence[RawRecord]: ...
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]: ...
 
 
 def _detect_handler_arity(handler: Callable[..., Any]) -> int:
     sig = inspect.signature(handler)
     params = [
-        p
-        for p in sig.parameters.values()
-        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        p for p in sig.parameters.values() if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
     ]
     return len(params)
 
@@ -122,10 +118,7 @@ class PollRunner:
         metrics: MetricsCollector | None = None,
     ) -> None:
         if asyncio.iscoroutinefunction(handler):
-            msg = (
-                "Async handlers are not supported. "
-                "Pass a synchronous function instead."
-            )
+            msg = "Async handlers are not supported. Pass a synchronous function instead."
             raise TypeError(msg)
         if batch_size < 1:
             msg = "batch_size must be >= 1"
@@ -221,9 +214,7 @@ class PollRunner:
                 )
                 self._sleep(delay)
 
-    def _emit_failure_metrics(
-        self, exc: Exception, *, source: str | None = None
-    ) -> None:
+    def _emit_failure_metrics(self, exc: Exception, *, source: str | None = None) -> None:
         labels: dict[str, str] = {
             "poller_name": self._name,
             "error_type": type(exc).__name__,
@@ -295,9 +286,7 @@ class PollRunner:
 
     def _acquire_lease(self, ctx: _TickState) -> str | None:
         try:
-            return self._state_store.acquire_lease(
-                self._name, self._lease_ttl_seconds
-            )
+            return self._state_store.acquire_lease(self._name, self._lease_ttl_seconds)
         except LeaseConflictError:
             # Scale-out contention: another instance holds the lease this
             # cycle. Treating it as a failure (logger.exception /
@@ -327,9 +316,7 @@ class PollRunner:
                 ),
             )
             self._emit_failure_metrics(exc)
-            raise LeaseAcquireError(
-                f"Failed to acquire lease for poller '{self._name}'"
-            ) from exc
+            raise LeaseAcquireError(f"Failed to acquire lease for poller '{self._name}'") from exc
 
     def _load_checkpoint(self, ctx: _TickState) -> dict[str, object]:
         return self._run_stage(
@@ -361,9 +348,7 @@ class PollRunner:
         def _fetch() -> Sequence[RawRecord]:
             fetch_started_monotonic = time.monotonic()
             raw_records = self._source.fetch(ctx.cursor, self._batch_size)
-            ctx.fetch_duration_ms = round(
-                (time.monotonic() - fetch_started_monotonic) * 1000, 2
-            )
+            ctx.fetch_duration_ms = round((time.monotonic() - fetch_started_monotonic) * 1000, 2)
             return raw_records
 
         raw_records = self._run_stage(
@@ -405,9 +390,7 @@ class PollRunner:
         raw_records: Sequence[RawRecord],
     ) -> list[RowChange]:
         return self._run_stage(
-            lambda: [
-                self._normalizer(record, descriptor) for record in raw_records
-            ],
+            lambda: [self._normalizer(record, descriptor) for record in raw_records],
             error_cls=SerializationError,
             message=f"Failed to normalize records for poller '{self._name}'",
             event="normalize_failed",
@@ -449,9 +432,7 @@ class PollRunner:
         self._run_stage(
             _invoke,
             error_cls=HandlerError,
-            message=(
-                f"Handler failed for poller '{self._name}' batch '{ctx.batch_id}'"
-            ),
+            message=(f"Handler failed for poller '{self._name}' batch '{ctx.batch_id}'"),
             event="handler_failed",
             invocation_id=ctx.invocation_id,
             extra_fields={
@@ -503,12 +484,8 @@ class PollRunner:
     ) -> None:
         try:
             commit_started_monotonic = time.monotonic()
-            self._state_store.commit_checkpoint(
-                self._name, new_checkpoint, ctx.lease_id
-            )
-            ctx.commit_duration_ms = round(
-                (time.monotonic() - commit_started_monotonic) * 1000, 2
-            )
+            self._state_store.commit_checkpoint(self._name, new_checkpoint, ctx.lease_id)
+            ctx.commit_duration_ms = round((time.monotonic() - commit_started_monotonic) * 1000, 2)
         except LostLeaseError:
             logger.exception(
                 "Checkpoint commit failed for poller '%s' batch '%s'",
@@ -534,13 +511,10 @@ class PollRunner:
             )
             self._emit_failure_metrics(exc, source=descriptor.name)
             raise CommitError(
-                f"Checkpoint commit failed for poller '{self._name}'"
-                f" batch '{ctx.batch_id}'"
+                f"Checkpoint commit failed for poller '{self._name}' batch '{ctx.batch_id}'"
             ) from exc
 
-    def _emit_success_metrics(
-        self, ctx: _TickState, events: list[RowChange]
-    ) -> None:
+    def _emit_success_metrics(self, ctx: _TickState, events: list[RowChange]) -> None:
         base_labels = ctx.base_labels
         self._safe_emit(
             lambda: self._metrics.increment(
@@ -584,9 +558,7 @@ class PollRunner:
             )
         )
 
-    def _compute_lag(
-        self, ctx: _TickState, new_checkpoint: dict[str, object]
-    ) -> float | None:
+    def _compute_lag(self, ctx: _TickState, new_checkpoint: dict[str, object]) -> float | None:
         lag_seconds: float | None = None
         cursor_for_lag = new_checkpoint.get("cursor")
         if isinstance(cursor_for_lag, str):
@@ -621,8 +593,7 @@ class PollRunner:
                         self._emit_lag_metric(lag_seconds, ctx.base_labels)
                     else:
                         logger.debug(
-                            "Poller '%s': cursor tuple[0] '%s' is"
-                            " tz-naive; lag metric skipped.",
+                            "Poller '%s': cursor tuple[0] '%s' is tz-naive; lag metric skipped.",
                             self._name,
                             first_part,
                         )
@@ -630,9 +601,7 @@ class PollRunner:
                     pass
         return lag_seconds
 
-    def _process_batch(
-        self, ctx: _TickState, descriptor: SourceDescriptor
-    ) -> bool:
+    def _process_batch(self, ctx: _TickState, descriptor: SourceDescriptor) -> bool:
         """Process a single batch. Returns ``False`` to stop the tick loop."""
         ctx.batch_id = f"{ctx.invocation_id}-{ctx.batch_idx}"
 
@@ -731,9 +700,7 @@ class PollRunner:
                 if not self._process_batch(ctx, descriptor):
                     break
 
-            tick_duration_ms = round(
-                (time.monotonic() - ctx.tick_started_monotonic) * 1000, 2
-            )
+            tick_duration_ms = round((time.monotonic() - ctx.tick_started_monotonic) * 1000, 2)
             self._safe_emit(
                 lambda: self._metrics.set_gauge(
                     METRIC_LAST_SUCCESS_TIMESTAMP,

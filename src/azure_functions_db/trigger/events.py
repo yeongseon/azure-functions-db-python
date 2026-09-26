@@ -5,9 +5,7 @@ from typing import ClassVar
 
 from azure_functions_db.core.types import CursorValue, SourceDescriptor
 
-VALID_OPS: frozenset[str] = frozenset(
-    {"insert", "update", "upsert", "delete", "unknown"}
-)
+VALID_OPS: frozenset[str] = frozenset({"insert", "update", "upsert", "delete", "unknown"})
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

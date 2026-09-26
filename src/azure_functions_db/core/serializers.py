@@ -32,10 +32,7 @@ def parse_checkpoint_cursor(raw: object) -> CursorValue | None:
         parts = tuple(raw)
         for i, part in enumerate(parts):
             if not _is_valid_cursor_part(part):
-                msg = (
-                    f"Unsupported cursor part type at index {i}: "
-                    f"{type(part).__name__}"
-                )
+                msg = f"Unsupported cursor part type at index {i}: {type(part).__name__}"
                 raise CursorSerializationError(msg)
         return parts
     msg = f"Unsupported cursor type in checkpoint: {type(raw).__name__}"

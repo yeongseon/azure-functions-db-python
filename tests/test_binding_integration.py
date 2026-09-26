@@ -152,9 +152,7 @@ class TestTriggerWithWriter:
         assert by_id[2]["name"] == "Bob"
         assert by_id[3]["name"] == "Charlie"
 
-    def test_second_tick_with_checkpoint_is_noop(
-        self, source_url: str, dest_url: str
-    ) -> None:
+    def test_second_tick_with_checkpoint_is_noop(self, source_url: str, dest_url: str) -> None:
         source = SqlAlchemySource(
             url=source_url,
             table="orders",
@@ -196,9 +194,7 @@ class TestTriggerWithWriter:
 
 
 class TestTriggerWithReaderAndWriter:
-    def test_trigger_reads_enriched_data_and_writes(
-        self, source_url: str, dest_url: str
-    ) -> None:
+    def test_trigger_reads_enriched_data_and_writes(self, source_url: str, dest_url: str) -> None:
         source = SqlAlchemySource(
             url=source_url,
             table="orders",
@@ -265,9 +261,7 @@ class TestEngineProviderSharing:
             )
 
             def handler(events: list[RowChange]) -> None:
-                with DbWriter(
-                    url=dest_url, table="processed", engine_provider=provider
-                ) as writer:
+                with DbWriter(url=dest_url, table="processed", engine_provider=provider) as writer:
                     for event in events:
                         assert event.after is not None
                         writer.upsert(
@@ -287,27 +281,19 @@ class TestEngineProviderSharing:
         finally:
             provider.dispose_all()
 
-    def test_reader_and_writer_same_db_shared_provider(
-        self, source_url: str
-    ) -> None:
+    def test_reader_and_writer_same_db_shared_provider(self, source_url: str) -> None:
         provider = EngineProvider()
         try:
-            with DbReader(
-                url=source_url, table="orders", engine_provider=provider
-            ) as reader:
+            with DbReader(url=source_url, table="orders", engine_provider=provider) as reader:
                 row = reader.get(pk={"id": 1})
                 assert row is not None
                 assert row["name"] == "Alice"
 
             dest_url = source_url
-            with DbWriter(
-                url=dest_url, table="orders", engine_provider=provider
-            ) as writer:
+            with DbWriter(url=dest_url, table="orders", engine_provider=provider) as writer:
                 writer.update(data={"name": "Alice Updated"}, pk={"id": 1})
 
-            with DbReader(
-                url=source_url, table="orders", engine_provider=provider
-            ) as reader:
+            with DbReader(url=source_url, table="orders", engine_provider=provider) as reader:
                 row = reader.get(pk={"id": 1})
                 assert row is not None
                 assert row["name"] == "Alice Updated"
@@ -432,9 +418,7 @@ class TestCheckpointResumeAfterFailure:
         finally:
             source.dispose()
 
-    def test_retry_with_upsert_is_idempotent(
-        self, source_url: str, dest_url: str
-    ) -> None:
+    def test_retry_with_upsert_is_idempotent(self, source_url: str, dest_url: str) -> None:
         source = SqlAlchemySource(
             url=source_url,
             table="orders",
@@ -489,9 +473,7 @@ class TestCheckpointResumeAfterFailure:
 
 
 class TestUpsertManyBatchIntegration:
-    def test_trigger_with_batch_upsert(
-        self, source_url: str, dest_url: str
-    ) -> None:
+    def test_trigger_with_batch_upsert(self, source_url: str, dest_url: str) -> None:
         source = SqlAlchemySource(
             url=source_url,
             table="orders",

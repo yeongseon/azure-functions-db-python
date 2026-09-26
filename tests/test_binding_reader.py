@@ -226,9 +226,7 @@ class TestDbReaderGet:
             reader.get(pk={"id": 1})
         reader.close()
 
-    def test_get_partial_pk_multiple_matches_raises(
-        self, composite_pk_url: str
-    ) -> None:
+    def test_get_partial_pk_multiple_matches_raises(self, composite_pk_url: str) -> None:
         reader = DbReader(url=composite_pk_url, table="order_items")
         with pytest.raises(ConfigurationError, match="Incomplete primary key"):
             reader.get(pk={"order_id": 1})
@@ -309,6 +307,7 @@ class TestDbReaderQuery:
     def test_query_with_params_does_not_warn(self, users_url: str) -> None:
         reader = DbReader(url=users_url)
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             # Supplying params must not trigger the injection warning.
@@ -324,6 +323,7 @@ class TestDbReaderQuery:
     def test_scalar_with_params_does_not_warn(self, users_url: str) -> None:
         reader = DbReader(url=users_url)
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             reader.scalar("SELECT * FROM users WHERE id = :id", params={"id": 1})
@@ -422,9 +422,7 @@ class TestDbReaderErrorMapping:
             with pytest.raises(DbConnectionError, match="Failed to create database engine"):
                 reader.get(pk={"id": 1})
 
-    def test_table_reflection_failure_raises_configuration_error(
-        self, users_url: str
-    ) -> None:
+    def test_table_reflection_failure_raises_configuration_error(self, users_url: str) -> None:
         reader = DbReader(url=users_url, table="nonexistent_table")
         with pytest.raises(ConfigurationError, match="Failed to reflect table"):
             reader.get(pk={"id": 1})
@@ -448,9 +446,7 @@ class TestDbReaderErrorMapping:
             reader.query("SELECT * FROM nonexistent_table_xyz")
         reader.close()
 
-    def test_get_on_nonexistent_table_raises_configuration_error(
-        self, users_url: str
-    ) -> None:
+    def test_get_on_nonexistent_table_raises_configuration_error(self, users_url: str) -> None:
         reader = DbReader(url=users_url, table="missing_table")
         with pytest.raises(ConfigurationError, match="Failed to reflect table"):
             reader.get(pk={"id": 1})

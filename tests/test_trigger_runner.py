@@ -85,9 +85,7 @@ class FakeSourceAdapter:
             raise self.descriptor_error
         return self._descriptor
 
-    def fetch(
-        self, cursor: CursorValue | None, batch_size: int
-    ) -> Sequence[RawRecord]:
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]:
         if self.fetch_error:
             raise self.fetch_error
         if self._call_count >= len(self._batches):
@@ -108,9 +106,7 @@ class RecordingMetricsCollector:
     ) -> None:
         self.increments.append((name, value, labels))
 
-    def observe(
-        self, name: str, value: float, *, labels: Mapping[str, str] | None = None
-    ) -> None:
+    def observe(self, name: str, value: float, *, labels: Mapping[str, str] | None = None) -> None:
         self.observations.append((name, value, labels))
 
     def set_gauge(
@@ -377,9 +373,7 @@ class TestPollRunner:
             pytest.approx(15.0),
         ]  # noqa: S101
 
-    def test_retry_policy_logs_each_retry_attempt(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_retry_policy_logs_each_retry_attempt(self, caplog: pytest.LogCaptureFixture) -> None:
         """Each retry emits a warning log with attempt number and delay."""
         from azure_functions_db.trigger.retry import RetryPolicy
 
@@ -401,14 +395,13 @@ class TestPollRunner:
         )
         runner._sleep = lambda _s: None  # noqa: SLF001
 
-        with caplog.at_level(
-            logging.WARNING, logger="azure_functions_db.trigger.runner"
-        ), pytest.raises(HandlerError):
+        with (
+            caplog.at_level(logging.WARNING, logger="azure_functions_db.trigger.runner"),
+            pytest.raises(HandlerError),
+        ):
             runner.tick()
 
-        retry_records = [
-            r for r in caplog.records if r.getMessage().startswith("Handler attempt")
-        ]
+        retry_records = [r for r in caplog.records if r.getMessage().startswith("Handler attempt")]
         assert len(retry_records) == 2  # noqa: S101,PLR2004
         assert getattr(retry_records[0], "attempt", None) == 1  # noqa: S101
         assert getattr(retry_records[1], "attempt", None) == 2  # noqa: S101,PLR2004
@@ -548,9 +541,7 @@ class TestPollRunner:
         runner.tick()
 
         last_success = [
-            gauge
-            for gauge in metrics.gauges
-            if gauge[0] == METRIC_LAST_SUCCESS_TIMESTAMP
+            gauge for gauge in metrics.gauges if gauge[0] == METRIC_LAST_SUCCESS_TIMESTAMP
         ]
         assert len(last_success) == 1  # noqa: S101
         assert last_success[0][2] == {"poller_name": "test_poller"}  # noqa: S101
@@ -689,9 +680,7 @@ class TestPollRunner:
 
         runner.tick()
 
-        lag_gauges = [
-            gauge for gauge in metrics.gauges if gauge[0] == METRIC_LAG_SECONDS
-        ]
+        lag_gauges = [gauge for gauge in metrics.gauges if gauge[0] == METRIC_LAG_SECONDS]
         assert len(lag_gauges) == 1  # noqa: S101
         assert lag_gauges[0][1] == 0.0  # noqa: S101
 
@@ -711,13 +700,9 @@ class TestPollRunner:
 
         runner.tick()
 
-        assert all(
-            name != METRIC_LAG_SECONDS for name, _, _ in metrics.gauges
-        )  # noqa: S101
+        assert all(name != METRIC_LAG_SECONDS for name, _, _ in metrics.gauges)  # noqa: S101
 
-    def test_lag_naive_datetime_emits_debug_log(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_lag_naive_datetime_emits_debug_log(self, caplog: pytest.LogCaptureFixture) -> None:
         """A tz-naive cursor string should produce a debug log, not silently vanish."""
         naive_cursor = "2024-01-01T12:00:00"  # no tzinfo
         records: list[RawRecord] = [{"id": 1, "updated_at": naive_cursor}]
@@ -734,8 +719,7 @@ class TestPollRunner:
             runner.tick()
 
         assert any(
-            "tz-naive" in r.message and "naive_lag_poller" in r.message
-            for r in caplog.records
+            "tz-naive" in r.message and "naive_lag_poller" in r.message for r in caplog.records
         ), "Expected debug log about tz-naive cursor"
 
     def test_collector_exception_on_gauge_does_not_break_tick(self) -> None:
@@ -787,9 +771,7 @@ class TestPollRunner:
 
         labels = [
             labels
-            for _, _, labels in (
-                metrics.increments + metrics.observations + metrics.gauges
-            )
+            for _, _, labels in (metrics.increments + metrics.observations + metrics.gauges)
             if labels is not None
         ]
         assert labels  # noqa: S101
@@ -812,9 +794,7 @@ class TestPollRunner:
 
         labels = [
             labels
-            for _, _, labels in (
-                metrics.increments + metrics.observations + metrics.gauges
-            )
+            for _, _, labels in (metrics.increments + metrics.observations + metrics.gauges)
             if labels is not None
         ]
         forbidden = {"invocation_id", "batch_id", "lease_owner"}
@@ -982,21 +962,13 @@ class TestPollRunner:
 
         assert result == 0
         assert handler_calls == []
+        assert all(name != METRIC_FAILURES_TOTAL for name, _value, _labels in metrics.increments)
         assert all(
-            name != METRIC_FAILURES_TOTAL
-            for name, _value, _labels in metrics.increments
-        )
-        assert all(
-            not (
-                name == METRIC_BATCHES_TOTAL
-                and (labels or {}).get("result") == "failure"
-            )
+            not (name == METRIC_BATCHES_TOTAL and (labels or {}).get("result") == "failure")
             for name, _value, labels in metrics.increments
         )
 
-    def test_lease_conflict_logs_at_debug_not_error(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_lease_conflict_logs_at_debug_not_error(self, caplog: pytest.LogCaptureFixture) -> None:
         source = FakeSourceAdapter(batches=[])
         store = FakeStateStore()
         store.acquire_error = LeaseConflictError("held by another instance")
@@ -1009,9 +981,7 @@ class TestPollRunner:
             handler=lambda events: None,
         )
 
-        with caplog.at_level(
-            logging.DEBUG, logger="azure_functions_db.trigger.runner"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="azure_functions_db.trigger.runner"):
             runner.tick()
 
         assert any(
@@ -1019,9 +989,7 @@ class TestPollRunner:
             and getattr(record, "event", None) == "lease_acquire_skipped"
             for record in caplog.records
         )
-        assert not any(
-            record.levelno >= logging.ERROR for record in caplog.records
-        )
+        assert not any(record.levelno >= logging.ERROR for record in caplog.records)
 
     def test_fetch_failure_raises(self) -> None:
         source = FakeSourceAdapter(batches=[])
@@ -1247,9 +1215,7 @@ class TestPollRunner:
         source = FakeSourceAdapter(batches=[records])
         store = FakeStateStore()
 
-        def bad_normalizer(
-            record: RawRecord, source: SourceDescriptor
-        ) -> RowChange:
+        def bad_normalizer(record: RawRecord, source: SourceDescriptor) -> RowChange:
             msg = "bad data"
             raise ValueError(msg)
 
@@ -1261,9 +1227,7 @@ class TestPollRunner:
             handler=lambda events: None,
         )
 
-        with pytest.raises(
-            SerializationError, match="Failed to normalize records"
-        ):
+        with pytest.raises(SerializationError, match="Failed to normalize records"):
             runner.tick()
 
     def test_lost_lease_error_propagates(self) -> None:
@@ -1284,9 +1248,7 @@ class TestPollRunner:
             runner.tick()
 
     def test_composite_cursor_list_roundtrip(self) -> None:
-        source = FakeSourceAdapter(
-            batches=[[{"id": 1, "updated_at": 100}]]
-        )
+        source = FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]])
         store = FakeStateStore()
         store.checkpoints["test_poller"] = {
             "cursor": ["2026-01-01", 42],
@@ -1304,9 +1266,7 @@ class TestPollRunner:
         assert store.checkpoints["test_poller"]["cursor"] == 100
 
     def test_unsupported_cursor_type_raises(self) -> None:
-        source = FakeSourceAdapter(
-            batches=[[{"id": 1, "updated_at": 100}]]
-        )
+        source = FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]])
         store = FakeStateStore()
         store.checkpoints["test_poller"] = {
             "cursor": {"complex": "object"},
