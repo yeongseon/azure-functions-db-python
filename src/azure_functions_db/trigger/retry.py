@@ -25,5 +25,5 @@ class RetryPolicy:
             raise ValueError(msg)
 
     def delay_for_attempt(self, attempt: int) -> float:
-        delay = self.base_delay_seconds * (self.exponential_base ** attempt)
+        delay = self.base_delay_seconds * (self.exponential_base**attempt)
         return min(delay, self.max_delay_seconds)

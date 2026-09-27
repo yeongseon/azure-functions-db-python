@@ -68,16 +68,18 @@ checkpoint_store = BlobCheckpointStore(
 )
 def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -> None:
     del timer
-    out.set([
-        {
-            "order_id": event.pk["id"],
-            "customer_name": event.after["name"],
-            "amount": event.after["amount"],
-            "processed_at": str(event.cursor),
-        }
-        for event in events
-        if event.after is not None
-    ])
+    out.set(
+        [
+            {
+                "order_id": event.pk["id"],
+                "customer_name": event.after["name"],
+                "amount": event.after["amount"],
+                "processed_at": str(event.cursor),
+            }
+            for event in events
+            if event.after is not None
+        ]
+    )
 
 
 @app.function_name(name="orders_poll_imperative")

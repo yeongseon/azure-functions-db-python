@@ -679,9 +679,7 @@ class TestStateStoreErrorFallbackPaths:
         resp = MagicMock()
         resp.status_code = 500
         resp.reason = "Internal Server Error"
-        blob.upload_error = HttpResponseError(
-            message="Internal Server Error", response=resp
-        )
+        blob.upload_error = HttpResponseError(message="Internal Server Error", response=resp)
 
         with pytest.raises(StateStoreError, match="Failed to acquire"):
             store.acquire_lease("test_poller", 120)
@@ -696,9 +694,7 @@ class TestStateStoreErrorFallbackPaths:
         resp = MagicMock()
         resp.status_code = 500
         resp.reason = "Internal Server Error"
-        blob.upload_error = HttpResponseError(
-            message="Internal Server Error", response=resp
-        )
+        blob.upload_error = HttpResponseError(message="Internal Server Error", response=resp)
 
         with pytest.raises(StateStoreError, match="Failed to renew"):
             store.renew_lease("test_poller", lease_id, 120)
@@ -713,9 +709,7 @@ class TestStateStoreErrorFallbackPaths:
         resp = MagicMock()
         resp.status_code = 500
         resp.reason = "Internal Server Error"
-        blob.upload_error = HttpResponseError(
-            message="Internal Server Error", response=resp
-        )
+        blob.upload_error = HttpResponseError(message="Internal Server Error", response=resp)
 
         with pytest.raises(StateStoreError, match="Failed to release"):
             store.release_lease("test_poller", lease_id)
@@ -730,9 +724,7 @@ class TestStateStoreErrorFallbackPaths:
         resp = MagicMock()
         resp.status_code = 500
         resp.reason = "Internal Server Error"
-        blob.upload_error = HttpResponseError(
-            message="Internal Server Error", response=resp
-        )
+        blob.upload_error = HttpResponseError(message="Internal Server Error", response=resp)
 
         with pytest.raises(StateStoreError, match="Failed to commit"):
             store.commit_checkpoint("test_poller", {"cursor": 1}, lease_id)

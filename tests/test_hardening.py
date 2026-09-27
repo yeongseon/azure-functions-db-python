@@ -92,9 +92,7 @@ class FakeSourceAdapter:
             raise self.descriptor_error
         return self._descriptor
 
-    def fetch(
-        self, cursor: CursorValue | None, batch_size: int
-    ) -> Sequence[RawRecord]:
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]:
         if self.fetch_error:
             raise self.fetch_error
         self.fetch_history.append(cursor)
@@ -331,9 +329,7 @@ def test_stale_runner_commit_rejected_winner_advances() -> None:
         source=source_b,
         state_store=store,
         normalizer=_default_normalizer,
-        handler=lambda events: runner_b_handled.append(
-            [event.event_id for event in events]
-        ),
+        handler=lambda events: runner_b_handled.append([event.event_id for event in events]),
         batch_size=10,
     )
 

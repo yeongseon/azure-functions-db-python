@@ -79,9 +79,7 @@ def oracle_orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> Non
     query="SELECT * FROM orders WHERE status = :status",
     params={"status": "pending"},
 )
-def oracle_get_orders(
-    req: func.HttpRequest, orders: list[dict]
-) -> func.HttpResponse:
+def oracle_get_orders(req: func.HttpRequest, orders: list[dict]) -> func.HttpResponse:
     del req
     return func.HttpResponse(
         f"Found {len(orders)} pending orders",

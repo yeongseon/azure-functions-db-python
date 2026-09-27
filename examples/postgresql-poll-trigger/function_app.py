@@ -128,15 +128,17 @@ def orders_poll(
 
     processed_at = datetime.now(timezone.utc)
 
-    out.set([
-        {
-            "order_id": event.pk["id"],
-            "source_cursor": event.cursor[0],
-            "customer_name": event.after["customer_name"],
-            "amount": event.after["amount"],
-            "status": event.after["status"],
-            "processed_at": processed_at,
-        }
-        for event in events
-        if event.after is not None
-    ])
+    out.set(
+        [
+            {
+                "order_id": event.pk["id"],
+                "source_cursor": event.cursor[0],
+                "customer_name": event.after["customer_name"],
+                "amount": event.after["amount"],
+                "status": event.after["status"],
+                "processed_at": processed_at,
+            }
+            for event in events
+            if event.after is not None
+        ]
+    )

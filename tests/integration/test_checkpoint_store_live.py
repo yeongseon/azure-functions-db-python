@@ -106,9 +106,7 @@ def test_lease_prevents_double_acquire(checkpoint_store: Any) -> None:
         datetime.now(timezone.utc).isoformat(),
     ],
 )
-def test_checkpoint_with_various_values(
-    checkpoint_store: Any, cursor_value: object
-) -> None:
+def test_checkpoint_with_various_values(checkpoint_store: Any, cursor_value: object) -> None:
     poller_name = "poller-various-values"
     lease_id = checkpoint_store.acquire_lease(poller_name, ttl_seconds=30)
     checkpoint = {"cursor": cursor_value}

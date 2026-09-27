@@ -74,9 +74,7 @@ class PollTrigger:
         del timer
 
         handler_call = getattr(handler, "__call__", None)
-        if asyncio.iscoroutinefunction(handler) or asyncio.iscoroutinefunction(
-            handler_call
-        ):
+        if asyncio.iscoroutinefunction(handler) or asyncio.iscoroutinefunction(handler_call):
             msg = "Async handlers are not supported. Pass a synchronous function instead."
             raise TypeError(msg)
 

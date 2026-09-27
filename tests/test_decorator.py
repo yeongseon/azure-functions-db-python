@@ -1123,11 +1123,13 @@ def test_inject_writer_async_transaction_concurrent_writes_serialized(tmp_path: 
         {"id": 3, "status": "c"},
     ]
 
+
 class _FakeTxCM:
     """Minimal context manager to drive _AsyncDbWriterProxy error paths."""
 
-    def __init__(self, enter_exc: BaseException | None = None,
-                 exit_exc: BaseException | None = None) -> None:
+    def __init__(
+        self, enter_exc: BaseException | None = None, exit_exc: BaseException | None = None
+    ) -> None:
         self._enter_exc = enter_exc
         self._exit_exc = exit_exc
         self.exit_calls: list[tuple[Any, Any, Any]] = []

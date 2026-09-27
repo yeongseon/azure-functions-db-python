@@ -61,9 +61,7 @@ class FakeSourceAdapter:
     def source_descriptor(self) -> SourceDescriptor:
         return self._descriptor
 
-    def fetch(
-        self, cursor: CursorValue | None, batch_size: int
-    ) -> Sequence[RawRecord]:
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]:
         del cursor, batch_size
         if self.fetch_error is not None:
             raise self.fetch_error
@@ -87,9 +85,7 @@ class FakeSourceAdapterNoCursorPk:
     def source_descriptor(self) -> SourceDescriptor:
         return self._descriptor
 
-    def fetch(
-        self, cursor: CursorValue | None, batch_size: int
-    ) -> Sequence[RawRecord]:
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]:
         del cursor, batch_size
         if self.fetch_error is not None:
             raise self.fetch_error
