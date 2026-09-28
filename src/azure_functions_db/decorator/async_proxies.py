@@ -137,7 +137,7 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
         self._target.close()
 
     @asynccontextmanager
-    async def transaction(self) -> "AsyncIterator[_AsyncTxWriterProxy]":
+    async def transaction(self) -> AsyncIterator[_AsyncTxWriterProxy]:
         """Group multiple async writes into a single SQL transaction.
 
         Because SQLAlchemy ``Connection`` / ``Transaction`` objects are not
