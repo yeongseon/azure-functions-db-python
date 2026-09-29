@@ -1,5 +1,11 @@
 name: e2e-azure
 
+# Azure Release Certification: deploys to real Azure, runs the live e2e suite,
+# and records an azure-cert artifact for the exact commit + version.
+#
+# It runs as a GATE INSIDE publish-pypi.yml (workflow_call), so certification
+# always covers the exact commit being published and no cross-run matching is
+# needed. workflow_dispatch is kept for standalone verification and debugging.
 on:
   workflow_dispatch:
     inputs:
@@ -13,9 +19,23 @@ on:
         type: string
   schedule:
     - cron: "0 6 * * 1"  # Weekly on Monday 6:00 UTC
-  push:
-    tags:
-      - "v*"
+  workflow_call:
+    inputs:
+      ref:
+        description: "Release commit SHA (or ref) to certify"
+        required: false
+        type: string
+      version:
+        description: "Expected package version (must match source __version__)"
+        required: false
+        type: string
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
 
 permissions:
   id-token: write
@@ -43,6 +63,12 @@ jobs:
           else
             echo "has_azure=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Azure OIDC secrets not configured — skipping e2e tests."
+            # Only the weekly schedule may skip. As a release gate (workflow_call) or a
+            # manual run, missing credentials must fail closed, never pass untested.
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "::error::Azure OIDC secrets are required for release certification."
+              exit 1
+            fi
           fi
 
   deploy_and_test:
@@ -173,7 +199,7 @@ jobs:
 
       - name: Record certification
         # Produce the SHA+version-matched certification record that
-        # publish-pypi.yml's verify-azure-certification gate requires. Mirrors the
+        # audit trail of the azure-e2e gate in publish-pypi.yml. Mirrors the
         # sibling pattern in azure-functions-openapi's e2e-azure.yml. Runs only
         # after the live e2e suite above has passed, so the record attests a real
         # deploy + live-e2e success for this exact commit.

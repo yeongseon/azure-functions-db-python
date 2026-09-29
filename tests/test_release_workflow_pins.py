@@ -54,13 +54,13 @@ def test_detects_unpinned_tag() -> None:
     assert errors and "not pinned to a 40-hex SHA" in errors[0]
 
 
-def test_detects_missing_verify_azure_certification() -> None:
-    # Drop verify-azure-certification while keeping build + lib-tests + tiers.
+def test_detects_missing_azure_e2e_gate() -> None:
+    # Drop azure-e2e while keeping build + lib-tests + tiers.
     tiers = ", ".join(lint_mod.REQUIRED_RUNTIME_TIERS)
     joined = "build, lib-tests" + (f", {tiers}" if tiers else "")
     text = f"  publish:\n    needs: [{joined}]\n"
     errors = lint_mod.check_publish_needs(text, "publish-pypi.yml")
-    assert any("verify-azure-certification" in e for e in errors)
+    assert any("azure-e2e" in e for e in errors)
 
 
 def test_detects_regressed_needs() -> None:
@@ -91,7 +91,7 @@ def test_parses_block_style_needs() -> None:
 
 # --- e2e-azure certification-artifact guards -------------------------------
 #
-# publish-pypi.yml's verify-azure-certification gate downloads the `azure-cert`
+# publish-pypi.yml's azure-e2e gate downloads the `azure-cert`
 # artifact and asserts cert/certification.json matches the release commit +
 # version. Nothing else guards that e2e-azure.yml actually PRODUCES that
 # artifact, so a well-meaning edit could silently break every release. These
@@ -110,7 +110,7 @@ def test_e2e_azure_uploads_azure_cert_artifact() -> None:
     text = _e2e_azure_text()
     assert "name: azure-cert" in text, (
         "e2e-azure.yml must upload an `azure-cert` artifact; "
-        "publish-pypi.yml's verify-azure-certification gate depends on it."
+        "publish-pypi.yml's azure-e2e gate depends on it."
     )
     assert "cert/certification.json" in text, (
         "e2e-azure.yml must write cert/certification.json (the record the publish gate parses)."
@@ -130,7 +130,7 @@ def test_e2e_azure_certification_records_required_fields() -> None:
     for field in ('"commit":', '"version":', '"result":'):
         assert field in text, (
             f"cert/certification.json is missing required field {field!r} "
-            "asserted by publish-pypi.yml verify-azure-certification."
+            "asserted by publish-pypi.yml azure-e2e."
         )
 
 
