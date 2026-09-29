@@ -48,6 +48,9 @@ jobs:
   deploy_and_test:
     name: Deploy & Test
     runs-on: ubuntu-latest
+    # Pins the OIDC subject to environment:azure-e2e regardless of the triggering
+    # ref, so one Azure federated credential covers tag pushes and dispatches.
+    environment: azure-e2e
     needs: [check_secrets]
     if: needs.check_secrets.outputs.has_azure == 'true'
     outputs:
@@ -217,6 +220,9 @@ jobs:
   cleanup:
     name: Cleanup Azure Resources
     runs-on: ubuntu-latest
+    # Pins the OIDC subject to environment:azure-e2e regardless of the triggering
+    # ref, so one Azure federated credential covers tag pushes and dispatches.
+    environment: azure-e2e
     needs: [check_secrets, deploy_and_test]
     if: always() && needs.check_secrets.outputs.has_azure == 'true'
     steps:

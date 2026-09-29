@@ -3,6 +3,14 @@
 ## Purpose
 `azure-functions-db-python` provides pseudo DB trigger functionality for Azure Functions Python v2 applications using SQLAlchemy.
 
+## Repository Identity
+
+- Project: `azure-functions-db`
+- Project type: Python library
+- Runtime scope: Azure Functions Python v2 programming model
+- Minimum supported Python: `3.10`
+- Packaging: `pyproject.toml` with Hatch
+
 ## Read First
 - `README.md`
 - `CONTRIBUTING.md`
@@ -120,6 +128,55 @@ Release verification is layered; each tier catches a different failure class, an
    - Treat any new `RuntimeWarning`/`DeprecationWarning` surfaced by this library during the cookbook run as a release-blocking signal — decorator-order and API-drift problems are reported as warnings, so a clean run (zero warnings from this package) is part of the release gate.
    - If the cookbook pins a lower bound (`azure-functions-db>=X.Y,<1`), bump it to the new minor in the same verification PR so examples are tested against the version they advertise.
    - A release is **not** considered done until the cookbook passes on the published version.
+
+## Golden Commands
+
+Use Makefile entry points only. Do not bypass the Makefile in CI or contributor guidance.
+
+| Purpose | Command |
+| --- | --- |
+| Environment setup | `make install` |
+| Format code | `make format` |
+| Check formatting (`src`, `tests`) | `make format-check` |
+| Lint | `make lint` |
+| Type check | `make typecheck` |
+| Tests | `make test` |
+| Coverage | `make cov` |
+| Full validation | `make check-all` |
+| Docs build | `make docs` |
+| Package build | `make build` |
+
+## Commit Rules
+
+Use Conventional Commits:
+
+```text
+<type>: <short imperative summary>
+```
+
+Allowed types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `ci`
+
+## Agent Rules
+
+When using AI-assisted development:
+
+- Prefer small, reviewable changes.
+- Do not guess about behavior that can be verified.
+- Keep repository structure aligned with sibling repositories.
+- Update docs, examples, and tests together when behavior changes.
+
+## Final Rule
+
+If it is not automated, it will drift.
+If it is not documented, it is not a stable rule.
+
+## Merge Policy
+
+- `main` requires a pull request, every required status check green, and all conversations resolved. It requires **zero approving reviews**: `yeongseon` is the only account with push access and GitHub forbids approving your own PR, so a required approval could only ever be met by an administrator bypass. The required checks are what guard `main`.
+- **Never use `gh pr merge --admin` to skip a failing or pending required check.**
+- Review is still expected, just not enforced. An AI review (`COMMENTED`) is not an approval.
+- **Dependabot:** `pip` patch/minor updates auto-merge on green CI. `github-actions` updates never auto-merge — confirm each pinned SHA matches its claimed tag (`git ls-remote --tags <repo>`, compare against the dereferenced `^{}` commit) before merging. `dependabot-automerge.yml` enforces the split.
+- If a second maintainer ever gets push access, raise the approval count back to 1.
 
 ## Branch Hygiene
 
