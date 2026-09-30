@@ -1,6 +1,40 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.6.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.5.3...v0.6.0) (2026-09-29)
+
+
+### Features
+
+* **deps:** lift azure-functions &lt;2.0.0 cap on Python 3.13+ ([#301](https://github.com/yeongseon/azure-functions-db-python/issues/301)) ([80ea218](https://github.com/yeongseon/azure-functions-db-python/commit/80ea218e4236140d3638e9407458a91483b87b8e))
+
+
+### Bug Fixes
+
+* **ci:** correct release wording and stale.yml inputs ([#318](https://github.com/yeongseon/azure-functions-db-python/issues/318)) ([fe88d17](https://github.com/yeongseon/azure-functions-db-python/commit/fe88d17d316a707208543e10058140328dd38db6)), closes [#317](https://github.com/yeongseon/azure-functions-db-python/issues/317)
+* **ci:** stop the format gate dropping type-changed Python paths ([#315](https://github.com/yeongseon/azure-functions-db-python/issues/315)) ([448298d](https://github.com/yeongseon/azure-functions-db-python/commit/448298da1d69af72dec841cfdb423da87984d2a4))
+* **deps:** drop unsupported semver cooldown keys for github-actions ecosystem ([#299](https://github.com/yeongseon/azure-functions-db-python/issues/299)) ([a852702](https://github.com/yeongseon/azure-functions-db-python/commit/a852702f9f51984410f62908847e910c27064d9e))
+* **templates:** use Conventional Commit prefixes in issue forms ([#320](https://github.com/yeongseon/azure-functions-db-python/issues/320)) ([2aaed06](https://github.com/yeongseon/azure-functions-db-python/commit/2aaed069297a9edf953523142f994d48dc194e8f))
+
+
+### Documentation
+
+* align the contributor contract with the actual configuration ([#316](https://github.com/yeongseon/azure-functions-db-python/issues/316)) ([2099c44](https://github.com/yeongseon/azure-functions-db-python/commit/2099c44fc1ced8ded1f6eca0e331edb2d925bda0))
+
+
+### Miscellaneous Tasks
+
+* adopt release-please and gate PyPI on in-chain Azure e2e ([#328](https://github.com/yeongseon/azure-functions-db-python/issues/328)) ([facbae3](https://github.com/yeongseon/azure-functions-db-python/commit/facbae3e04547f160b85e30b22bfba8a9daf813b))
+* allow build/ branch prefix in branch-naming validation ([#298](https://github.com/yeongseon/azure-functions-db-python/issues/298)) ([5d5dfbc](https://github.com/yeongseon/azure-functions-db-python/commit/5d5dfbcd0ab7c92db83c86e78519ffc79432ba76))
+* **deps:** bump ruff in the python-dependencies group ([#302](https://github.com/yeongseon/azure-functions-db-python/issues/302)) ([55806a8](https://github.com/yeongseon/azure-functions-db-python/commit/55806a806bb8d36d1ff4e62a50ade991443fddb7))
+* **deps:** bump ruff in the python-dependencies group ([#308](https://github.com/yeongseon/azure-functions-db-python/issues/308)) ([52c1069](https://github.com/yeongseon/azure-functions-db-python/commit/52c10693d6baa01e41c4443554807f2c24132f76))
+* **deps:** bump the github-actions group across 1 directory with 4 updates ([#309](https://github.com/yeongseon/azure-functions-db-python/issues/309)) ([80201d1](https://github.com/yeongseon/azure-functions-db-python/commit/80201d17f31e3990ae813dadf0584e401b651abf))
+* **deps:** bump the github-actions group across 1 directory with 5 updates ([#293](https://github.com/yeongseon/azure-functions-db-python/issues/293)) ([e1009e1](https://github.com/yeongseon/azure-functions-db-python/commit/e1009e18796e0631bf3cd0d595ee40c3adc330fa))
+* enforce Ruff formatting in PR quality checks ([#312](https://github.com/yeongseon/azure-functions-db-python/issues/312)) ([dc74f39](https://github.com/yeongseon/azure-functions-db-python/commit/dc74f39440556cd9e6187715ae04ab76dd2c78b0))
+* harden the hatch default-env-pin lint ([#297](https://github.com/yeongseon/azure-functions-db-python/issues/297)) ([55c16de](https://github.com/yeongseon/azure-functions-db-python/commit/55c16de0f5f088ce8a73a272d7d27a03eb9c26a4))
+* modernize typing and pin ruff, complete AGENTS.md, unify Azure e2e auth ([#326](https://github.com/yeongseon/azure-functions-db-python/issues/326)) ([204a752](https://github.com/yeongseon/azure-functions-db-python/commit/204a752d07066c8c9e370ac1e899154072b0c814))
+* remove the unmaintained uv.lock ([#322](https://github.com/yeongseon/azure-functions-db-python/issues/322)) ([4d3741e](https://github.com/yeongseon/azure-functions-db-python/commit/4d3741eabdfbe41f8a9b2e37cde401747b3efe9c)), closes [#321](https://github.com/yeongseon/azure-functions-db-python/issues/321)
+
 ## [0.5.3] - 2026-09-11
 
 ### Bug Fixes
