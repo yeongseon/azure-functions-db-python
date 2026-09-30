@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.6.1](https://github.com/yeongseon/azure-functions-db-python/compare/v0.6.0...v0.6.1) (2026-09-30)
+
+
+### Miscellaneous Tasks
+
+* add a PR title check and unify the title convention ([#331](https://github.com/yeongseon/azure-functions-db-python/issues/331)) ([de187e6](https://github.com/yeongseon/azure-functions-db-python/commit/de187e6bb34af992c62e5f26db5ac7d8c37dfc07))
+
 ## [0.6.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.5.3...v0.6.0) (2026-09-29)
 
 
