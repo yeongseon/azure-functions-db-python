@@ -148,6 +148,6 @@ pip install dist/azure_functions_db-<version>-py3-none-any.whl
 ## Related
 
 - [CHANGELOG.md](https://github.com/yeongseon/azure-functions-db-python/blob/main/CHANGELOG.md)
-- [Development Guide](development.md)
+- [Development Guide](09-local-dev-guide.md)
 - [Contributing](contributing.md)
 - [Release Please](https://github.com/googleapis/release-please)
