@@ -133,6 +133,12 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
     ) -> None:
         await self._offload(self._target.upsert_many, rows=rows, conflict_columns=conflict_columns)
 
+    async def update(self, *, data: dict[str, object], pk: dict[str, object]) -> None:
+        await self._offload(self._target.update, data=data, pk=pk)
+
+    async def delete(self, *, pk: dict[str, object]) -> None:
+        await self._offload(self._target.delete, pk=pk)
+
     def close(self) -> None:
         self._target.close()
 

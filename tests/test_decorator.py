@@ -1051,6 +1051,34 @@ def test_inject_writer_async_proxy_upsert(tmp_path: Path) -> None:
     assert _read_orders(url) == [{"id": 1, "status": "processed"}]
 
 
+def test_inject_writer_async_proxy_update(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-update.db")
+    _create_orders_table(url)
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: Any) -> None:
+        await writer.insert(data={"id": 1, "status": "pending"})
+        await writer.update(data={"status": "shipped"}, pk={"id": 1})
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == [{"id": 1, "status": "shipped"}]
+
+
+def test_inject_writer_async_proxy_delete(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-delete.db")
+    _create_orders_table(url)
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    async def handler(writer: Any) -> None:
+        await writer.insert(data={"id": 1, "status": "pending"})
+        await writer.delete(pk={"id": 1})
+
+    asyncio.run(handler())
+
+    assert _read_orders(url) == []
+
+
 def test_inject_writer_async_transaction_commit(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "writer-async-tx-commit.db")
     _create_orders_table(url)
