@@ -319,6 +319,7 @@ class DbBindings:
                 )
 
             is_async = inspect.iscoroutinefunction(fn)
+            handler_signature = inspect.signature(fn)
 
             binding_info: dict[str, Any] = {
                 "kind": "input",
@@ -394,7 +395,8 @@ class DbBindings:
 
                 @functools.wraps(fn)
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    r_pk, r_params = _resolve_read_args(kwargs)
+                    bound_args = handler_signature.bind_partial(*args, **kwargs)
+                    r_pk, r_params = _resolve_read_args(bound_args.arguments)
                     data = await asyncio.to_thread(_execute_read, r_pk, r_params)
                     kwargs[arg_name] = _apply_input_model(data, model)
                     return await fn(*args, **kwargs)
@@ -409,7 +411,8 @@ class DbBindings:
 
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                r_pk, r_params = _resolve_read_args(kwargs)
+                bound_args = handler_signature.bind_partial(*args, **kwargs)
+                r_pk, r_params = _resolve_read_args(bound_args.arguments)
                 data = _execute_read(r_pk, r_params)
                 kwargs[arg_name] = _apply_input_model(data, model)
                 return fn(*args, **kwargs)
