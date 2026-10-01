@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 import logging
 
 import pytest
@@ -665,7 +665,7 @@ class TestPollRunner:
         }
 
     def test_lag_negative_clamped_to_zero(self) -> None:
-        future_cursor = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        future_cursor = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
         records: list[RawRecord] = [{"id": 1, "updated_at": future_cursor}]
         metrics = RecordingMetricsCollector()
 
@@ -723,7 +723,7 @@ class TestPollRunner:
         ), "Expected debug log about tz-naive cursor"
 
     def test_collector_exception_on_gauge_does_not_break_tick(self) -> None:
-        lagging_cursor = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+        lagging_cursor = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
         records: list[RawRecord] = [{"id": 1, "updated_at": lagging_cursor}]
 
         runner = PollRunner(
@@ -804,7 +804,7 @@ class TestPollRunner:
         records: list[RawRecord] = [
             {
                 "id": 1,
-                "updated_at": (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat(),
+                "updated_at": (datetime.now(UTC) - timedelta(seconds=5)).isoformat(),
             }
         ]
         caplog.set_level(logging.DEBUG)
