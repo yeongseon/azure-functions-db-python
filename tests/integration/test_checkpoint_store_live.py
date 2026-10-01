@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import os
 from typing import Any
 import uuid
@@ -103,7 +103,7 @@ def test_lease_prevents_double_acquire(checkpoint_store: Any) -> None:
     [
         123,
         "cursor-abc",
-        datetime.now(UTC).isoformat(),
+        datetime.now(timezone.utc).isoformat(),
     ],
 )
 def test_checkpoint_with_various_values(checkpoint_store: Any, cursor_value: object) -> None:

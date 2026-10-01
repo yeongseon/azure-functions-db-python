@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 from typing import Any
@@ -52,7 +52,7 @@ def _parse_lease_id(lease_id: str) -> tuple[str, int]:
 
 
 def _now_utc() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 def _iso(dt: datetime) -> str:

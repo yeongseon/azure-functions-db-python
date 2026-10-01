@@ -141,7 +141,7 @@ All custom markers are registered in `pyproject.toml`:
 
 ### Unit + Lint (`ci.yml`)
 
-Runs on every push. Matrix: Ubuntu latest, Python 3.11-3.14.
+Runs on every push. Matrix: Ubuntu latest, Python 3.10–3.14.
 
 Stages:
 1. Lint (Ruff)
