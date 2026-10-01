@@ -215,7 +215,7 @@ DbBindings decorators can be combined on a single handler. The following rules a
 | `input` + `output` | Read data and write results |
 | `input` + `inject_writer` | Read data with imperative writes |
 | `inject_reader` + `inject_writer` | Full imperative control |
-| `inject_reader` + `output` | Imperative read + auto-write |
+| `inject_reader` + `output` | Imperative read + explicit `DbOut.set()` write |
 
 ### Invalid Combinations
 | Combination | Reason |
