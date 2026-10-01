@@ -374,6 +374,41 @@ def test_input_query_with_callable_params(tmp_path: Path) -> None:
     assert result[0]["name"] == "Bob"
 
 
+def test_input_pk_callable_resolves_positional_handler_argument(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-pk-callable-positional.db")
+    _create_users_table(url)
+
+    class FakeReq:
+        def __init__(self, user_id: int) -> None:
+            self.user_id = user_id
+
+    @DbBindings().input("user", url=url, table="users", pk=lambda req: {"id": req.user_id})
+    def handler(req: FakeReq, user: dict[str, object] | None) -> dict[str, object] | None:
+        return user
+
+    assert handler(FakeReq(1)) == {"id": 1, "name": "Alice"}
+
+
+def test_input_params_callable_resolves_positional_handler_argument(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-params-callable-positional.db")
+    _create_users_table_with_data(url)
+
+    class FakeReq:
+        def __init__(self, active: int) -> None:
+            self.active = active
+
+    @DbBindings().input(
+        "users",
+        url=url,
+        query="SELECT id, name FROM users WHERE active = :active ORDER BY id",
+        params=lambda req: {"active": req.active},
+    )
+    def handler(req: FakeReq, users: list[dict[str, object]]) -> list[dict[str, object]]:
+        return users
+
+    assert handler(FakeReq(0)) == [{"id": 2, "name": "Bob"}]
+
+
 def test_input_query_returns_empty_list(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-empty.db")
     _create_users_table(url)
