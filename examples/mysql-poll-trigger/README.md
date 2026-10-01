@@ -38,7 +38,7 @@ change as an event, and writes an idempotent projection into a
 ## Prerequisites
 
 - Docker + Docker Compose v2
-- Python 3.10+
+- Python 3.11+
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
   (`func` CLI)
 - `mysql` client for seeding rows (`apt-get install mysql-client` or the
@@ -306,7 +306,7 @@ declare this explicitly.
 The `[mysql]` extra pulls in [PyMySQL](https://pymysql.readthedocs.io/)
 (`pymysql>=1.1`), a pure-Python driver. It is the default because it
 installs without a C build step and works out of the box on every Python
-version supported by the package (3.10 – 3.14).
+version supported by the package (3.11-3.14).
 
 If you need native throughput (2×–5× on tight workloads), install
 [mysqlclient](https://github.com/PyMySQL/mysqlclient) separately and

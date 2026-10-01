@@ -38,7 +38,7 @@ change as an event, and writes an idempotent projection into a
 ## Prerequisites
 
 - Docker + Docker Compose
-- Python 3.10+
+- Python 3.11+
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
   (`func` CLI)
 - **Microsoft ODBC Driver 18 for SQL Server** on the host running the Function
