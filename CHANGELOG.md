@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.6.0...v0.7.0) (2026-10-01)
+
+
+### Bug Fixes
+
+* **async:** expose update and delete on the injected async writer ([#343](https://github.com/yeongseon/azure-functions-db-python/issues/343)) ([16e6f3f](https://github.com/yeongseon/azure-functions-db-python/commit/16e6f3f546628f8f7387567e9199cd0a567172b2))
+* **compat:** deprecate Python 3.10 ahead of its removal ([#342](https://github.com/yeongseon/azure-functions-db-python/issues/342)) ([a5e978d](https://github.com/yeongseon/azure-functions-db-python/commit/a5e978d602388613858478e896734e6fbbc2b9c2))
+* **decorator:** pass positional handler arguments to dynamic resolvers ([#344](https://github.com/yeongseon/azure-functions-db-python/issues/344)) ([969f33e](https://github.com/yeongseon/azure-functions-db-python/commit/969f33e59fadfd2b6bbc183c7ea66305936a2ddb))
+* **trigger:** isolate checkpoint_before from stored state ([#346](https://github.com/yeongseon/azure-functions-db-python/issues/346)) ([0677155](https://github.com/yeongseon/azure-functions-db-python/commit/06771556ff944c697dc7bccd15dbb7e7441b3db6))
+
+
+### Miscellaneous Tasks
+
+* release 0.7.0 ([2cb0b47](https://github.com/yeongseon/azure-functions-db-python/commit/2cb0b474514ee43af339f18979f476a45f26bd76))
+
 ## [0.6.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.5.3...v0.6.0) (2026-09-29)
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import warnings
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 from .adapter import SqlAlchemySource
 from .binding import DbReader, DbWriter
