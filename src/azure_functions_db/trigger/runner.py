@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Sequence
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import inspect
@@ -622,7 +623,7 @@ class PollRunner:
             invocation_id=ctx.invocation_id,
             batch_id=ctx.batch_id,
             lease_owner=ctx.lease_id,
-            checkpoint_before=ctx.checkpoint,
+            checkpoint_before=copy.deepcopy(ctx.checkpoint),
             checkpoint_after_candidate=new_checkpoint,
             tick_started_at=ctx.tick_started_at,
             source_name=descriptor.name,

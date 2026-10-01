@@ -1064,6 +1064,38 @@ class TestPollRunner:
 
         assert "test_poller" not in store.checkpoints
 
+    def test_handler_failure_does_not_mutate_stored_checkpoint(self) -> None:
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        stored_checkpoint: dict[str, object] = {
+            "cursor": 50,
+            "history": ["committed"],
+        }
+        store.checkpoints["test_poller"] = stored_checkpoint
+
+        def bad_handler(events: list[RowChange], context: PollContext) -> None:
+            history = context.checkpoint_before["history"]
+            assert isinstance(history, list)
+            history.append("handler mutation")
+            raise ValueError("fail")
+
+        runner = PollRunner(
+            name="test_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=bad_handler,
+        )
+
+        with pytest.raises(HandlerError):
+            runner.tick()
+
+        assert store.checkpoints["test_poller"] == {
+            "cursor": 50,
+            "history": ["committed"],
+        }
+
     def test_lease_released_on_success(self) -> None:
         records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
         source = FakeSourceAdapter(batches=[records])
