@@ -81,7 +81,7 @@ The `DbBindings` class provides Azure Functions-style decorators:
 
 - **`trigger`** — pseudo-trigger wrapping `PollTrigger` for change detection
 - **`input`** — data injection (injects query results directly)
-- **`output`** — auto-write (writes handler return value to DB)
+- **`output`** — injects `DbOut`; call `.set()` to write explicitly
 - **`inject_reader`** / **`inject_writer`** — client injection (imperative escape hatches)
 
 Internally, decorators manage `__signature__` to hide injected parameters from the Azure runtime. Decorator order contract: Azure decorators outermost, db decorators closest to the function.
@@ -275,6 +275,7 @@ from azure.storage.blob import ContainerClient
 from azure_functions_db import (
     BlobCheckpointStore,
     DbBindings,
+    DbOut,
     EngineProvider,
     RowChange,
     SqlAlchemySource,
@@ -306,14 +307,15 @@ checkpoint_store = BlobCheckpointStore(
 @app.schedule(schedule="0 */1 * * * *", arg_name="timer", use_monitor=True)
 @db.trigger(arg_name="events", source=source, checkpoint_store=checkpoint_store)
 @db.output(
+    "out",
     url="%DEST_DB_URL%",
     table="processed_orders",
     action="upsert",
     conflict_columns=["order_id"],
     engine_provider=engine_provider,
 )
-def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> list[dict]:
-    return [
+def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -> None:
+    out.set([
         {
             "order_id": event.pk["id"],
             "customer": event.after["name"],
@@ -321,7 +323,7 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> list[dict]
         }
         for event in events
         if event.after is not None
-    ]
+    ])
 ```
 
 Using the imperative API directly:
@@ -456,31 +458,37 @@ Parameters:
 - `params`: `dict | Callable` — query parameters (only with `query`)
 - `on_not_found`: `"none"` (default) or `"raise"` — behavior when pk lookup returns no row
 
-#### output (auto-write)
+#### output (explicit `DbOut.set()` injection)
 
-Writes the handler's return value to the database automatically.
+Injects a `DbOut` instance into the named handler parameter. Call `.set()` to
+write explicitly; the handler's return value is independent of the database
+write.
 
 ```python
-from azure_functions_db import DbBindings
+from azure_functions_db import DbBindings, DbOut
 
 db = DbBindings()
 
-# Insert (default) — dict for single row, list[dict] for batch
-@db.output(url="%DB_URL%", table="orders")
-def create_order() -> dict:
-    return {"id": 1, "status": "pending", "total": 99.99}
+# Insert (default) — pass a dict for one row or list[dict] for a batch
+@db.output("out", url="%DB_URL%", table="orders")
+def create_order(out: DbOut) -> str:
+    out.set({"id": 1, "status": "pending", "total": 99.99})
+    return "Created"
 
 # Upsert — requires conflict_columns
-@db.output(url="%DB_URL%", table="orders",
-              action="upsert", conflict_columns=["id"])
-def upsert_order() -> dict:
-    return {"id": 1, "status": "shipped", "total": 99.99}
+@db.output("out", url="%DB_URL%", table="orders",
+               action="upsert", conflict_columns=["id"])
+def upsert_order(out: DbOut) -> str:
+    out.set({"id": 1, "status": "shipped", "total": 99.99})
+    return "Upserted"
 ```
 
-Return value contract:
+`DbOut.set()` payload contract:
 - `dict` → single-row write
-- `list[dict]` → batch write
-- `None` → no-op
+- `list[dict]` → batch write; an empty list is an explicit no-op
+
+The handler may independently return any value required by its trigger, such
+as an `HttpResponse`.
 
 Parameters:
 - `action`: `"insert"` (default) or `"upsert"`
