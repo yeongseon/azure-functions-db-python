@@ -539,11 +539,11 @@ Notes:
 - A commit failure surfaces as `WriteError`; a failure during rollback is logged and the original exception is preserved.
 - If you prefer to keep everything on a synchronous `DbWriter`, you can still wrap the whole unit in a single `asyncio.to_thread` call that drives `DbWriter.transaction()` end-to-end.
 
-## `engine_kwargs` flow-through
+## Engine configuration
 
-Every binding decorator and `DbConfig` accept an `engine_kwargs` mapping that is forwarded to `sqlalchemy.create_engine`. Anything the underlying dialect supports — connection / query timeouts, pool sizing, isolation level, custom event listeners — flows through unchanged. Use `EngineProvider` when several bindings should share a single engine instance with a consistent `engine_kwargs` configuration.
+Binding decorators accept an optional `engine_provider` for sharing a configured engine pool. They do not accept `engine_kwargs` or `connect_args` directly. For imperative use, `DbConfig` supports `engine_kwargs` and `connect_args`, which `EngineProvider` forwards to `sqlalchemy.create_engine`.
 
-> **Note:** Pass driver-level `connect_args` via the dedicated `connect_args` parameter, **not** nested inside `engine_kwargs`. Nesting `connect_args` inside `engine_kwargs` raises `ConfigurationError` because `EngineProvider` already owns that argument and silently overriding it would mask user intent.
+> **Note:** In `DbConfig`, pass driver-level `connect_args` via the dedicated `connect_args` field, **not** nested inside `engine_kwargs`. Nesting `connect_args` inside `engine_kwargs` raises `ConfigurationError` because `EngineProvider` already owns that argument and silently overriding it would mask user intent.
 
 > See [EngineProvider Lifecycle & SQLAlchemy Pooling Guidance](docs/25-engine-provider-pooling.md) for engine cache-key rules, recommended pool settings on Azure Functions (`pool_pre_ping`, `pool_recycle`, `pool_size` / `max_overflow`), per-dialect snippets, and SQLite test caveats.
 
