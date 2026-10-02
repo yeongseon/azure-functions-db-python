@@ -103,13 +103,16 @@ This pattern applies equally to lease acquisition, heartbeat, and checkpoint com
 
 ## 7. Heartbeat
 
-A heartbeat is required because handlers may take a long time to complete.
+A heartbeat is required while a tick remains active across batches and retries.
 
 Default rules:
-- `heartbeat_interval < lease_ttl / 2`
-- Consider halting execution after n consecutive heartbeat failures
+- `PollRunner` renews before each batch, before and after retry backoff, and
+  immediately before checkpoint commit
+- The synchronous runner does not renew concurrently with a handler or sleep;
+  the TTL must exceed the longest single handler attempt or retry delay
 - Heartbeat = CAS write to state blob (updating heartbeat_at and expires_at)
-- CAS failure = lease lost; handler must be stopped
+- Any renewal failure aborts the tick; CAS failure means the lease was lost and
+  the current batch must not be committed
 
 ## 8. Commit Algorithm
 

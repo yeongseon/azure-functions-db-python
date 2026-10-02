@@ -207,8 +207,13 @@ is safe.
 
 ### 5.8 Heartbeat / lease loss mid-handler
 
-The current implementation does not perform an in-flight heartbeat from inside
-a long-running handler. If `handler_duration > lease_ttl_seconds`:
+The runner renews its lease before every batch, before and after retry backoff,
+and immediately before committing a checkpoint. If renewal fails, the tick
+aborts and does not commit the current batch.
+
+The implementation does not perform an in-flight heartbeat from inside a
+single synchronous handler invocation. If `handler_duration >
+lease_ttl_seconds`:
 
 1. Another instance may acquire the lease via the expiry + grace window in
    `BlobCheckpointStore`.
@@ -216,7 +221,7 @@ a long-running handler. If `handler_duration > lease_ttl_seconds`:
 3. The new owner will re-fetch and re-deliver the same batch.
 
 **Operator action:** size `lease_ttl_seconds` so `lease_ttl_seconds > p99
-handler duration + commit time + safety margin`. See
+single handler attempt or retry delay + safety margin`. See
 [§7](#7-tuning-lease_ttl_seconds-and-timer-interval).
 
 ### 5.9 Poison batch / permanent handler failure
@@ -283,15 +288,17 @@ The two timing knobs you control are:
 Recommended sizing:
 
 ```text
-lease_ttl_seconds  >  p99(fetch + handler + commit) + safety_margin (~30s)
+lease_ttl_seconds  >  p99(single handler attempt or retry delay) + safety_margin (~30s)
 timer_interval     >= lease_ttl_seconds / 2
 ```
 
 Reasoning:
 
-- `lease_ttl_seconds` must outlast the worst-case tick. If the handler runs
-  longer than the TTL, another instance can steal the lease and you fall into
-  window W4.
+- Safe-point renewal keeps multi-batch ticks and retry sequences alive without
+  requiring the TTL to outlast the whole tick.
+- `lease_ttl_seconds` must outlast each uninterrupted handler invocation and
+  retry delay. If either runs longer than the TTL, another instance can steal
+  the lease and you fall into window W4.
 - The timer interval should be at least half the TTL so a single instance
   comfortably renews ownership across ticks. Faster timers under contention
   just produce more `LeaseAcquireError` no-ops.
@@ -411,7 +418,7 @@ checks — lives in
 
 Before promoting a `db.trigger` to production:
 
-- [ ] Confirm `lease_ttl_seconds > p99 handler duration + commit time + 30s`.
+- [ ] Confirm `lease_ttl_seconds > p99 single handler attempt or retry delay + 30s`.
 - [ ] Confirm timer interval ≥ `lease_ttl_seconds / 2`.
 - [ ] Confirm the handler is idempotent under [§4](#4-duplicate-window-reference).
 - [ ] Confirm `BlobCheckpointStore` has its own dedicated container and the
