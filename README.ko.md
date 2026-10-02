@@ -371,7 +371,6 @@ trigger = PollTrigger(
 | [azure-functions-scaffold-python](https://github.com/yeongseon/azure-functions-scaffold-python) | Project scaffolding CLI |
 | [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | Structured logging and observability |
 | [azure-functions-doctor-python](https://github.com/yeongseon/azure-functions-doctor-python) | Pre-deploy diagnostic CLI |
-| [azure-functions-durable-graph-python](https://github.com/yeongseon/azure-functions-durable-graph-python) | Manifest-first graph runtime with Durable Functions *(experimental)* |
 | [azure-functions-cookbook-python](https://github.com/yeongseon/azure-functions-cookbook-python) | Recipes and examples |
 
 ## 면책 조항
