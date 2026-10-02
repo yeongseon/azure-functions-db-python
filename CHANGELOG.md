@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.1](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.0...v0.7.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **trigger:** propagate lease acquisition failures ([#357](https://github.com/yeongseon/azure-functions-db-python/issues/357)) ([da8d009](https://github.com/yeongseon/azure-functions-db-python/commit/da8d0098b015147225192171ff514ec7a8c450c2))
+* **trigger:** renew leases while processing batches ([#361](https://github.com/yeongseon/azure-functions-db-python/issues/361)) ([c1e1217](https://github.com/yeongseon/azure-functions-db-python/commit/c1e12173a80d1924bad1d6657a07700301a7ed09))
+
 ## [0.7.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.6.0...v0.7.0) (2026-10-01)
 
 
