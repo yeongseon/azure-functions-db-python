@@ -39,8 +39,11 @@ class FakeStateStore:
         self.leases: dict[str, str] = {}
         self.lease_counter = 0
         self.acquire_error: Exception | None = None
+        self.renew_error: Exception | None = None
         self.commit_error: Exception | None = None
         self.load_error: Exception | None = None
+        self.renew_calls = 0
+        self.commit_calls = 0
 
     def acquire_lease(self, poller_name: str, ttl_seconds: int) -> str:
         if self.acquire_error:
@@ -51,7 +54,10 @@ class FakeStateStore:
         return lease_id
 
     def renew_lease(self, poller_name: str, lease_id: str, ttl_seconds: int) -> None:
-        pass
+        del poller_name, lease_id, ttl_seconds
+        self.renew_calls += 1
+        if self.renew_error:
+            raise self.renew_error
 
     def release_lease(self, poller_name: str, lease_id: str) -> None:
         self.leases.pop(poller_name, None)
@@ -64,6 +70,7 @@ class FakeStateStore:
     def commit_checkpoint(
         self, poller_name: str, checkpoint: dict[str, object], lease_id: str
     ) -> None:
+        self.commit_calls += 1
         if self.commit_error:
             raise self.commit_error
         self.checkpoints[poller_name] = checkpoint
@@ -893,7 +900,26 @@ class TestPollRunner:
 
         assert count == 2
         assert call_count == 2
+        assert store.renew_calls > 0
         assert store.checkpoints["test_poller"]["cursor"] == 200
+
+    def test_lost_lease_during_renewal_does_not_commit_checkpoint(self) -> None:
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        store = FakeStateStore()
+        store.renew_error = LostLeaseError("lease stolen")
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=lambda events: None,
+        )
+
+        with pytest.raises(LostLeaseError, match="lease stolen"):
+            runner.tick()
+
+        assert store.commit_calls == 0
+        assert "test_poller" not in store.checkpoints
 
     def test_handler_with_context(self) -> None:
         records: list[RawRecord] = [{"id": 1, "updated_at": 100}]

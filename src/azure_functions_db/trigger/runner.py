@@ -163,8 +163,7 @@ class PollRunner:
         events: list[RowChange],
         context: PollContext,
         *,
-        batch_id: str,
-        invocation_id: str,
+        ctx: _TickState,
         source_name: str,
     ) -> None:
         """Invoke the handler, applying the retry policy on failure.
@@ -197,14 +196,14 @@ class PollRunner:
                     attempt + 1,
                     max_attempts,
                     self._name,
-                    batch_id,
+                    ctx.batch_id,
                     type(exc).__name__,
                     delay,
                     extra=build_log_fields(
                         event="handler_retry",
                         poller_name=self._name,
-                        invocation_id=invocation_id,
-                        batch_id=batch_id,
+                        invocation_id=ctx.invocation_id,
+                        batch_id=ctx.batch_id,
                         source=source_name,
                         attempt=attempt + 1,
                         max_attempts=max_attempts,
@@ -213,7 +212,9 @@ class PollRunner:
                         result="retry",
                     ),
                 )
+                self._renew_lease(ctx, source=source_name)
                 self._sleep(delay)
+                self._renew_lease(ctx, source=source_name)
 
     def _emit_failure_metrics(self, exc: Exception, *, source: str | None = None) -> None:
         labels: dict[str, str] = {
@@ -329,6 +330,47 @@ class PollRunner:
             extra_fields={"lease_owner": ctx.lease_id},
         )
 
+    def _renew_lease(self, ctx: _TickState, *, source: str | None = None) -> None:
+        message = f"Lease renewal failed for poller '{self._name}'"
+        try:
+            self._state_store.renew_lease(
+                self._name,
+                ctx.lease_id,
+                self._lease_ttl_seconds,
+            )
+        except LostLeaseError:
+            logger.exception(
+                message,
+                extra=build_log_fields(
+                    event="lease_renew_failed",
+                    poller_name=self._name,
+                    invocation_id=ctx.invocation_id,
+                    batch_id=ctx.batch_id or None,
+                    source=source,
+                    lease_owner=ctx.lease_id,
+                    error_type="LostLeaseError",
+                    result="failure",
+                ),
+            )
+            self._emit_failure_metrics(LostLeaseError(message), source=source)
+            raise
+        except Exception as exc:
+            logger.exception(
+                message,
+                extra=build_log_fields(
+                    event="lease_renew_failed",
+                    poller_name=self._name,
+                    invocation_id=ctx.invocation_id,
+                    batch_id=ctx.batch_id or None,
+                    source=source,
+                    lease_owner=ctx.lease_id,
+                    error_type=type(exc).__name__,
+                    result="failure",
+                ),
+            )
+            self._emit_failure_metrics(exc, source=source)
+            raise LostLeaseError(message) from exc
+
     def _resolve_source_descriptor(self, ctx: _TickState) -> SourceDescriptor:
         return self._run_stage(
             lambda: self._source.source_descriptor,
@@ -422,8 +464,7 @@ class PollRunner:
             self._invoke_handler_with_retry(
                 events,
                 context,
-                batch_id=ctx.batch_id,
-                invocation_id=ctx.invocation_id,
+                ctx=ctx,
                 source_name=descriptor.name,
             )
             ctx.handler_duration_ms = round(
@@ -485,6 +526,7 @@ class PollRunner:
     ) -> None:
         try:
             commit_started_monotonic = time.monotonic()
+            self._renew_lease(ctx, source=descriptor.name)
             self._state_store.commit_checkpoint(self._name, new_checkpoint, ctx.lease_id)
             ctx.commit_duration_ms = round((time.monotonic() - commit_started_monotonic) * 1000, 2)
         except LostLeaseError:
@@ -698,6 +740,7 @@ class PollRunner:
 
             for batch_idx in range(self._max_batches_per_tick):
                 ctx.batch_idx = batch_idx
+                self._renew_lease(ctx, source=descriptor.name)
                 if not self._process_batch(ctx, descriptor):
                     break
 

@@ -162,7 +162,12 @@ A lease is the "write authority for the current poller execution."
 Rules:
 - Checkpoint commits are forbidden without a valid lease
 - Commits with a lower fencing token are rejected
-- A heartbeat is required before lease expiry
+- The runner renews the lease before each batch, before and after retry backoff,
+  and immediately before each checkpoint commit. A renewal failure aborts the
+  tick without committing that batch.
+- Renewal does not run concurrently with a synchronous handler or sleep, so
+  `lease_ttl_seconds` must exceed the longest single handler attempt or retry
+  delay.
 
 ## 10. Visibility Delay
 
