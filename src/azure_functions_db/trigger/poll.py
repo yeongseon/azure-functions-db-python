@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-import logging
 from typing import Any
 
 from azure_functions_db.observability import MetricsCollector
-from azure_functions_db.trigger.errors import LeaseAcquireError
 from azure_functions_db.trigger.normalizers import EventNormalizer, make_normalizer
 from azure_functions_db.trigger.retry import RetryPolicy
 from azure_functions_db.trigger.runner import PollRunner, SourceAdapter, StateStore
-
-logger = logging.getLogger(__name__)
 
 
 class PollTrigger:
@@ -91,11 +87,4 @@ class PollTrigger:
             metrics=self._metrics,
         )
 
-        try:
-            return runner.tick()
-        except LeaseAcquireError:
-            logger.debug(
-                "Poller '%s' could not acquire lease, skipping tick",
-                self._name,
-            )
-            return 0
+        return runner.tick()
