@@ -1,6 +1,19 @@
 # Changelog
 
-This page documents the version history and migration paths for the `azure-functions-db-python` package.
+This page documents the versioning scheme and migration paths for the
+`azure-functions-db-python` package.
+
+## Where the release history lives
+
+[Release Please](https://github.com/googleapis/release-please) generates the
+root [`CHANGELOG.md`](https://github.com/yeongseon/azure-functions-db-python/blob/main/CHANGELOG.md)
+from Conventional Commits, and that file is the authoritative, complete history
+from `v0.1.0` onward. Per-release notes are also published on the
+[GitHub Releases](https://github.com/yeongseon/azure-functions-db-python/releases)
+page. See [Release process](release_process.md) for how a release is cut.
+
+This page is hand-maintained and holds only the versioning scheme and migration
+guidance. It deliberately does not mirror the generated history.
 
 ## Versioning Scheme
 
@@ -10,51 +23,32 @@ This project follows Semantic Versioning (semver.org). Given a version number MA
 - MINOR version when you add functionality in a backward compatible manner
 - PATCH version when you make backward compatible bug fixes
 
-The changelog is generated from Conventional Commits using git-cliff. Breaking changes are explicitly listed under the "Breaking Changes" section for each release.
+Breaking changes are listed under the "Breaking Changes" heading of the release
+that carries them in `CHANGELOG.md`.
 
-## Full Version History
+## Migration Guides
 
-### Unreleased (post-0.1.0)
+### Migrating from v0.1.0 to v0.2.0
 
-The following changes have been merged to `main` but are not yet released. Breaking changes are acceptable — this is a pre-1.0 package with no external users.
+The v0.2.0 release renamed the public surface. Update call sites as follows:
 
-#### Breaking Changes
+- `DbFunctionApp` is now `DbBindings` (#33).
+- Decorators lost their `db_` prefix: use `trigger`, `input`, `output`,
+  `inject_reader`, and `inject_writer` (#41, #45).
+- `OutputResult` is replaced by the `DbOut` class, which writes via `.set()`
+  instead of returning a result object (#50).
+- The public export list was narrowed; import only documented symbols from the
+  package root (#34).
 
-- Renamed `DbFunctionApp` to `DbBindings` (#33)
-- Dropped `db_` prefix from all decorators: `trigger`, `input`, `output`, `inject_reader`, `inject_writer` (#41, #45)
-- Replaced `OutputResult` with `DbOut` class using `.set()` pattern (#50)
-- Narrowed public exports to 27 stable symbols (#34)
+### Configuring engine options
 
-#### Features
+Binding decorators accept `engine_provider` only. Driver-level engine options
+belong on a `DbConfig` (`engine_kwargs`, `connect_args`), which an
+`EngineProvider` forwards to `sqlalchemy.create_engine()`. See
+[Engine provider and pooling](25-engine-provider-pooling.md).
 
-- Added `input` decorator for data injection with row lookup and query modes (#35)
-- Added `output` decorator for declarative writes with `DbOut` (#35, #50)
-- Added `inject_reader`/`inject_writer` for imperative client injection (#35)
-- Added decorator composition validation with mutual exclusivity rules (#43)
-- Added partial env var substitution for connection URLs (#39)
-- Added `engine_kwargs` passthrough on all decorators (#40)
-- Added `EngineProvider` for shared connection pooling
+### Python version support
 
-#### Documentation
-
-- Added async support matrix documentation (#37)
-- Added input mode (row lookup / query) documentation (#36)
-- Added lifecycle and thread-safety documentation (#44)
-- Updated README with ecosystem branding (#42)
-- Aligned documentation structure with sibling repos
-
-### v0.1.0 (2025-04-08)
-
-#### Features
-
-- Add MetricsCollector, structured logging, and lag calculation (#21)
-- Add PollTrigger, `db.poll()` decorator, and normalizers (#20)
-- Add SqlAlchemySource with cursor-based polling (#19)
-- Add BlobCheckpointStore with ETag-based CAS leasing (#18)
-- Core types, errors, trigger events, context, retry, and runner (#17)
-- Initial project scaffold — unified DB integration framework for Azure Functions Python v2
-
-#### Documentation
-
-- Translate docs to English and align README with series style (#16)
-- Release process documentation and CI/CD workflow fixes (#22)
+The package requires Python `>=3.10,<3.15`. Python 3.10 is deprecated and emits
+a `DeprecationWarning` on import; support will be dropped in the next minor
+release.
