@@ -15,7 +15,7 @@ from azure_functions_db.core.errors import NotFoundError
 import azure_functions_db.decorator as decorator_mod
 from azure_functions_db.decorator import DbOut
 from azure_functions_db.observability import NoOpCollector
-from azure_functions_db.trigger.errors import FetchError
+from azure_functions_db.trigger.errors import FetchError, LeaseAcquireError
 from azure_functions_db.trigger.events import RowChange
 from tests.test_poll_trigger import FakeSourceAdapter, FakeStateStore
 
@@ -150,7 +150,7 @@ def test_trigger_async_handler_rejected() -> None:
         )(handler)
 
 
-def test_trigger_swallows_lease_error() -> None:
+def test_trigger_propagates_lease_acquire_error() -> None:
     store = FakeStateStore()
     store.acquire_error = RuntimeError("lease conflict")
 
@@ -162,7 +162,8 @@ def test_trigger_swallows_lease_error() -> None:
     def handler(events: list[RowChange]) -> None:
         del events
 
-    assert handler(object()) == 0
+    with pytest.raises(LeaseAcquireError, match="Failed to acquire lease"):
+        handler(object())
 
 
 def test_trigger_propagates_other_errors() -> None:

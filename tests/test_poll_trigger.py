@@ -5,7 +5,7 @@ from collections.abc import Sequence
 import pytest
 
 from azure_functions_db.core.types import CursorValue, RawRecord, SourceDescriptor
-from azure_functions_db.trigger.errors import FetchError, HandlerError
+from azure_functions_db.trigger.errors import FetchError, HandlerError, LeaseAcquireError
 from azure_functions_db.trigger.events import RowChange
 from azure_functions_db.trigger.normalizers import default_normalizer
 from azure_functions_db.trigger.poll import PollTrigger
@@ -163,7 +163,7 @@ def test_run_accepts_timer_ignores_it() -> None:
     assert count == 1  # noqa: S101
 
 
-def test_run_swallows_lease_acquire_error_returns_zero() -> None:
+def test_run_propagates_lease_acquire_error() -> None:
     store = FakeStateStore()
     store.acquire_error = RuntimeError("lease conflict")
     trigger = PollTrigger(
@@ -172,8 +172,8 @@ def test_run_swallows_lease_acquire_error_returns_zero() -> None:
         checkpoint_store=store,
     )
 
-    count = trigger.run(timer=object(), handler=lambda events: None)
-    assert count == 0  # noqa: S101
+    with pytest.raises(LeaseAcquireError, match="Failed to acquire lease"):
+        trigger.run(timer=object(), handler=lambda events: None)
 
 
 def test_run_propagates_fetch_error() -> None:
