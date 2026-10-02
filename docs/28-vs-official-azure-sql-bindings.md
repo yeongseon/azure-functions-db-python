@@ -159,7 +159,7 @@ See [Semantics § 1.3 Duplicate and Reprocessing Windows](03-semantics.md#13-dup
 - Any dialect that ships a SQLAlchemy driver works — the built-in extras just bundle common drivers for convenience. Concretely:
   - Install the driver: `pip install oracledb`
   - Use the SQLAlchemy URL: `url="oracle+oracledb://user:pass@host:1521/db"`
-  - Pass dialect-specific engine options via `engine_kwargs=...` — everything the underlying dialect supports (pool sizing, timeouts, isolation, custom event listeners) flows through unchanged.
+  - Pass dialect-specific engine options through a `DbConfig` (`engine_kwargs`, `connect_args`) wrapped in an `EngineProvider`, then hand that provider to the binding via `engine_provider=...` — everything the underlying dialect supports (pool sizing, timeouts, isolation, custom event listeners) flows through unchanged.
 - **BYOD source adapters** for non-SQL sources: implement the [`SourceAdapter`](05-adapter-sdk.md) protocol and pass it to `@db.trigger(source=...)`. The trigger no longer needs SQL at all — this is how MongoDB, Kafka, or REST-API sources are supported. Input / output bindings remain SQLAlchemy-based.
 - Async handlers are supported (see [Async handlers](https://github.com/yeongseon/azure-functions-db-python#async-handlers)), but the internal engine remains sync — blocking DB calls are offloaded via `asyncio.to_thread`. Fully native asyncio drivers (`asyncpg`, `aiomysql`) are not used internally; if you need them, drive them yourself outside the binding.
 

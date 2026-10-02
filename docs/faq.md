@@ -20,7 +20,10 @@ Three steps:
 
 1. **Install the driver** — for example `pip install oracledb` for Oracle
 2. **Use the SQLAlchemy connection URL** — e.g. `url="oracle+oracledb://user:pass@host/db"` (exact format varies by driver)
-3. **Pass engine options if needed** — use `engine_kwargs` for driver-specific settings
+3. **Pass engine options if needed** — build a `DbConfig` with `engine_kwargs` /
+   `connect_args`, wrap it in an `EngineProvider`, and hand that provider to the
+   binding via `engine_provider=...`. The decorators themselves do not accept
+   `engine_kwargs`.
 
 This works for bindings (`input`, `output`, `inject_reader`, `inject_writer`)
 and for `SqlAlchemySource`-based triggers.
@@ -41,7 +44,10 @@ Python v2 only — the decorator-based `func.FunctionApp()` model. The legacy
 
 ### What Python versions are supported?
 
-Python 3.11, 3.12, 3.13, and 3.14. The project metadata declares `>=3.11,<3.15`.
+Python 3.10, 3.11, 3.12, 3.13, and 3.14. The project metadata declares
+`>=3.10,<3.15`. Python 3.10 is deprecated: importing the package on 3.10 emits
+a `DeprecationWarning`, and support will be dropped in the next minor release
+because 3.10 reaches end of life in October 2026.
 
 ## Trigger
 
@@ -105,8 +111,12 @@ from the environment at runtime. Partial substitution is also supported:
 
 ### Can I pass custom SQLAlchemy engine options?
 
-Yes. Use the `engine_kwargs` parameter on any decorator to pass additional
-keyword arguments to `sqlalchemy.create_engine()`.
+Yes, but not directly on a decorator. Binding decorators accept
+`engine_provider` only. Put `engine_kwargs` (and driver-level `connect_args`)
+on a `DbConfig`, create an `EngineProvider` from it, and pass that provider to
+the decorator or to `SqlAlchemySource`. `EngineProvider` forwards both to
+`sqlalchemy.create_engine()`. See
+[Engine provider and pooling](25-engine-provider-pooling.md).
 
 ### Can I share a connection pool across decorators?
 

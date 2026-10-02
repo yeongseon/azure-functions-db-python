@@ -105,7 +105,7 @@ Three steps:
 
 1. **Install the driver** — e.g. `pip install oracledb` for Oracle
 2. **Use the SQLAlchemy URL** — e.g. `url="oracle+oracledb://user:pass@host/db"`
-3. **Pass engine options if needed** — use `engine_kwargs` for driver-specific settings
+3. **Pass engine options if needed** — set `engine_kwargs` / `connect_args` on a `DbConfig`, build an `EngineProvider` from it, and pass it as `engine_provider=...`
 
 ```python
 from azure_functions_db import DbBindings
