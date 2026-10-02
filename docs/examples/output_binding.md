@@ -83,4 +83,3 @@ happens independently via `out.set()`.
 | `action` | `str` | Write action: `"insert"` (default) or `"upsert"`. |
 | `conflict_columns` | `list[str]` | Columns for upsert conflict detection. Required when `action="upsert"`. |
 | `engine_provider` | `EngineProvider` | Optional shared engine provider for connection pooling. |
-| `engine_kwargs` | `dict` | Additional keyword arguments passed to `create_engine()`. |

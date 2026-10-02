@@ -78,4 +78,3 @@ def get_user(req: func.HttpRequest, user: dict | None) -> func.HttpResponse:
 | `query` | `str` | SQL query for query mode. Mutually exclusive with `table`/`pk`. |
 | `params` | `dict` | Query parameters for named placeholders (`:name`). |
 | `engine_provider` | `EngineProvider` | Optional shared engine provider for connection pooling. |
-| `engine_kwargs` | `dict` | Additional keyword arguments passed to `create_engine()`. |

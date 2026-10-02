@@ -137,7 +137,6 @@ def search_users(req: func.HttpRequest, reader: DbReader) -> func.HttpResponse:
 | `url` | `str` | Database connection URL. Supports `%ENV_VAR%` substitution. |
 | `table` | `str` | Default table for operations. |
 | `engine_provider` | `EngineProvider` | Optional shared engine provider for connection pooling. |
-| `engine_kwargs` | `dict` | Additional keyword arguments passed to `create_engine()`. |
 
 ## Mutual Exclusivity
 
