@@ -166,7 +166,7 @@ class DbBindings:
             host_params = [p_name for p_name in fn_sig.parameters if p_name not in db_injected]
 
             @functools.wraps(fn)
-            def wrapper(*args: Any, **kwargs: Any) -> int:
+            def wrapper(*args: Any, **kwargs: Any) -> None:
                 timer: Any = None
                 if args:
                     timer = args[0]
@@ -186,7 +186,7 @@ class DbBindings:
                         call_kwargs["context"] = context
                     return fn(**call_kwargs)
 
-                return trigger.run(timer=timer, handler=invoke_handler)
+                trigger.run(timer=timer, handler=invoke_handler)
 
             # Keep host trigger params visible in __signature__ so Azure
             # worker binding validation can find them.  Only hide the
