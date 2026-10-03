@@ -256,6 +256,32 @@ class TestSqlAlchemySourceFetch:
         assert rows[0]["name"] == "Alice"
         assert rows[-1]["name"] == "Eve"
 
+    def test_initial_fetch_skips_null_cursor_rows(self, orders_url: str) -> None:
+        engine = create_engine(orders_url)
+        metadata = MetaData()
+        orders = Table("orders", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(insert(orders), {"id": 6, "name": "Null", "updated_at": None})
+        engine.dispose()
+
+        src = _make_source(url=orders_url)
+        rows = src.fetch(cursor=None, batch_size=10)
+
+        assert [row["id"] for row in rows] == [1, 2, 3, 4, 5]
+
+    def test_checkpoint_fetch_skips_null_cursor_rows(self, orders_url: str) -> None:
+        engine = create_engine(orders_url)
+        metadata = MetaData()
+        orders = Table("orders", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(insert(orders), {"id": 6, "name": "Null", "updated_at": None})
+        engine.dispose()
+
+        src = _make_source(url=orders_url)
+        rows = src.fetch(cursor=(100, 2), batch_size=10)
+
+        assert [row["id"] for row in rows] == [3, 4, 5]
+
     def test_fetch_with_batch_size(self, orders_url: str) -> None:
         src = _make_source(url=orders_url)
         rows = src.fetch(cursor=None, batch_size=3)
