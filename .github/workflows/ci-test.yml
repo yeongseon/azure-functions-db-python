@@ -154,8 +154,9 @@ jobs:
       - name: Install Functions host, Azurite, and checkout package
         run: |
           npm install --global azure-functions-core-tools@4 --unsafe-perm true
-          python -m pip install --upgrade pip
-          python -m pip install .
+          python -m venv tests/host_smoke/.venv
+          tests/host_smoke/.venv/bin/python -m pip install --upgrade pip
+          tests/host_smoke/.venv/bin/python -m pip install .
 
       - name: Run real Functions host smoke
         run: |
@@ -164,7 +165,7 @@ jobs:
           trap 'kill "$azurite_pid" 2>/dev/null || true' EXIT
 
           cd tests/host_smoke
-          export PATH="$VIRTUAL_ENV/bin:$PATH"
+          export PATH="$PWD/.venv/bin:$PATH"
           timeout 120s func start --verbose > "$RUNNER_TEMP/host-smoke.log" 2>&1 &
           host_pid=$!
 
