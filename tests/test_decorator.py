@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import azure.functions as func
 from pydantic import BaseModel
 import pytest
 from sqlalchemy import create_engine, text
@@ -123,7 +124,12 @@ def test_trigger_calls_handler_with_events() -> None:
     assert handled[0][0].pk == {"id": 1}
 
 
-def test_trigger_returns_processed_count() -> None:
+def test_trigger_returns_none_without_return_binding() -> None:
+    class TimerRequest(func.TimerRequest):
+        @property
+        def past_due(self) -> bool:
+            return False
+
     @DbBindings().trigger(
         arg_name="events",
         source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
@@ -132,10 +138,11 @@ def test_trigger_returns_processed_count() -> None:
     def handler(events: list[RowChange]) -> None:
         del events
 
-    result = handler(object())
+    timer = TimerRequest()
 
-    assert isinstance(result, int)
-    assert result == 1
+    result = handler(timer)
+
+    assert result is None
 
 
 def test_trigger_async_handler_rejected() -> None:
@@ -237,7 +244,7 @@ def test_trigger_accepts_metrics() -> None:
     def handler(events: list[RowChange]) -> None:
         del events
 
-    assert handler(object()) == 1
+    assert handler(object()) is None
 
 
 def test_trigger_signature_preserves_host_params() -> None:
@@ -1332,7 +1339,7 @@ def test_trigger_stacked_with_output(tmp_path: Path) -> None:
 
     result = handler(object())
 
-    assert result == 1
+    assert result is None
     assert _read_orders(url) == [{"id": 1, "status": "done"}]
 
 
@@ -1356,7 +1363,7 @@ def test_trigger_stacked_with_inject_writer(tmp_path: Path) -> None:
 
     result = handler(object())
 
-    assert result == 1
+    assert result is None
     assert captured["events_count"] == 1
     assert captured["has_writer"] is True
 
@@ -1579,7 +1586,7 @@ def test_trigger_forwards_host_params_with_output(tmp_path: Path) -> None:
 
     result = handler(host_timer)
 
-    assert result == 1
+    assert result is None
     assert received["timer"] is host_timer
     assert _read_orders(url) == [{"id": 1, "status": "done"}]
 
@@ -1782,7 +1789,7 @@ def test_trigger_timer_from_kwargs_and_first_host_param(tmp_path: Path) -> None:
     host_timer = object()
     result = handler(timer=host_timer)
 
-    assert result == 1
+    assert result is None
     assert received["timer"] is host_timer
 
 
