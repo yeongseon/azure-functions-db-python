@@ -32,6 +32,9 @@ def create_orders(out: DbOut) -> None:
     ])
 ```
 
+Every dict in an insert batch must contain the same set of columns. A batch
+with differing row shapes raises `WriteError` before anything is written.
+
 ## Upsert
 
 Set `action="upsert"` and specify `conflict_columns` to handle duplicates:

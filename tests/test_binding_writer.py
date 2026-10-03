@@ -210,6 +210,16 @@ class TestDbWriterInsertMany:
         rows = _read_all(users_url, "users")
         assert len(rows) == 0
 
+    def test_insert_many_rejects_rows_with_different_columns(self, users_url: str) -> None:
+        with DbWriter(url=users_url, table="users") as writer:
+            with pytest.raises(WriteError, match="same columns"):
+                writer.insert_many(
+                    rows=[
+                        {"id": 1, "name": "Alice"},
+                        {"id": 2, "name": "Bob", "email": "b@b.com"},
+                    ]
+                )
+
     def test_insert_many_rollback_on_failure(self, users_url: str) -> None:
         with DbWriter(url=users_url, table="users") as writer:
             writer.insert(data={"id": 1, "name": "Existing", "email": "e@e.com"})
