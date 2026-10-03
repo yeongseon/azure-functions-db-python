@@ -21,6 +21,8 @@ Precise definition:
 ### 1.2 Source Preconditions
 Conditions the source must satisfy for the framework to operate correctly:
 - The cursor column must be **monotonically non-decreasing**
+- Commit visibility must follow cursor order: after checkpoint `(C, PK)` is
+  committed, no transaction may become visible with a cursor lower than `C`
 - Rows whose cursor value is `NULL` are not eligible for polling and are
   skipped; the framework never creates a checkpoint containing a `None` cursor
 - The PK/tiebreaker must be **stable and support total ordering**
@@ -78,6 +80,10 @@ Recommended patterns:
 - Target-side upsert
 - Processed table tracking
 - Downstream idempotency key usage
+
+If the source cannot guarantee commit visibility in cursor order, use an outbox
+or CDC. A custom overlapping look-back query is possible, but it intentionally
+creates duplicates and requires durable deduplication by primary key/version.
 
 ## 4. Delete Semantics
 

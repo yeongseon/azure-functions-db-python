@@ -108,6 +108,7 @@ handler see the same row twice" question maps to one of these.
 | **W5. Commit response timeout (ambiguous)** | Network timeout on the commit blob write; commit may or may not have persisted | Entire batch (only if commit actually failed) | No |
 | **W6. Redeploy / restart** | New instance starts from last committed checkpoint | Whole or partial in-flight batch | No |
 | **W7. Cursor precision collapse** | Multiple updates within one cursor tick collapse into one | Latest state only — earlier intermediate states lost | Yes (only one event arrives) |
+| **W8. Late visibility below checkpoint** | A transaction commits after the poller advances past its lower cursor value | Late row is permanently skipped | Yes (expected row never arrives) |
 
 Windows that **cannot** produce duplicates within this framework:
 
@@ -119,6 +120,14 @@ Windows that **cannot** produce duplicates within this framework:
 Rows with a `NULL` cursor value are excluded from every poll. They cannot stop
 the poller or produce a checkpoint containing `None`; they become eligible only
 after the source assigns a non-NULL cursor value.
+
+W8 is a loss window, not a duplicate window. The source must make rows visible
+in non-decreasing cursor order: a transaction that becomes visible after
+checkpoint `(C, PK)` must not carry a cursor lower than `C`. Prefer a database
+sequence or commit-ordered logical version assigned when the row becomes
+visible. Where that cannot be guaranteed, use an outbox or CDC. An overlapping
+look-back query is another mitigation, but it deliberately re-delivers rows and
+therefore requires durable deduplication by primary key/version in the handler.
 
 For the matching state-machine view see
 [Semantics §12 Failure Matrix](03-semantics.md#12-failure-matrix) and
