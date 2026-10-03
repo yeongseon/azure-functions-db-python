@@ -30,11 +30,10 @@ explicit and safe, the package exposes [`EngineProvider`](#3-engineprovider).
 
 ## 2. Engine lifetime across warm invocations
 
-### Without `EngineProvider`
+### Without an explicit `EngineProvider`
 
-If you do **not** pass an `engine_provider` to bindings or
-`SqlAlchemySource`, each binding creates an independent SQLAlchemy engine
-the first time it runs:
+If you do **not** pass an `engine_provider` to an input or output decorator,
+the decorator uses a package-level default provider:
 
 ```python
 @db.input("rows", url="%DB_URL%", query="SELECT * FROM users")
@@ -44,11 +43,14 @@ def list_users(rows): ...
 def write_order(out): ...
 ```
 
-In the snippet above, the input binding and the output binding **each build
-their own engine** the first time they execute. Both engines are then cached
-inside their respective bindings for the lifetime of the worker process —
-i.e. across all warm invocations — but they are **not** shared with each
-other.
+In the snippet above, both decorators resolve the same connection config to
+the same cached engine for the lifetime of the worker process. Per-invocation
+`DbReader` and `DbWriter` objects close without disposing that shared engine.
+
+Imperative `DbReader`, `DbWriter`, and `SqlAlchemySource` instances still own
+an engine when constructed without a provider. Their engine lives for that
+instance's lifecycle and is disposed by `close()` / `dispose()`. Pass an
+explicit provider when separate imperative instances should share a pool.
 
 This is fine for small apps. For functions that fan out to many bindings on
 the same database, you want a single shared engine; that is what

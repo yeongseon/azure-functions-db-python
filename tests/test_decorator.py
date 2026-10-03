@@ -8,10 +8,13 @@ import azure.functions as func
 from pydantic import BaseModel
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 from azure_functions_db import ConfigurationError, DbBindings
 from azure_functions_db.binding.reader import DbReader
 from azure_functions_db.binding.writer import DbWriter
+from azure_functions_db.core.config import DbConfig
+from azure_functions_db.core.engine import EngineProvider
 from azure_functions_db.core.errors import NotFoundError
 import azure_functions_db.decorator as decorator_mod
 from azure_functions_db.decorator import DbOut
@@ -358,6 +361,32 @@ def test_input_query_with_static_params(tmp_path: Path) -> None:
     assert len(result) == 2
     assert result[0]["name"] == "Alice"
     assert result[1]["name"] == "Carol"
+
+
+def test_input_reuses_default_engine_across_invocations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = _sqlite_url(tmp_path, "default-provider.db")
+    _create_users_table(url)
+    created = 0
+    original = EngineProvider.create_isolated_engine
+
+    def counting_create(provider: EngineProvider, config: DbConfig) -> Engine:
+        nonlocal created
+        created += 1
+        return original(provider, config)
+
+    monkeypatch.setattr(EngineProvider, "create_isolated_engine", counting_create)
+    db = DbBindings()
+
+    @db.input("users", url=url, query="SELECT * FROM users")
+    def handler(users: list[dict[str, object]]) -> int:
+        return len(users)
+
+    handler()
+    handler()
+
+    assert created == 1
 
 
 def test_input_query_with_callable_params(tmp_path: Path) -> None:
