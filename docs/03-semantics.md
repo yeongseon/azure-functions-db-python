@@ -21,6 +21,8 @@ Precise definition:
 ### 1.2 Source Preconditions
 Conditions the source must satisfy for the framework to operate correctly:
 - The cursor column must be **monotonically non-decreasing**
+- Rows whose cursor value is `NULL` are not eligible for polling and are
+  skipped; the framework never creates a checkpoint containing a `None` cursor
 - The PK/tiebreaker must be **stable and support total ordering**
 - The source query must be **deterministic**
 - If cursor precision is too low, intermediate updates may be collapsed into one

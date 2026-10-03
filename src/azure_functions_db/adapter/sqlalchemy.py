@@ -268,7 +268,7 @@ class SqlAlchemySource:
 
         stmt = select(self._table)
 
-        conditions = []
+        conditions: list[Any] = [self._table.c[self._cursor_column].is_not(None)]
         if cursor is not None:
             cursor_filter = self._build_cursor_filter_table(cursor)
             conditions.append(cursor_filter)
@@ -293,7 +293,8 @@ class SqlAlchemySource:
 
         stmt: Any = select(literal_column("*")).select_from(subq)
 
-        conditions = []
+        cursor_expr: Any = literal_column(f"source.{self._cursor_column}")
+        conditions: list[Any] = [cursor_expr.is_not(None)]
         if cursor is not None:
             cursor_filter = self._build_cursor_filter_subquery(cursor)
             conditions.append(cursor_filter)
@@ -304,7 +305,7 @@ class SqlAlchemySource:
         if conditions:
             stmt = stmt.where(and_(*conditions))
 
-        order_cols: list[Any] = [literal_column(f"source.{self._cursor_column}")] + [
+        order_cols: list[Any] = [cursor_expr] + [
             literal_column(f"source.{pk}") for pk in self._pk_columns
         ]
         stmt = stmt.order_by(*order_cols)
