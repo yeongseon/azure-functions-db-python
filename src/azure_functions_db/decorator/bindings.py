@@ -40,6 +40,8 @@ from .validation import (
 )
 from .wrapper import _finalize_wrapper, _wrap_handler
 
+_DEFAULT_ENGINE_PROVIDER = EngineProvider()
+
 
 class DbBindings:
     """Azure Functions-style decorator API for database integration.
@@ -296,6 +298,7 @@ class DbBindings:
             msg = "input 'params' is only valid with 'query'"
             raise ConfigurationError(msg)
         _validate_model_type(model)
+        resolved_engine_provider = engine_provider or _DEFAULT_ENGINE_PROVIDER
 
         use_pk = pk is not None
         pk_callable: Callable[..., dict[str, object]] | None = pk if callable(pk) else None
@@ -363,7 +366,7 @@ class DbBindings:
                     url=url,
                     table=table,
                     schema=schema,
-                    engine_provider=engine_provider,
+                    engine_provider=resolved_engine_provider,
                 )
                 try:
                     if use_pk:
@@ -475,6 +478,7 @@ class DbBindings:
         if action == "upsert" and not conflict_columns:
             msg = "output with action='upsert' requires 'conflict_columns'"
             raise ConfigurationError(msg)
+        resolved_engine_provider = engine_provider or _DEFAULT_ENGINE_PROVIDER
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             _check_composition(fn, "output")
@@ -485,7 +489,7 @@ class DbBindings:
                 schema=schema,
                 action=action,
                 conflict_columns=conflict_columns,
-                engine_provider=engine_provider,
+                engine_provider=resolved_engine_provider,
             )
             proxy = _AsyncDbOutProxy(out)
 
