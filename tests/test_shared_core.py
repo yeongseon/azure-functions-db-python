@@ -407,7 +407,7 @@ def test_sqlalchemy_source_uses_engine_provider(tmp_path: Path) -> None:
 
     shared_engine = provider.get_engine(DbConfig(connection_url=url))
     with shared_engine.connect() as conn:
-        count = conn.execute(text("SELECT COUNT(*) FROM orders")).scalar_one()
+        count: int = conn.execute(text("SELECT COUNT(*) FROM orders")).scalar_one()
 
     assert count == 2
     provider.dispose_all()
