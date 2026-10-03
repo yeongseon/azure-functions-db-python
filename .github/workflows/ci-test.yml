@@ -138,6 +138,62 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck examples/postgresql-poll-trigger/smoke.sh examples/mysql-poll-trigger/smoke.sh
 
+  host-smoke:
+    name: Functions host smoke (Py 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Functions host, Azurite, and checkout package
+        run: |
+          npm install --global azure-functions-core-tools@4 --unsafe-perm true
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Run real Functions host smoke
+        run: |
+          npx --yes azurite --silent > "$RUNNER_TEMP/azurite.log" 2>&1 &
+          azurite_pid=$!
+          trap 'kill "$azurite_pid" 2>/dev/null || true' EXIT
+
+          cd tests/host_smoke
+          export PATH="$VIRTUAL_ENV/bin:$PATH"
+          timeout 120s func start --verbose > "$RUNNER_TEMP/host-smoke.log" 2>&1 &
+          host_pid=$!
+
+          observed=false
+          for _ in {1..60}; do
+            if grep -q "DB_TRIGGER_HOST_SMOKE_OK" "$RUNNER_TEMP/host-smoke.log"; then
+              observed=true
+              break
+            fi
+            if ! kill -0 "$host_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          kill "$host_pid" 2>/dev/null || true
+          wait "$host_pid" 2>/dev/null || true
+          cat "$RUNNER_TEMP/host-smoke.log"
+
+          if [ "$observed" != true ]; then
+            echo "::error::The database trigger did not execute"
+            exit 1
+          fi
+          if grep -Eq "Executed 'Functions\.db_trigger_host_smoke' \(Failed|without a \\$return binding.*returned a non-None value" "$RUNNER_TEMP/host-smoke.log"; then
+            echo "::error::The Functions host reported a failed trigger invocation"
+            exit 1
+          fi
+          grep -q "Executed 'Functions.db_trigger_host_smoke' (Succeeded" "$RUNNER_TEMP/host-smoke.log"
+
   # azure-functions 2.x compatibility proof lane (issue #287), following the
   # sibling proof-lane pattern (azure-functions-openapi #508/#525,
   # azure-functions-langgraph #350, azure-functions-validation #348). This is a
@@ -214,7 +270,7 @@ jobs:
   # reports, and it reads every dependency's result, so a skipped or cancelled
   # job cannot pass by not being a failure.
   ci-required:
-    needs: [quality, test, shellcheck]
+    needs: [quality, test, shellcheck, host-smoke]
     if: always()
     runs-on: ubuntu-latest
     steps:
