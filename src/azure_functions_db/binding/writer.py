@@ -171,7 +171,11 @@ class DbWriter:
             raise WriteError(msg) from exc
 
     def insert_many(self, *, rows: list[dict[str, object]]) -> None:
-        """Insert multiple rows in a single transaction (all-or-nothing)."""
+        """Insert rows with identical column sets in one transaction.
+
+        Raises :class:`WriteError` before execution when rows contain different
+        columns, avoiding SQLAlchemy's first-row-dependent batch behaviour.
+        """
         if not rows:
             return
 
@@ -181,6 +185,11 @@ class DbWriter:
 
         for row in rows:
             self._validate_data_columns(row)
+
+        expected_columns = rows[0].keys()
+        if any(row.keys() != expected_columns for row in rows[1:]):
+            msg = "insert_many rows must all contain the same columns"
+            raise WriteError(msg)
 
         try:
             with self._execution_scope() as conn:
