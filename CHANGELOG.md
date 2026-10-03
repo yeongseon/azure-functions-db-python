@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.3](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.2...v0.7.3) (2026-10-03)
+
+
+### Bug Fixes
+
+* **engine:** share engines across invocations by default ([#378](https://github.com/yeongseon/azure-functions-db-python/issues/378)) ([7592f99](https://github.com/yeongseon/azure-functions-db-python/commit/7592f99b4e7032a005faaa56e2ce7b6610711ae3))
+* **trigger:** ignore rows with a NULL cursor value ([#376](https://github.com/yeongseon/azure-functions-db-python/issues/376)) ([679c56e](https://github.com/yeongseon/azure-functions-db-python/commit/679c56e3642083a5fb79345134c7f9e430956e45))
+* **types:** keep mypy clean with SQLAlchemy 2.1 ([#379](https://github.com/yeongseon/azure-functions-db-python/issues/379)) ([fafc943](https://github.com/yeongseon/azure-functions-db-python/commit/fafc9433bc6eee462d83fe5d2d081069b502b1db))
+* **writer:** reject rows with differing columns in insert_many ([#374](https://github.com/yeongseon/azure-functions-db-python/issues/374)) ([0125f22](https://github.com/yeongseon/azure-functions-db-python/commit/0125f227cf8033778bfebb2bc917e7022b2ec681))
+
 ## [0.7.2](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.1...v0.7.2) (2026-10-03)
 
 
