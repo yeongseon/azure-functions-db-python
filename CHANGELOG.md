@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.2](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.1...v0.7.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* **trigger:** return None from the trigger wrapper ([#370](https://github.com/yeongseon/azure-functions-db-python/issues/370)) ([5e22c4b](https://github.com/yeongseon/azure-functions-db-python/commit/5e22c4b80bfa19d59deb3003fa1b8f6feb54e08c))
+
 ## [0.7.1](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.0...v0.7.1) (2026-10-02)
 
 
