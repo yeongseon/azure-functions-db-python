@@ -485,7 +485,9 @@ def upsert_order(out: DbOut) -> str:
 
 `DbOut.set()` payload contract:
 - `dict` → single-row write
-- `list[dict]` → batch write; an empty list is an explicit no-op
+- `list[dict]` → batch write; an empty list is an explicit no-op. For inserts,
+  every row must contain the same set of columns or `WriteError` is raised
+  before execution.
 
 The handler may independently return any value required by its trigger, such
 as an `HttpResponse`.
