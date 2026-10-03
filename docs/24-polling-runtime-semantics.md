@@ -116,6 +116,10 @@ Windows that **cannot** produce duplicates within this framework:
 - Two ticks racing on the same instance — `lease_ttl_seconds` and the single
   state blob CAS prevent this.
 
+Rows with a `NULL` cursor value are excluded from every poll. They cannot stop
+the poller or produce a checkpoint containing `None`; they become eligible only
+after the source assigns a non-NULL cursor value.
+
 For the matching state-machine view see
 [Semantics §12 Failure Matrix](03-semantics.md#12-failure-matrix) and
 [§13 Duplicate and Reprocessing Windows](03-semantics.md#13-duplicate-and-reprocessing-windows).
