@@ -29,8 +29,8 @@ dependencies = [
     # still blocking the uncertified 3.x line. The advisory "azure-functions 2.x
     # compat (Py 3.13)" lane stays green; real-Azure certification via
     # e2e-azure.yml is a separate follow-up. See knowledge#46 / dx#8 / #287.
-    "azure-functions>=1.22.0,<2.0.0; python_version < '3.13'",
-    "azure-functions>=1.22.0,<3.0.0; python_version >= '3.13'",
+    "azure-functions>=1.21.0,<2.0.0; python_version < '3.13'",
+    "azure-functions>=1.21.0,<3.0.0; python_version >= '3.13'",
     "sqlalchemy>=2.0",
     "azure-storage-blob>=12.21.0",
     "pydantic>=2.7",
