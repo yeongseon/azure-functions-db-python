@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.4](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.3...v0.7.4) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** align azure-functions floor at 1.21.0 ([#382](https://github.com/yeongseon/azure-functions-db-python/issues/382)) ([a4a8ec6](https://github.com/yeongseon/azure-functions-db-python/commit/a4a8ec6175f7051c101eeca3f3d6e623f170ec7d))
+
 ## [0.7.3](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.2...v0.7.3) (2026-10-03)
 
 
