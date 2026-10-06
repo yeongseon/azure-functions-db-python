@@ -124,9 +124,9 @@ def orders_poll(
     # first element is the source-side change timestamp (TIMESTAMPTZ); we
     # persist that as `source_cursor`. `processed_at` records when *we*
     # observed the event, so it is wall-clock `now()`, not the source cursor.
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
-    processed_at = datetime.now(timezone.utc)
+    processed_at = datetime.now(UTC)
 
     out.set(
         [
