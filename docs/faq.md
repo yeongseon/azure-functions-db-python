@@ -44,10 +44,8 @@ Python v2 only — the decorator-based `func.FunctionApp()` model. The legacy
 
 ### What Python versions are supported?
 
-Python 3.10, 3.11, 3.12, 3.13, and 3.14. The project metadata declares
-`>=3.10,<3.15`. Python 3.10 is deprecated: importing the package on 3.10 emits
-a `DeprecationWarning`, and support will be dropped in the next minor release
-because 3.10 reaches end of life in October 2026.
+Python 3.11, 3.12, 3.13, and 3.14. The project metadata declares
+`>=3.11,<3.15`.
 
 ## Trigger
 
