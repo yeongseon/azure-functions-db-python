@@ -397,7 +397,7 @@ jobs:
       - name: Build wheel
         # Prove 2.x against a WHEEL-installed build, not an editable/source tree,
         # mirroring the sibling proof lanes. Building the distribution artifact
-        # also avoids Hatch's default env, which is pinned to Python 3.10 in
+        # also avoids Hatch's default env, which is pinned to Python 3.11 in
         # pyproject and cannot install azure-functions 2.x (Requires-Python
         # >=3.13).
         run: |
