@@ -8,7 +8,7 @@
 - Project: `azure-functions-db`
 - Project type: Python library
 - Runtime scope: Azure Functions Python v2 programming model
-- Minimum supported Python: `3.10`
+- Minimum supported Python: `3.11`
 - Packaging: `pyproject.toml` with Hatch
 
 ## Read First
