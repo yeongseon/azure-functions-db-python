@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.4...v0.8.0) (2026-10-06)
+
+
+### Features
+
+* **python:** require Python 3.11 or newer ([778355c](https://github.com/yeongseon/azure-functions-db-python/commit/778355cd8e2418bfbccf90ad3210f36ed97f12a1))
+
 ## [0.7.4](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.3...v0.7.4) (2026-10-05)
 
 
