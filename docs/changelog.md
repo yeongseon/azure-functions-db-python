@@ -49,6 +49,4 @@ belong on a `DbConfig` (`engine_kwargs`, `connect_args`), which an
 
 ### Python version support
 
-The package requires Python `>=3.10,<3.15`. Python 3.10 is deprecated and emits
-a `DeprecationWarning` on import; support will be dropped in the next minor
-release.
+The package requires Python `>=3.11,<3.15`.

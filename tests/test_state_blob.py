@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 import json
 from typing import Any
 from unittest.mock import MagicMock
@@ -145,8 +145,8 @@ def _make_state(
     checkpoint: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     if expires_at is None:
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-    now_str = datetime.now(timezone.utc).isoformat()
+        expires_at = datetime.now(UTC) + timedelta(hours=1)
+    now_str = datetime.now(UTC).isoformat()
     return {
         "version": 1,
         "poller_name": poller_name,
@@ -183,7 +183,7 @@ class TestBlobCheckpointStoreAcquireLease:
 
     def test_acquire_succeeds_when_lease_expired(self) -> None:
         store, container = _make_store()
-        expired_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        expired_at = datetime.now(UTC) - timedelta(minutes=10)
         _seed_blob(
             container,
             "test_poller",
@@ -196,7 +196,7 @@ class TestBlobCheckpointStoreAcquireLease:
 
     def test_acquire_raises_conflict_when_lease_active(self) -> None:
         store, container = _make_store()
-        active_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        active_at = datetime.now(UTC) + timedelta(hours=1)
         _seed_blob(
             container,
             "test_poller",
@@ -214,9 +214,7 @@ class TestBlobCheckpointStoreAcquireLease:
 
         # Expire the lease so acquire tries to steal
         state = _read_blob_state(container, "test_poller")
-        state["lease"]["expires_at"] = (
-            datetime.now(timezone.utc) - timedelta(minutes=10)
-        ).isoformat()
+        state["lease"]["expires_at"] = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
         blob = container.get_blob_client("state/test_poller.json")
         blob.content = json.dumps(state).encode()
 
@@ -228,7 +226,7 @@ class TestBlobCheckpointStoreAcquireLease:
 
         # Expire the lease and simulate another CAS race
         state = _read_blob_state(container, "test_poller")
-        expired = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+        expired = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
         state["lease"]["expires_at"] = expired
         blob = container.get_blob_client("state/test_poller.json")
         blob.content = json.dumps(state).encode()
@@ -239,7 +237,7 @@ class TestBlobCheckpointStoreAcquireLease:
 
     def test_acquire_increments_fencing_token(self) -> None:
         store, container = _make_store()
-        expired_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        expired_at = datetime.now(UTC) - timedelta(minutes=10)
         _seed_blob(
             container,
             "test_poller",
@@ -254,7 +252,7 @@ class TestBlobCheckpointStoreAcquireLease:
     def test_acquire_uses_grace_period(self) -> None:
         store, container = _make_store()
         # TTL=120, grace=5s. Lease expired 3s ago → still within grace.
-        expired_at = datetime.now(timezone.utc) - timedelta(seconds=3)
+        expired_at = datetime.now(UTC) - timedelta(seconds=3)
         _seed_blob(
             container,
             "test_poller",
@@ -267,7 +265,7 @@ class TestBlobCheckpointStoreAcquireLease:
     def test_acquire_grace_scales_for_short_ttl(self) -> None:
         store, container = _make_store()
         # TTL=4, grace=min(4*0.5, 5)=2s. Lease expired 3s ago → past grace.
-        expired_at = datetime.now(timezone.utc) - timedelta(seconds=3)
+        expired_at = datetime.now(UTC) - timedelta(seconds=3)
         _seed_blob(
             container,
             "test_poller",
@@ -287,7 +285,7 @@ class TestBlobCheckpointStoreRenewLease:
 
         state = _read_blob_state(container, "test_poller")
         expires_at = datetime.fromisoformat(state["lease"]["expires_at"])
-        assert expires_at > datetime.now(timezone.utc) + timedelta(seconds=60)
+        assert expires_at > datetime.now(UTC) + timedelta(seconds=60)
 
     def test_renew_raises_lost_lease_on_wrong_owner(self) -> None:
         store, container = _make_store()
@@ -316,7 +314,7 @@ class TestBlobCheckpointStoreRenewLease:
 
         # Manually expire the lease in the blob
         state = _read_blob_state(container, "test_poller")
-        expired = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        expired = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
         state["lease"]["expires_at"] = expired
         blob = container.get_blob_client("state/test_poller.json")
         blob.content = json.dumps(state).encode()
@@ -346,7 +344,7 @@ class TestBlobCheckpointStoreReleaseLease:
         state = _read_blob_state(container, "test_poller")
         expires_at = datetime.fromisoformat(state["lease"]["expires_at"])
         # Should be approximately now (within 2 seconds tolerance)
-        assert abs((expires_at - datetime.now(timezone.utc)).total_seconds()) < 2
+        assert abs((expires_at - datetime.now(UTC)).total_seconds()) < 2
 
     def test_release_preserves_fencing_token(self) -> None:
         store, container = _make_store()
@@ -370,7 +368,7 @@ class TestBlobCheckpointStoreReleaseLease:
 
         # Manually expire the lease — release should still work
         state = _read_blob_state(container, "test_poller")
-        expired = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        expired = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
         state["lease"]["expires_at"] = expired
         blob = container.get_blob_client("state/test_poller.json")
         blob.content = json.dumps(state).encode()
@@ -447,7 +445,7 @@ class TestBlobCheckpointStoreCommitCheckpoint:
         lease_id = store.acquire_lease("test_poller", 120)
 
         state = _read_blob_state(container, "test_poller")
-        expired = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        expired = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
         state["lease"]["expires_at"] = expired
         blob = container.get_blob_client("state/test_poller.json")
         blob.content = json.dumps(state).encode()
@@ -672,7 +670,7 @@ class TestStateStoreErrorFallbackPaths:
         from azure.core.exceptions import HttpResponseError
 
         store, container = _make_store()
-        expired_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        expired_at = datetime.now(UTC) - timedelta(minutes=10)
         _seed_blob(container, "test_poller", _make_state(expires_at=expired_at))
 
         blob = container.get_blob_client("state/test_poller.json")

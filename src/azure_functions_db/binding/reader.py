@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from types import TracebackType
-from typing import Any
+from typing import Any, Self
 import warnings
 
 from sqlalchemy.engine import Engine, create_engine
@@ -372,7 +372,7 @@ class DbReader:
             self._initialized = False
             self._owns_engine = False
 
-    def __enter__(self) -> DbReader:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(

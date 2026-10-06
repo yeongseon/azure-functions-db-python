@@ -31,7 +31,7 @@ Delivery is at-least-once; see docs/24-polling-runtime-semantics.md.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import os
 
 import azure.functions as func
@@ -111,7 +111,7 @@ def orders_poll(
     # ordering — here ``(updated_at, id)``. Element 0 is the source-side change
     # timestamp we persist as ``source_cursor``; ``processed_at`` is our own
     # observation wall-clock time.
-    processed_at = datetime.now(timezone.utc)
+    processed_at = datetime.now(UTC)
 
     for event in events:
         if event.after is None:

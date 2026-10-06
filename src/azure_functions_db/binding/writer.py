@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 import logging
 from types import TracebackType
-from typing import Any
+from typing import Any, Self
 
 from sqlalchemy.engine import Connection, Engine, create_engine
 from sqlalchemy.engine.base import Transaction
@@ -352,7 +352,7 @@ class DbWriter:
         if had_active_tx:
             self._closed_in_active_tx = True
 
-    def __enter__(self) -> DbWriter:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(

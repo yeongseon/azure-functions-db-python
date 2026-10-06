@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout code
@@ -27,7 +27,7 @@ jobs:
 
       - name: Assert the runtime interpreter matches the matrix cell
         # Belt-and-braces: the tests below run *directly* on this interpreter
-        # via `python -m pytest` (NOT through the Python-3.10-pinned hatch env),
+        # via `python -m pytest` (NOT through the default pinned Hatch env),
         # so every matrix cell genuinely exercises its advertised interpreter.
         env:
           EXPECTED: ${{ matrix.python-version }}
@@ -56,7 +56,7 @@ jobs:
         run: ls -lh coverage.xml
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.10' && github.actor != 'dependabot[bot]'
+        if: matrix.python-version == '3.11' && github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -68,7 +68,7 @@ jobs:
 
   quality:
     # Lint, type-check, workflow-lint and security run once on the single
-    # pinned interpreter (3.10) through Hatch -- these are interpreter-agnostic
+    # pinned interpreter (3.11) through Hatch -- these are interpreter-agnostic
     # gates, so running them per matrix cell would only duplicate reporting.
     runs-on: ubuntu-latest
     steps:
@@ -79,10 +79,10 @@ jobs:
           # which a shallow clone does not contain.
           fetch-depth: 0
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.11
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Install Hatch and dependencies via Makefile
         run: |
@@ -111,10 +111,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.11
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install accepted SQLAlchemy upper edge
         run: pip install -e ".[dev]" --upgrade-strategy eager
@@ -133,10 +133,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.11
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -158,18 +158,167 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck examples/postgresql-poll-trigger/smoke.sh examples/mysql-poll-trigger/smoke.sh
 
-  host-smoke:
-    name: Functions host smoke (Py 3.12)
+  minimum-dependencies:
+    name: Minimum dependencies (Py 3.11)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.11
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.11"
+
+      - name: Install minimum runtime and development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "azure-functions==1.21.0" "sqlalchemy==2.0.0"
+          pip install -e ".[dev]"
+
+      - name: Assert declared runtime dependency floors are resolved
+        run: |
+          pip show azure-functions sqlalchemy azure-functions-db
+          python - <<'PY'
+          from importlib.metadata import version
+
+          resolved = {
+              "azure-functions": version("azure-functions"),
+              "sqlalchemy": version("sqlalchemy"),
+          }
+          print(f"resolved dependencies={resolved}")
+          assert resolved == {"azure-functions": "1.21.0", "sqlalchemy": "2.0.0"}
+          PY
+
+      - name: Run full suite against minimum runtime dependencies
+        run: pytest tests/ --no-cov
+
+  artifact-build:
+    name: Build compatibility artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Upload compatibility artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: compatibility-dist
+          path: dist/
+          if-no-files-found: error
+
+  artifact-python310-negative:
+    name: Wheel install rejection (Py 3.10, negative test)
+    needs: artifact-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python 3.10 for negative install test
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: compatibility-dist
+          path: compatibility-dist
+
+      - name: Require wheel rejection by Requires-Python
+        run: |
+          wheel=$(find compatibility-dist -maxdepth 1 -name '*.whl' -print -quit)
+          test -n "$wheel"
+          if output=$(python -m pip install --no-deps "$wheel" 2>&1); then
+            echo "::error ::Python 3.10 unexpectedly installed the candidate wheel"
+            exit 1
+          fi
+          printf '%s\n' "$output"
+          grep -F "requires a different Python" <<<"$output"
+          grep -F "3.10" <<<"$output"
+          grep -F ">=3.11" <<<"$output"
+
+  artifact-python311:
+    name: Wheel install and SQLite smoke (Py 3.11)
+    needs: artifact-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: compatibility-dist
+          path: compatibility-dist
+
+      - name: Install wheel with runtime dependencies
+        run: |
+          wheel=$(find compatibility-dist -maxdepth 1 -name '*.whl' -print -quit)
+          test -n "$wheel"
+          python -m pip install "$wheel"
+
+      - name: Check installed wheel outside the checkout
+        working-directory: /tmp
+        env:
+          CHECKOUT: ${{ github.workspace }}
+        run: |
+          python -m pip check
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          import azure_functions_db
+          from azure_functions_db import DbReader, DbWriter
+          from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine
+
+          module_path = Path(azure_functions_db.__file__).resolve()
+          checkout = Path(os.environ["CHECKOUT"]).resolve()
+          print(f"imported module: {module_path}")
+          assert not module_path.is_relative_to(checkout)
+
+          database = Path("artifact-smoke.sqlite")
+          url = f"sqlite:///{database}"
+          metadata = MetaData()
+          Table(
+              "items",
+              metadata,
+              Column("id", Integer, primary_key=True),
+              Column("name", String, nullable=False),
+          )
+          metadata.create_all(create_engine(url))
+          with DbWriter(url=url, table="items") as writer:
+              writer.insert(data={"id": 1, "name": "installed-wheel"})
+          with DbReader(url=url, table="items") as reader:
+              assert reader.get(pk={"id": 1}) == {"id": 1, "name": "installed-wheel"}
+          PY
+
+  host-smoke:
+    name: Functions host smoke (Py ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Install Functions host, Azurite, and checkout package
         run: |
@@ -248,7 +397,7 @@ jobs:
       - name: Build wheel
         # Prove 2.x against a WHEEL-installed build, not an editable/source tree,
         # mirroring the sibling proof lanes. Building the distribution artifact
-        # also avoids Hatch's default env, which is pinned to Python 3.10 in
+        # also avoids Hatch's default env, which is pinned to Python 3.11 in
         # pyproject and cannot install azure-functions 2.x (Requires-Python
         # >=3.13).
         run: |
@@ -291,7 +440,15 @@ jobs:
   # reports, and it reads every dependency's result, so a skipped or cancelled
   # job cannot pass by not being a failure.
   ci-required:
-    needs: [quality, test, shellcheck, host-smoke]
+    needs:
+      - quality
+      - test
+      - minimum-dependencies
+      - artifact-build
+      - artifact-python310-negative
+      - artifact-python311
+      - shellcheck
+      - host-smoke
     if: always()
     runs-on: ubuntu-latest
     steps:

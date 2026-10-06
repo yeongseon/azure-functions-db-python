@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Callable, Sequence
 import copy
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import inspect
 import logging
 import time
@@ -610,7 +610,7 @@ class PollRunner:
                 if cursor_dt.tzinfo is not None:
                     lag_seconds = max(
                         0.0,
-                        (datetime.now(timezone.utc) - cursor_dt).total_seconds(),
+                        (datetime.now(UTC) - cursor_dt).total_seconds(),
                     )
                     self._emit_lag_metric(lag_seconds, ctx.base_labels)
                 else:
@@ -631,7 +631,7 @@ class PollRunner:
                     if cursor_dt.tzinfo is not None:
                         lag_seconds = max(
                             0.0,
-                            (datetime.now(timezone.utc) - cursor_dt).total_seconds(),
+                            (datetime.now(UTC) - cursor_dt).total_seconds(),
                         )
                         self._emit_lag_metric(lag_seconds, ctx.base_labels)
                     else:
@@ -709,7 +709,7 @@ class PollRunner:
     def tick(self) -> int:
         ctx = _TickState(
             invocation_id=uuid.uuid4().hex,
-            tick_started_at=datetime.now(timezone.utc),
+            tick_started_at=datetime.now(UTC),
             tick_started_monotonic=time.monotonic(),
         )
 
@@ -748,7 +748,7 @@ class PollRunner:
             self._safe_emit(
                 lambda: self._metrics.set_gauge(
                     METRIC_LAST_SUCCESS_TIMESTAMP,
-                    datetime.now(timezone.utc).timestamp(),
+                    datetime.now(UTC).timestamp(),
                     labels={"poller_name": self._name},
                 )
             )

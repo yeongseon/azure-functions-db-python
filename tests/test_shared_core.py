@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 import threading
@@ -319,7 +319,7 @@ class TestEngineProvider:
 
 class TestSerializers:
     def test_serialize_cursor_part_datetime(self) -> None:
-        value = datetime(2026, 4, 8, 1, 2, 3, 456789, tzinfo=timezone.utc)
+        value = datetime(2026, 4, 8, 1, 2, 3, 456789, tzinfo=UTC)
         assert serialize_cursor_part(value) == "2026-04-08T01:02:03.456789+00:00"
 
     def test_serialize_cursor_part_decimal(self) -> None:

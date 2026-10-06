@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -55,7 +55,7 @@ def test_default_normalizer_before_is_none() -> None:
 
 
 def test_cursor_part_datetime() -> None:
-    value = datetime(2026, 4, 7, 1, 23, 45, 123456, tzinfo=timezone.utc)
+    value = datetime(2026, 4, 7, 1, 23, 45, 123456, tzinfo=UTC)
     assert _cursor_part(value) == "2026-04-07T01:23:45.123456+00:00"  # noqa: S101
 
 

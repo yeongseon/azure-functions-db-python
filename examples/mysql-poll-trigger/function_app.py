@@ -148,9 +148,9 @@ def orders_poll(
     # `--default-time-zone=+00:00`); we persist that as `source_cursor`.
     # `processed_at` records when *we* observed the event, so it is
     # wall-clock `now()`, not the source cursor.
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
-    processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    processed_at = datetime.now(UTC).replace(tzinfo=None)
 
     out.set(
         [
