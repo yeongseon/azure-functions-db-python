@@ -282,7 +282,34 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 `async def` ハンドラーがサポートされています。`azure-functions-db` 内部の SQLAlchemy 操作は同期的に実行され、`async` ハンドラーがバインディング（入力取得、`DbOut.set(...)`、ポーリングコミットなど）を呼び出すと、パッケージは `asyncio.to_thread` を介してブロッキング呼び出しをワーカースレッドにオフロードするため、イベントループはブロックされません。
 
+このパッケージは内部で SQLAlchemy `AsyncEngine` を使用し**ません**。完全なネイティブ asyncio ドライバー（例: `asyncpg`、`aiomysql`）が必要な場合は、バインディングの外で自分で扱ってください。`azure-functions-db` は dialect 間で挙動を揃えるため、意図的に同期エンジンの単一経路のみを公開しています。
+
 > **例外 — `@db.trigger` は非同期ハンドラーをサポートしません。** `PollTrigger.run()` が同期的に動作するため、`trigger` デコレーターはデコレーション時に `ConfigurationError` を送出して非同期ハンドラーを拒否します。さらに `PollTrigger.run()` は防御的なランタイムガードとして、非同期の呼び出し可能オブジェクトが渡された場合に `TypeError` を送出します。`@db.trigger` には同期ハンドラーを使用してください。
+
+### 非同期 writer のトランザクション
+
+`async def` ハンドラーに `@db.inject_writer` が注入する非同期 writer プロキシは、`insert`、`insert_many`、`upsert`、`upsert_many`、`update`、`delete`、`close` に加え、複数ステートメントを原子的にまとめる `transaction()` 非同期コンテキストマネージャーを公開します。
+
+SQLAlchemy の `Connection` / `Transaction` はスレッド間で共有しても安全ではなく、`asyncio.to_thread` は処理を特定の OS スレッドに固定しません。そのため `transaction()` は `async with` ブロックの間、**トランザクション全体**を専用のワーカースレッド 1 つに固定します。ブロックが渡すプロキシ経由の書き込みはすべてそのスレッドにルーティングされるため、基盤のコネクションは常に単一スレッドからのみ触れられます。トランザクションは正常終了時にコミットされ、ブロックが例外を送出した場合はロールバックされます。
+
+```python
+from azure_functions_db import DbBindings
+
+db = DbBindings()
+
+
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
+async def transfer(writer) -> None:
+    async with writer.transaction() as tx:
+        await tx.insert(data={"id": 1, "status": "pending"})
+        await tx.update(data={"status": "shipped"}, pk={"id": 1})
+```
+
+補足:
+
+- ブロック内の同時書き込み（例: `asyncio.gather`）は固定されたスレッド上で**直列化**されます。SQLAlchemy のコネクションは 1 スレッド上でも同時使用できません。
+- コミット失敗は `WriteError` として表面化し、ロールバック中の失敗はログに記録したうえで元の例外を保持します。
+- すべて同期の `DbWriter` で完結させたい場合は、`DbWriter.transaction()` を最後まで駆動する 1 回の `asyncio.to_thread` 呼び出しで処理単位全体を包むこともできます。
 
 ## Supported Databases
 
@@ -344,6 +371,8 @@ trigger = PollTrigger(
 - **Blob checkpoint** — チェックポイント永続化に Azure Blob Storage ([ADR-003](docs/18-ADR-003-blob-checkpoint-mvp.md))
 - **At-least-once** — 冪等性を前提にした既定配信保証 ([ADR-004](docs/19-ADR-004-at-least-once-default.md))
 - **Unified package** — trigger + binding を 1 パッケージで提供 ([ADR-005](docs/23-ADR-005-unified-package-design.md))
+- **ネイティブ拡張ではなく Python ラッパー** — .NET の Azure Functions 拡張ではなく timer trigger 上の Python デコレーター ([ADR-006](docs/27-ADR-006-no-native-extension.md))
+- **固定ワーカースレッドによる非同期トランザクション** — ネイティブ async ドライバーを追加せず、`async with writer.transaction()` がトランザクションをワーカースレッド 1 つに固定 ([ADR-007](docs/29-ADR-007-async-writer-transaction.md))
 
 ## Duplicate Handling
 
@@ -366,7 +395,7 @@ trigger = PollTrigger(
 |---------|------|
 | [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI spec generation and Swagger UI |
 | [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | Request/response validation and serialization |
-| **azure-functions-db-python** | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
+| **azure-functions-db-python** | SQLAlchemy-powered DB integration helpers (poll-based pseudo trigger, input/output/client injection) |
 | [azure-functions-langgraph-python](https://github.com/yeongseon/azure-functions-langgraph-python) | LangGraph deployment adapter for Azure Functions |
 | [azure-functions-scaffold-python](https://github.com/yeongseon/azure-functions-scaffold-python) | Project scaffolding CLI |
 | [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | Structured logging and observability |

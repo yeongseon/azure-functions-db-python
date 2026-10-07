@@ -60,13 +60,13 @@ python -c "import azure_functions_db; print(azure_functions_db.__version__)"
 
 Expected outcome:
 
-- The command prints a version string such as `0.1.0`.
+- The command prints a version string such as `X.Y.Z` (see package metadata for the current release).
 - No import errors are raised.
 
 You can also verify package metadata:
 
 ```bash
-pip show azure-functions-db-python
+pip show azure-functions-db
 ```
 
 Check that your active environment is the same one used by your Function App.
