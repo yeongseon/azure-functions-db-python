@@ -282,7 +282,34 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 支持 `async def` 处理器。`azure-functions-db` 内部的 SQLAlchemy 操作以同步方式运行；当 `async` 处理器调用绑定（输入获取、`DbOut.set(...)`、轮询提交等）时，该包会通过 `asyncio.to_thread` 将阻塞调用卸载到工作线程，因此事件循环不会被阻塞。
 
+该包内部**不**使用 SQLAlchemy `AsyncEngine`。如果需要完全原生的 asyncio 驱动（例如 `asyncpg`、`aiomysql`），请在绑定之外自行驱动它们。`azure-functions-db` 刻意只暴露单一的同步引擎路径，以保证各 dialect 的行为保持一致。
+
 > **例外 —— `@db.trigger` 不支持异步处理器。** 由于 `PollTrigger.run()` 是同步的，`trigger` 装饰器会在装饰时抛出 `ConfigurationError` 以拒绝异步处理器；此外 `PollTrigger.run()` 作为防御性运行时保护，在被传入异步可调用对象时会抛出 `TypeError`。请为 `@db.trigger` 使用同步处理器。
+
+### 异步 writer 事务
+
+`@db.inject_writer` 注入到 `async def` 处理器中的异步 writer 代理提供 `insert`、`insert_many`、`upsert`、`upsert_many`、`update`、`delete`、`close`，以及用于多语句原子性的 `transaction()` 异步上下文管理器。
+
+由于 SQLAlchemy 的 `Connection` / `Transaction` 对象在多线程间共享并不安全，而 `asyncio.to_thread` 又不会把任务固定到某个 OS 线程，因此 `transaction()` 会在 `async with` 块期间把**整个事务**固定到一个专用工作线程上。通过所产出代理发起的每次写入都会路由到该线程，所以底层连接始终只被单个线程触碰。事务在正常退出时提交，块内抛出异常时回滚：
+
+```python
+from azure_functions_db import DbBindings
+
+db = DbBindings()
+
+
+@db.inject_writer("writer", url="%DB_URL%", table="orders")
+async def transfer(writer) -> None:
+    async with writer.transaction() as tx:
+        await tx.insert(data={"id": 1, "status": "pending"})
+        await tx.update(data={"status": "shipped"}, pk={"id": 1})
+```
+
+注意事项：
+
+- 块内的并发写入（例如通过 `asyncio.gather`）会在被固定的线程上**串行化**；SQLAlchemy 连接即便在同一线程上也不能并发使用。
+- 提交失败会表现为 `WriteError`；回滚期间的失败会被记录日志，并保留原始异常。
+- 如果你更想全程使用同步的 `DbWriter`，也可以用一次 `asyncio.to_thread` 调用包住整个工作单元，由它端到端驱动 `DbWriter.transaction()`。
 
 ## Supported Databases
 
@@ -344,6 +371,8 @@ trigger = PollTrigger(
 - **Blob checkpoint** — 使用 Azure Blob Storage 持久化 checkpoint（[ADR-003](docs/18-ADR-003-blob-checkpoint-mvp.md)）
 - **At-least-once** — 默认交付语义，支持幂等处理（[ADR-004](docs/19-ADR-004-at-least-once-default.md)）
 - **Unified package** — 将 trigger + binding 放在同一包中（[ADR-005](docs/23-ADR-005-unified-package-design.md)）
+- **Python 包装层而非原生扩展** — 在 timer trigger 之上使用 Python 装饰器，而不是 .NET 的 Azure Functions 扩展（[ADR-006](docs/27-ADR-006-no-native-extension.md)）
+- **借助固定工作线程的异步事务** — 不引入原生 async 驱动，由 `async with writer.transaction()` 把事务固定到单个工作线程（[ADR-007](docs/29-ADR-007-async-writer-transaction.md)）
 
 ## Duplicate Handling
 
@@ -366,7 +395,7 @@ trigger = PollTrigger(
 |---------|------|
 | [azure-functions-openapi-python](https://github.com/yeongseon/azure-functions-openapi-python) | OpenAPI spec generation and Swagger UI |
 | [azure-functions-validation-python](https://github.com/yeongseon/azure-functions-validation-python) | Request/response validation and serialization |
-| **azure-functions-db-python** | Database bindings for SQL, PostgreSQL, MySQL, SQLite, and Cosmos DB |
+| **azure-functions-db-python** | SQLAlchemy-powered DB integration helpers (poll-based pseudo trigger, input/output/client injection) |
 | [azure-functions-langgraph-python](https://github.com/yeongseon/azure-functions-langgraph-python) | LangGraph deployment adapter for Azure Functions |
 | [azure-functions-scaffold-python](https://github.com/yeongseon/azure-functions-scaffold-python) | Project scaffolding CLI |
 | [azure-functions-logging-python](https://github.com/yeongseon/azure-functions-logging-python) | Structured logging and observability |

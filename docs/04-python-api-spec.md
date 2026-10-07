@@ -13,22 +13,28 @@
 
 ```python
 import azure.functions as func
+from azure.storage.blob import ContainerClient
 from azure_functions_db import PollTrigger, SqlAlchemySource, BlobCheckpointStore
 
 app = func.FunctionApp()
 
+source = SqlAlchemySource(
+    url="%ORDERS_DB_URL%",
+    table="orders",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+)
+
 orders_trigger = PollTrigger(
     name="orders",
-    source=SqlAlchemySource(
-        url="%ORDERS_DB_URL%",
-        table="orders",
-        schema="public",
-        cursor_column="updated_at",
-        pk_columns=["id"],
-    ),
+    source=source,
     checkpoint_store=BlobCheckpointStore(
-        connection="AzureWebJobsStorage",
-        container="db-state",
+        container_client=ContainerClient.from_connection_string(
+            conn_str="%AzureWebJobsStorage%",
+            container_name="db-state",
+        ),
+        source_fingerprint=source.source_descriptor.fingerprint,
     ),
     batch_size=100,
 )
@@ -330,22 +336,28 @@ Using the imperative API directly:
 
 ```python
 import azure.functions as func
+from azure.storage.blob import ContainerClient
 from azure_functions_db import PollTrigger, SqlAlchemySource, BlobCheckpointStore, DbWriter
 
 app = func.FunctionApp()
 
+source = SqlAlchemySource(
+    url="%ORDERS_DB_URL%",
+    table="orders",
+    schema="public",
+    cursor_column="updated_at",
+    pk_columns=["id"],
+)
+
 orders_trigger = PollTrigger(
     name="orders",
-    source=SqlAlchemySource(
-        url="%ORDERS_DB_URL%",
-        table="orders",
-        schema="public",
-        cursor_column="updated_at",
-        pk_columns=["id"],
-    ),
+    source=source,
     checkpoint_store=BlobCheckpointStore(
-        connection="AzureWebJobsStorage",
-        container="db-state",
+        container_client=ContainerClient.from_connection_string(
+            conn_str="%AzureWebJobsStorage%",
+            container_name="db-state",
+        ),
+        source_fingerprint=source.source_descriptor.fingerprint,
     ),
 )
 
