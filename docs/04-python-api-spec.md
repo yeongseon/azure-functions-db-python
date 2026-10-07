@@ -12,6 +12,8 @@
 ### 2.1 Recommended Approach: Helper + Azure Schedule Decorator
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 from azure_functions_db import PollTrigger, SqlAlchemySource, BlobCheckpointStore
@@ -31,7 +33,7 @@ orders_trigger = PollTrigger(
     source=source,
     checkpoint_store=BlobCheckpointStore(
         container_client=ContainerClient.from_connection_string(
-            conn_str="%AzureWebJobsStorage%",
+            conn_str=os.environ["AzureWebJobsStorage"],
             container_name="db-state",
         ),
         source_fingerprint=source.source_descriptor.fingerprint,
@@ -52,6 +54,8 @@ def handle_orders(events, context):
 ### 2.2 Decorator API (DbBindings)
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
@@ -69,7 +73,7 @@ source = SqlAlchemySource(
 
 checkpoint_store = BlobCheckpointStore(
     container_client=ContainerClient.from_connection_string(
-        conn_str="%AzureWebJobsStorage%",
+        conn_str=os.environ["AzureWebJobsStorage"],
         container_name="db-state",
     ),
     source_fingerprint=source.source_descriptor.fingerprint,
@@ -275,6 +279,8 @@ writer.upsert_many(rows=[...], conflict_columns=["id"])
 Using the decorator API with `DbBindings` (data injection):
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 
@@ -303,7 +309,7 @@ source = SqlAlchemySource(
 
 checkpoint_store = BlobCheckpointStore(
     container_client=ContainerClient.from_connection_string(
-        conn_str="%AzureWebJobsStorage%",
+        conn_str=os.environ["AzureWebJobsStorage"],
         container_name="db-state",
     ),
     source_fingerprint=source.source_descriptor.fingerprint,
@@ -335,6 +341,8 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 Using the imperative API directly:
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 from azure_functions_db import PollTrigger, SqlAlchemySource, BlobCheckpointStore, DbWriter
@@ -354,7 +362,7 @@ orders_trigger = PollTrigger(
     source=source,
     checkpoint_store=BlobCheckpointStore(
         container_client=ContainerClient.from_connection_string(
-            conn_str="%AzureWebJobsStorage%",
+            conn_str=os.environ["AzureWebJobsStorage"],
             container_name="db-state",
         ),
         source_fingerprint=source.source_descriptor.fingerprint,
