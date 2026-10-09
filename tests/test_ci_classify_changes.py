@@ -83,6 +83,23 @@ def test_docs_build_inputs_run_the_matrix_and_docs_build(files: list[str]) -> No
     assert result["docs_changed"] == "true"
 
 
+@pytest.mark.parametrize(
+    "files",
+    [
+        [".github/workflows/ci-test.yml"],
+        ["tests/test_docs_metric_drift.py"],
+        ["tests/test_docs_pip_install_drift.py"],
+        ["tests/test_docs_i18n_async_drift.py"],
+    ],
+)
+def test_docs_check_executable_inputs_run_the_matrix_and_docs_build(files: list[str]) -> None:
+    assert classify(files) == {
+        "docs_only": "false",
+        "docs_changed": "true",
+        "full_required": "true",
+    }
+
+
 def test_mixed_docs_and_code_run_both() -> None:
     assert classify(["README.md", "src/azure_functions_db/core/engine.py"]) == {
         "docs_only": "false",

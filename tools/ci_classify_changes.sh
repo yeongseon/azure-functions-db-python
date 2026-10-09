@@ -14,6 +14,8 @@ while IFS= read -r f || [ -n "$f" ]; do
   [ -z "$f" ] && continue
   count=$((count + 1))
   case "$f" in
+    .github/workflows/ci-test.yml | tests/test_docs_metric_drift.py | \
+    tests/test_docs_pip_install_drift.py | tests/test_docs_i18n_async_drift.py | \
     mkdocs.yml | pyproject.toml | docs/*.py | docs/*.yml | docs/*.yaml | docs/*.json | \
     docs/*.toml | docs/*.js | docs/*.css | docs/*.html | docs/*.txt | \
     src/azure_functions_db/*)
