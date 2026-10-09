@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && github.event.pull_request.base.sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Classify changed files
         id: classify
@@ -36,32 +36,23 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           SHA: ${{ github.sha }}
           SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           fail_safe() {
             printf 'docs_only=false\ndocs_changed=true\nfull_required=true\n' >> "$GITHUB_OUTPUT"
           }
           paths=$(mktemp)
-          classifier=tools/ci_classify_changes.sh
-          if [ "$EVENT_NAME" = pull_request ]; then
-            if ! git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" > "$paths"; then
+          if [ "$EVENT_NAME" = pull_request ] && [ "$SAME_REPOSITORY" != true ]; then
+            if ! git fetch --no-tags origin "refs/pull/$PR_NUMBER/head"; then
               fail_safe
               exit 0
             fi
-            if [ "$SAME_REPOSITORY" != true ]; then
-              classifier=$(mktemp)
-              if ! git show "$BASE_SHA:tools/ci_classify_changes.sh" > "$classifier"; then
-                fail_safe
-                exit 0
-              fi
-              chmod +x "$classifier"
-            fi
-          elif [ -z "$BEFORE_SHA" ] || [[ "$BEFORE_SHA" =~ ^0+$ ]] || \
-               ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null || \
-               ! git diff --name-only --no-renames "$BEFORE_SHA" "$SHA" > "$paths"; then
+          fi
+          if ! tools/ci_changed_paths.sh > "$paths"; then
             fail_safe
             exit 0
           fi
-          if ! "$classifier" < "$paths" >> "$GITHUB_OUTPUT"; then
+          if ! tools/ci_classify_changes.sh < "$paths" >> "$GITHUB_OUTPUT"; then
             fail_safe
           fi
 
@@ -560,6 +551,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && github.event.pull_request.base.sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Evaluate required checks
         env:
