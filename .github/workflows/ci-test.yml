@@ -38,23 +38,7 @@ jobs:
           SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          fail_safe() {
-            printf 'docs_only=false\ndocs_changed=true\nfull_required=true\n' >> "$GITHUB_OUTPUT"
-          }
-          paths=$(mktemp)
-          if [ "$EVENT_NAME" = pull_request ] && [ "$SAME_REPOSITORY" != true ]; then
-            if ! git fetch --no-tags origin "refs/pull/$PR_NUMBER/head"; then
-              fail_safe
-              exit 0
-            fi
-          fi
-          if ! tools/ci_changed_paths.sh > "$paths"; then
-            fail_safe
-            exit 0
-          fi
-          if ! tools/ci_classify_changes.sh < "$paths" >> "$GITHUB_OUTPUT"; then
-            fail_safe
-          fi
+          tools/ci_classify_event.sh "$GITHUB_OUTPUT"
 
   test:
     needs: changes
