@@ -284,7 +284,7 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 이 패키지는 내부적으로 SQLAlchemy `AsyncEngine`을 사용하지 **않습니다**. 완전한 네이티브 asyncio 드라이버(예: `asyncpg`, `aiomysql`)가 필요하다면 바인딩 외부에서 직접 다루세요. `azure-functions-db`는 모든 dialect에서 동작이 동일하게 유지되도록 의도적으로 단일 동기 엔진 경로만 노출합니다.
 
-> **예외 — `@db.trigger`는 비동기 핸들러를 지원하지 않습니다.** `PollTrigger.run()`이 동기 방식으로 동작하기 때문에, `trigger` 데코레이터는 데코레이션 시점에 `ConfigurationError`를 발생시켜 비동기 핸들러를 거부합니다. 또한 `PollTrigger.run()`은 방어적 런타임 가드로서 비동기 콜러블이 전달되면 `TypeError`를 발생시킵니다. `@db.trigger`에는 동기 핸들러를 사용하세요.
+> **예외 — `@db.trigger`는 비동기 핸들러를 지원하지 않습니다.** 이 문장은 문서 드리프트 CI 시나리오를 위해 의도적으로 불완전합니다.
 
 ### 비동기 writer 트랜잭션
 
