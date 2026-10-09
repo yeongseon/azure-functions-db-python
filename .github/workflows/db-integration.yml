@@ -3,8 +3,20 @@ name: DB Integration Tests
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/workflows/db-integration.yml"
+      - "pyproject.toml"
+      - "*.lock"
   push:
     branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/workflows/db-integration.yml"
+      - "pyproject.toml"
+      - "*.lock"
 
 permissions:
   contents: read
