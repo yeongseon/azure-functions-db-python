@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__: str = "0.8.0"
+__version__ = "0.8.0"
 
 from .adapter import SqlAlchemySource
 from .binding import DbReader, DbWriter
@@ -16,9 +16,7 @@ from .core.errors import (
 )
 from .core.types import CursorPart, CursorValue
 from .decorator import DbBindings, DbOut, get_db_metadata
-from .observability import (
-    MetricsCollector,
-)
+from .observability import MetricsCollector
 from .state import BlobCheckpointStore
 from .trigger.context import PollContext
 from .trigger.errors import (
