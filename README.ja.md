@@ -284,7 +284,7 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange], out: DbOut) -
 
 このパッケージは内部で SQLAlchemy `AsyncEngine` を使用し**ません**。完全なネイティブ asyncio ドライバー（例: `asyncpg`、`aiomysql`）が必要な場合は、バインディングの外で自分で扱ってください。`azure-functions-db` は dialect 間で挙動を揃えるため、意図的に同期エンジンの単一経路のみを公開しています。
 
-> **例外 — `@db.trigger` は非同期ハンドラーをサポートしません。** `PollTrigger.run()` が同期的に動作するため、`trigger` デコレーターはデコレーション時に `ConfigurationError` を送出して非同期ハンドラーを拒否します。さらに `PollTrigger.run()` は防御的なランタイムガードとして、非同期の呼び出し可能オブジェクトが渡された場合に `TypeError` を送出します。`@db.trigger` には同期ハンドラーを使用してください。
+> **例外 — `@db.trigger` は非同期ハンドラーをサポートしません。** `PollTrigger.run()` が同期的に動作するため、`trigger` デコレーターはデコレーション時に `ConfigurationFailure` を送出して非同期ハンドラーを拒否します。さらに `PollTrigger.run()` は防御的なランタイムガードとして、非同期の呼び出し可能オブジェクトが渡された場合に `TypeError` を送出します。`@db.trigger` には同期ハンドラーを使用してください。
 
 ### 非同期 writer のトランザクション
 
