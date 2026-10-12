@@ -1,5 +1,8 @@
 # Azure Functions DB
 
+> [!NOTE]
+> このドキュメントは[英語の原文](README.md)の翻訳であり、コミュニティが維持管理しています。英語の原文が更新された後は、内容が少し遅れることがあります。
+
 > ⚠️ **実験的（Experimental）** — パターン探索の段階です。API と振る舞いは変更される可能性があり、まだ本番環境の依存関係として推奨されません。
 
 [![PyPI](https://img.shields.io/pypi/v/azure-functions-db-python.svg)](https://pypi.org/project/azure-functions-db-python/)
