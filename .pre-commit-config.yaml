@@ -28,7 +28,7 @@ repos:
         additional_dependencies: ["bandit[toml]"]
         files: "^src/"
 
- - repo: local
+  - repo: local
     hooks:
       - id: forbid-korean
         name: Forbid Korean Characters
