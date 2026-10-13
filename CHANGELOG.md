@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.1](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.0...v0.8.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **ci:** repair malformed pre-commit config indentation ([#406](https://github.com/yeongseon/azure-functions-db-python/issues/406)) ([7ff2554](https://github.com/yeongseon/azure-functions-db-python/commit/7ff2554ff3184509db983a48264910e1d890e050))
+
 ## [0.8.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.7.4...v0.8.0) (2026-10-06)
 
 
