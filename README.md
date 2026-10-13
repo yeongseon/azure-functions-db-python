@@ -169,6 +169,11 @@ azure-functions-db[postgres]
 
 The fastest path — read rows with `@db.input`, write rows with `@db.output`:
 
+Set `DB_URL` to a SQLAlchemy connection URL for a database that contains the
+`users` and `orders` tables used below. The decorators resolve `%DB_URL%` when
+the wrapped functions run, so defining the functions does not connect to the
+database; invoking them does.
+
 ```python
 from azure_functions_db import DbBindings, DbOut
 
