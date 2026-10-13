@@ -34,9 +34,11 @@ Recommended branch prefixes:
 
 ## Local development quickstart
 
-Local development requires Python 3.11 through 3.14. The standard checks do not
-require a running database, Docker, Azurite, or Azure Functions Core Tools; tests
-that need those services skip when their connection settings are absent.
+The package supports Python 3.11 through 3.14. Install Python 3.11 for the
+Makefile workflow because the default Hatch environment runs on Python 3.11.
+The standard checks do not require a running database, Docker, Azurite, or Azure
+Functions Core Tools; tests that need those services skip when their connection
+settings are absent.
 
 From a fresh clone, bootstrap the project-managed virtual environment and Hatch
 environment with:
