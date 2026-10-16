@@ -18,9 +18,9 @@ For the underlying design rationale of the Python wrapper model, see
 | Axis                              | Official Azure SQL bindings                       | `azure-functions-db-python`                                    |
 | --------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
 | Databases                         | Azure SQL Database, SQL Server                    | PostgreSQL, MySQL, SQL Server + any SQLAlchemy dialect (BYOD)  |
-| Trigger mechanism                 | SQL Change Tracking (CT)                          | Cursor-column polling on the timer trigger                     |
+| Trigger mechanism                 | Polling over SQL Change Tracking (CT)             | Cursor-column polling on the timer trigger                     |
 | Trigger scaling                   | Functions extension scale controller              | Timer schedule × `PollTrigger` batch size                      |
-| Delivery guarantee                | Exactly-once (per official docs, on managed sinks) | At-least-once — handlers must be idempotent                    |
+| User-function side effects        | Retried batches require application idempotency   | At-least-once — handlers must be idempotent                    |
 | Checkpoint storage                | Leases table in the source DB (`az_func` schema)  | Azure Blob Storage via `BlobCheckpointStore`                   |
 | Extension language                | C# / .NET (WebJobs SDK extension)                 | Pure Python decorators                                         |
 | Distribution                      | Extension bundle / `func extensions install`      | `pip install azure-functions-db[<extra>]`                      |
@@ -80,7 +80,9 @@ See [Semantics § 1.2 Source Preconditions](03-semantics.md#12-source-preconditi
 - Throughput is bounded by **timer cadence × `PollTrigger` batch size**:
   - Example: `schedule="0 */1 * * * *"` (every minute) with `PollTrigger(batch_size=500)` = up to 500 rows per minute per instance.
   - Tighten cadence and raise batch size for higher throughput; loosen both for lower cost.
-- If you need push-based sub-second scaling for Azure SQL specifically, prefer the official extension. Cross-dialect users generally accept the timer cadence because polling is the trade for the wider database reach.
+- If you need host-managed backlog scaling for Azure SQL specifically, prefer
+  the official extension. Both designs poll; they differ in source tracking,
+  host registration, and scaling integration.
 
 See [ADR-006 § Functions scale-controller integration is not worth the extension cost for polling workloads](27-ADR-006-no-native-extension.md#functions-scale-controller-integration-is-not-worth-the-extension-cost-for-polling-workloads) for the full rationale.
 
@@ -88,7 +90,10 @@ See [ADR-006 § Functions scale-controller integration is not worth the extensio
 
 **Official Azure SQL bindings**
 
-- Per the [official documentation](https://learn.microsoft.com/azure/azure-functions/functions-bindings-azure-sql-trigger?tabs=python-v2%2Cisolated-process%2Cnodejs-v4&pivots=programming-language-python), the SQL trigger provides **exactly-once** delivery **for each change on managed sinks**. Duplicates can still happen on the write side unless the sink itself is idempotent — the guarantee is about change-consumption, not end-to-end.
+- The official trigger retries a batch when the user function throws. If the
+  function performs an external side effect and then fails, that effect can be
+  repeated. Exactly-once external effects therefore require an application
+  idempotency key or a transaction that includes the effect and acknowledgement.
 - Lease bookkeeping lives in `az_func.Leases_<table_id>` in the source database.
 
 **`azure-functions-db-python`**
@@ -196,3 +201,4 @@ See [Semantics § 1.3 Duplicate and Reprocessing Windows](03-semantics.md#13-dup
 - Microsoft Learn — [Azure Functions SQL bindings overview](https://learn.microsoft.com/azure/azure-functions/functions-bindings-azure-sql)
 - Microsoft Learn — [Azure Functions SQL trigger](https://learn.microsoft.com/azure/azure-functions/functions-bindings-azure-sql-trigger)
 - Microsoft Learn — [SQL Change Tracking overview](https://learn.microsoft.com/sql/relational-databases/track-changes/about-change-tracking-sql-server)
+- Microsoft Learn — [SQL trigger functionality and retries](https://learn.microsoft.com/azure/azure-functions/functions-bindings-azure-sql-trigger#functionality-overview) (verified 2026-10-16)

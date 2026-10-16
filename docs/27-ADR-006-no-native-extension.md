@@ -53,7 +53,7 @@ handler, or wraps a real timer trigger and polls a source for changes.
 | Scaling                             | Functions scale controller inspects the trigger source         | Timer schedule + host scale controller — tied to timer cadence |
 | Language of the extension           | C# / .NET (extension bundle)                                   | Python                                                         |
 | Distribution                        | NuGet package via `func extensions install` / extension bundle | Standard `pip install azure-functions-db`                      |
-| Delivery guarantee                  | Whatever the extension implements (often exactly-once)         | At-least-once, per [ADR-004](19-ADR-004-at-least-once-default.md) |
+| External side effects               | Application idempotency required across retries                 | At-least-once, per [ADR-004](19-ADR-004-at-least-once-default.md) |
 | Change detection surface            | Whatever the native source supports (e.g. SQL Change Tracking) | Cursor-column polling — works on any SQLAlchemy dialect        |
 | Multi-database reach                | Bounded to what the extension author writes native code for    | Any database with a SQLAlchemy dialect                         |
 
