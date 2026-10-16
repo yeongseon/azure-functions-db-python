@@ -112,7 +112,18 @@ class DbWriter:
             msg = "Failed to acquire connection for transaction"
             raise WriteError(msg) from exc
 
-        tx = conn.begin()
+        try:
+            tx = conn.begin()
+        except Exception as exc:
+            try:
+                conn.close()
+            except Exception:
+                logger.warning(
+                    "Failed to close connection after transaction begin failure",
+                    exc_info=True,
+                )
+            msg = "Failed to begin transaction"
+            raise WriteError(msg) from exc
         self._tx_conn = conn
         self._tx = tx
         self._closed_in_active_tx = False

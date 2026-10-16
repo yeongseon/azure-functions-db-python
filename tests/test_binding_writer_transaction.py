@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, select
+from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, event, select
+from sqlalchemy.engine import Connection
 
 from azure_functions_db.binding.writer import DbWriter
 from azure_functions_db.core.errors import WriteError
@@ -40,6 +42,48 @@ def users_url(tmp_path: Path) -> str:
 
 
 class TestTransactionCommit:
+    def test_begin_failure_returns_connection_and_preserves_cause(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+        assert writer._engine is not None
+        captured: list[Connection] = []
+
+        def fail_begin(connection: Connection) -> None:
+            captured.append(connection)
+            raise RuntimeError("injected begin failure")
+
+        event.listen(writer._engine, "begin", fail_begin)
+        try:
+            with pytest.raises(WriteError, match="begin transaction") as exc_info:
+                with writer.transaction():
+                    pytest.fail("body must not execute")
+        finally:
+            event.remove(writer._engine, "begin", fail_begin)
+            writer.close()
+
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+        assert captured[0].closed
+        assert writer._tx is None
+        assert writer._tx_conn is None
+
+    def test_begin_and_close_failure_preserves_begin_error(self, users_url: str) -> None:
+        writer = DbWriter(url=users_url, table="users")
+        writer._ensure_initialized()
+        assert writer._engine is not None
+        connection = MagicMock()
+        connection.begin.side_effect = RuntimeError("begin failed")
+        connection.close.side_effect = RuntimeError("close failed")
+
+        with (
+            patch.object(writer._engine, "connect", return_value=connection),
+            pytest.raises(WriteError, match="begin transaction") as exc_info,
+        ):
+            with writer.transaction():
+                pytest.fail("body must not execute")
+
+        assert str(exc_info.value.__cause__) == "begin failed"
+        connection.close.assert_called_once_with()
+
     def test_transaction_commits_on_success(self, users_url: str) -> None:
         with DbWriter(url=users_url, table="users") as writer:
             with writer.transaction():
