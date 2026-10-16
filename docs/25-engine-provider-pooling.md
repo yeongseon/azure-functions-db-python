@@ -16,10 +16,10 @@ Azure Functions reuses Python worker processes across **warm** invocations.
 SQLAlchemy engines and their connection pools therefore survive multiple
 handler executions:
 
-- The first invocation pays the cost of building the engine and opening
-  pooled connections.
-- Subsequent warm invocations on the same worker reuse the existing engine
-  and pool — **no reconnect, no DNS lookup, no TLS handshake**.
+- The first invocation pays the cost of building the engine and checking out
+  its first connection.
+- Subsequent warm invocations can reuse the engine and pool. A checkout may
+  still open or replace a physical connection, including DNS and TLS work.
 - A cold start (new worker, scale-out, idle eviction, redeploy) builds a
   fresh engine.
 
@@ -85,9 +85,9 @@ consistently across bindings.
 | `engine_provider.dispose_all()` called | All cached engines disposed; next access rebuilds |
 | Source `engine_kwargs` change at runtime | New cache key → new engine; old engine remains until process exit (see [§3.2](#32-cache-key)) |
 
-`EngineProvider` does **not** register an `atexit` hook. If you need
-deterministic disposal during graceful shutdown (e.g. tests, custom
-lifecycle), call `engine_provider.dispose_all()` explicitly.
+`EngineProvider` registers `dispose_all()` with `atexit` as best-effort
+graceful-process cleanup. Forced termination does not guarantee that hook runs;
+tests and custom lifecycle owners should still dispose explicitly.
 
 ---
 
@@ -163,10 +163,8 @@ config = DbConfig(
 ```
 
 > `DbConfig` exposes `connect_args` as a dedicated field. Prefer it over
-> nesting `connect_args` inside `engine_kwargs`: a `connect_args` key inside
-> `engine_kwargs` will silently override the dedicated field
-> (see [`core/engine.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/src/azure_functions_db/core/engine.py)
-> — `engine_kwargs` is applied after `connect_args`).
+> nesting `connect_args` inside `engine_kwargs`: the latter is rejected with
+> `ConfigurationError` so conflicting settings cannot be silently selected.
 
 ### 4.1 `pool_pre_ping=True`
 
@@ -190,19 +188,9 @@ connection. SQLAlchemy will discard and re-open any connection older than
 this on next checkout, regardless of whether the server still considers it
 alive.
 
-Set it **below** your database's server-side idle timeout. Common values:
-
-> The values below are **starting points**, not Azure platform guarantees.
-> Server-side idle timeouts are configurable on every managed database and
-> may differ from the defaults shown here. Always confirm the configured
-> timeout on your specific database/server before relying on these numbers.
-
-| Database | Typical server idle timeout | Recommended `pool_recycle` |
-|---|---|---|
-| Azure Database for PostgreSQL — Flexible Server | configurable, default 5 min | `1800` (30 min if you raised it) or `240` (4 min default) |
-| Azure Database for MySQL — Flexible Server | configurable, default 8 hr (`wait_timeout`) | `1800` |
-| Azure SQL Database / SQL Server | ~30 min idle disconnect | `1500` |
-| PgBouncer (transaction pooling) | controlled by `server_idle_timeout` | match or shorten |
+Set it below the timeout configured on your database, proxy, or firewall.
+Those values vary by service, SKU, driver, and operator configuration; inspect
+the deployed system rather than copying an uncited platform number.
 
 `pool_recycle` complements `pool_pre_ping` — recycle drops stale connections
 proactively, pre-ping catches the rest. Use both.
@@ -227,10 +215,8 @@ max_db_connections_consumed_by_app
   ≈ (pool_size + max_overflow) × max_function_app_instances × workers_per_instance
 ```
 
-Stay well below your database's `max_connections` ceiling. For Azure
-Database for PostgreSQL Flexible Server, that ceiling scales with the SKU
-(e.g. ~50 on Burstable B1ms, ~1700 on General Purpose D16s_v3). Confirm
-your SKU's limit and divide.
+Stay well below your database's configured `max_connections` ceiling and
+account for every Function host process that can create a pool.
 
 For most polling triggers a single worker only needs 1–2 active connections
 per binding. Defaults are fine. Increase `max_overflow` only if you see
@@ -240,17 +226,13 @@ per binding. Defaults are fine. Increase `max_overflow` only if you see
 
 SQLite defaults differ from managed-DB defaults:
 
-- **In-memory** SQLite (`sqlite:///:memory:`) gives each new connection a
-  fresh empty database. SQLAlchemy uses a `StaticPool` so all checkouts
-  share a single connection — meaning `pool_size` and `max_overflow` are
-  effectively ignored.
-- **File-based** SQLite (`sqlite:///path.db`) defaults to `NullPool`
-  (every checkout opens a new connection). `pool_size`, `max_overflow`,
-  and `pool_recycle` are no-ops there.
-- SQLite drivers are not thread-safe by default. SQLAlchemy enforces
-  `connect_args={"check_same_thread": False}` if you need multi-thread
-  access. The bindings do **not** set this for you — pass it via
-  `connect_args` if you genuinely need it.
+- SQLAlchemy 2.0 synchronous pysqlite uses `SingletonThreadPool` for an
+  in-memory URL by default. Each thread therefore gets a distinct connection
+  and a distinct in-memory database.
+- File-based SQLite uses `QueuePool` by default in SQLAlchemy 2.0.
+- The file-based dialect normally sets `check_same_thread=False`. For an
+  intentionally shared in-memory database, explicitly choose `StaticPool` and
+  `connect_args={"check_same_thread": False}`.
 - `pool_pre_ping=True` is harmless on SQLite and can stay enabled.
 
 For tests, a typical config is:
@@ -259,8 +241,13 @@ For tests, a typical config is:
 DbConfig(
     connection_url="sqlite:///:memory:",
     connect_args={"check_same_thread": False},
+    engine_kwargs={"poolclass": StaticPool},
 )
 ```
+
+These defaults were verified with SQLAlchemy 2.0.50 on 2026-10-16. See
+[SQLite threading/pooling behavior](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#threading-pooling-behavior)
+and [connection pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html).
 
 ---
 
