@@ -36,15 +36,20 @@ thread** for the lifetime of the `async with` block.
   executor, guaranteeing the connection is only ever touched by one thread.
 - On exit, run the context manager's `__exit__` on the same executor (commit on
   success, rollback on error), then shut the executor down. The cleanup is
-  shielded from cancellation so commit/rollback still runs if the awaiting task
-  is cancelled; if the shield itself is cancelled, the cleanup is forced to
-  complete synchronously on the still-alive worker thread.
+  submitted exactly once and retained until completion. Cancellation remains
+  pending while the event loop asynchronously observes that retained operation;
+  no synchronous wait runs on the event-loop thread.
 - The executor is scoped to the `async with` block — two concurrent
   transactions get independent executors, threads, and connections.
 
 Concurrent writes issued inside the block (for example via `asyncio.gather`) are
 **serialized** onto the pinned thread. This is the correct guarantee: a
 SQLAlchemy connection cannot be used concurrently even on a single thread.
+Cancellation of the awaiting coroutine cannot retroactively undo a synchronous
+database operation that has already begun committing. Its outcome may therefore
+be ambiguous to the cancelled caller; applications must use their normal
+idempotency and reconciliation strategy rather than assuming cancellation means
+rollback.
 
 ## Alternatives considered
 
