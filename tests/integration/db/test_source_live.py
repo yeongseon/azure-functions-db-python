@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 import os
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Column, DateTime, Integer, MetaData, Table, create_engine, insert
 
 from azure_functions_db.adapter.sqlalchemy import SqlAlchemySource
 from azure_functions_db.core.types import SourceDescriptor
@@ -32,6 +34,51 @@ def db_url(db_key: str, tmp_path: Path) -> str:
 
 @pytest.mark.parametrize("db_key", _DB_KEYS)
 class TestSqlAlchemySourceLive:
+    @pytest.mark.integration
+    def test_datetime_cursor_round_trip(self, db_url: str, db_key: str) -> None:
+        engine = create_engine(db_url)
+        metadata = MetaData()
+        events = Table(
+            "typed_cursor_events",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("occurred_at", DateTime, nullable=False),
+        )
+        metadata.drop_all(engine, tables=[events], checkfirst=True)
+        metadata.create_all(engine, tables=[events])
+        with engine.begin() as connection:
+            connection.execute(
+                insert(events),
+                [
+                    {"id": 1, "occurred_at": datetime(2026, 10, 16, 10)},
+                    {"id": 2, "occurred_at": datetime(2026, 10, 16, 10)},
+                    {"id": 3, "occurred_at": datetime(2026, 10, 16, 11)},
+                ],
+            )
+        source = SqlAlchemySource(
+            url=db_url,
+            table="typed_cursor_events",
+            cursor_column="occurred_at",
+            pk_columns=["id"],
+        )
+        cursor = None
+        seen: list[int] = []
+        for _ in range(4):
+            rows = source.fetch(cursor=cursor, batch_size=1)
+            if not rows:
+                break
+            event_id = rows[0]["id"]
+            occurred_at = rows[0]["occurred_at"]
+            assert isinstance(event_id, int)
+            assert isinstance(occurred_at, datetime)
+            seen.append(event_id)
+            cursor = (occurred_at.isoformat(), event_id)
+        source.dispose()
+        metadata.drop_all(engine, tables=[events])
+        engine.dispose()
+
+        assert seen == [1, 2, 3]
+
     @pytest.mark.integration
     def test_table_reflection(self, orders_table: tuple[object, str], db_url: str) -> None:
         source = SqlAlchemySource(
