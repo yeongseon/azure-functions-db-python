@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.2](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.1...v0.8.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **async:** avoid blocking cancellation cleanup ([#425](https://github.com/yeongseon/azure-functions-db-python/issues/425)) ([698831e](https://github.com/yeongseon/azure-functions-db-python/commit/698831eb0dca1d509ee7e893054b4869d7ceb0b5))
+* **config:** propagate complete database settings to bindings ([#429](https://github.com/yeongseon/azure-functions-db-python/issues/429)) ([104ebaf](https://github.com/yeongseon/azure-functions-db-python/commit/104ebaf4900b7bac3cf1cf6013f456217a3532d1))
+* **cursor:** preserve DateTime checkpoint query semantics ([#423](https://github.com/yeongseon/azure-functions-db-python/issues/423)) ([d77efcc](https://github.com/yeongseon/azure-functions-db-python/commit/d77efcc91101514ac4bdd331a0bd57e6effee48d))
+* **trigger:** isolate observable checkpoint state ([#426](https://github.com/yeongseon/azure-functions-db-python/issues/426)) ([7e5d468](https://github.com/yeongseon/azure-functions-db-python/commit/7e5d46821f7461ec04fc0ff822995c334fea59c9))
+* **trigger:** reject awaitable handler results ([#427](https://github.com/yeongseon/azure-functions-db-python/issues/427)) ([5d64213](https://github.com/yeongseon/azure-functions-db-python/commit/5d642137722427891b4f76cbfcbb24639719d406))
+* **writer:** close connections when transaction begin fails ([#428](https://github.com/yeongseon/azure-functions-db-python/issues/428)) ([a6bfa00](https://github.com/yeongseon/azure-functions-db-python/commit/a6bfa00b4282f47c4a2831765ec7ad192ca86592))
+
 ## [0.8.1](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.0...v0.8.1) (2026-10-13)
 
 
