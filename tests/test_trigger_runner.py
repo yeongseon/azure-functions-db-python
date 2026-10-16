@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 import logging
 
@@ -945,6 +945,75 @@ class TestPollRunner:
         assert ctx.poller_name == "test_poller"
         assert ctx.source_name == "test_table"
         assert isinstance(ctx.tick_started_at, datetime)
+
+    def test_sync_handler_returning_coroutine_is_not_acknowledged(self) -> None:
+        store = FakeStateStore()
+        seen: list[int] = []
+
+        async def actual_handler(events: list[RowChange]) -> None:
+            for event in events:
+                event_id = event.pk["id"]
+                assert isinstance(event_id, int)
+                seen.append(event_id)
+
+        def wrapper(events: list[RowChange]) -> object:
+            return actual_handler(events)
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=wrapper,
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert seen == []
+        assert store.commit_calls == 0
+
+    def test_context_handler_returning_coroutine_is_not_acknowledged(self) -> None:
+        store = FakeStateStore()
+
+        async def actual_handler(events: list[RowChange], context: PollContext) -> None:
+            return None
+
+        def wrapper(events: list[RowChange], context: PollContext) -> object:
+            return actual_handler(events, context)
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=wrapper,
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert store.commit_calls == 0
+
+    def test_custom_awaitable_is_not_acknowledged(self) -> None:
+        class AwaitableResult:
+            def __await__(self) -> Generator[None, None, None]:
+                yield
+                return None
+
+        store = FakeStateStore()
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=lambda events: AwaitableResult(),
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert store.commit_calls == 0
 
     def test_handler_checkpoint_mutation_cannot_change_committed_state(self) -> None:
         records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
