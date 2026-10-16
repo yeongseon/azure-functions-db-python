@@ -13,8 +13,9 @@ This document defines the **most important contracts** of the project.
 The default guarantee level is **at-least-once**.
 
 Precise definition:
-> Any change visible to the adapter query after checkpoint `C` at the source
-> may be delivered to the handler zero or more times until the checkpoint commit for that batch succeeds.
+> Any eligible change visible to the deterministic adapter query after
+> checkpoint `C` is retried until a handler attempt and its checkpoint commit
+> succeed, while the poller continues making progress and retains source access.
 > Once the checkpoint commit succeeds, the framework will not intentionally re-read rows at or below that checkpoint.
 > This guarantee is only valid when the source preconditions below are satisfied.
 
@@ -54,10 +55,10 @@ Global ordering is not guaranteed.
 
 A checkpoint represents the "last event **successfully processed** up to this point."
 
-The default format is:
+The default JSON object is:
 
 ```text
-(cursor_value, tiebreaker_pk, batch_id)
+{"cursor": [cursor_value, *tiebreaker_pk_values], "batch_id": batch_id}
 ```
 
 ### Important

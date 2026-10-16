@@ -76,8 +76,8 @@ Use the **official Azure SQL bindings** when:
 | Axis                              | Official Azure SQL bindings                       | `azure-functions-db-python`                                    |
 | --------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
 | Databases                         | Azure SQL Database, SQL Server                    | PostgreSQL, MySQL, SQL Server + any SQLAlchemy dialect (BYOD)  |
-| Trigger mechanism                 | SQL Change Tracking                               | Cursor-column polling on the timer trigger                     |
-| Delivery guarantee                | Exactly-once (per official docs, managed sinks)   | At-least-once — handlers must be idempotent                    |
+| Trigger mechanism                 | Polling over SQL Change Tracking                  | Cursor-column polling on the timer trigger                     |
+| External side effects             | Retried batches require application idempotency   | At-least-once — handlers must be idempotent                    |
 | Checkpoint storage                | Leases in the source DB (`az_func` schema)        | Azure Blob Storage via `BlobCheckpointStore`                   |
 | Extension language / distribution | C# / .NET, extension bundle                       | Python, `pip install`                                          |
 | Native binding metadata           | Yes                                               | No — only the underlying timer trigger is visible to the host |
