@@ -44,6 +44,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.full_required == 'true'
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
@@ -97,8 +99,14 @@ jobs:
           path: coverage.xml
           if-no-files-found: error
 
+      - name: Report skipped Codecov upload
+        if: matrix.python-version == '3.11' && github.event_name == 'push' && github.actor != 'dependabot[bot]' && env.CODECOV_TOKEN == ''
+        run: |
+          echo "::warning title=Codecov upload skipped::CODECOV_TOKEN is not configured for this repository; coverage.xml is retained as a workflow artifact."
+          echo "### Codecov upload skipped (CODECOV_TOKEN is not configured)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11' && github.event_name == 'push' && github.actor != 'dependabot[bot]'
+        if: matrix.python-version == '3.11' && github.event_name == 'push' && github.actor != 'dependabot[bot]' && env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
