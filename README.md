@@ -103,14 +103,21 @@ Three steps:
 
 1. **Install the driver** — e.g. `pip install oracledb` for Oracle
 2. **Use the SQLAlchemy URL** — e.g. `url="oracle+oracledb://user:pass@host/db"`
-3. **Pass engine options if needed** — set `engine_kwargs` / `connect_args` on a `DbConfig`, build an `EngineProvider` from it, and pass it as `engine_provider=...`
+3. **Pass engine options if needed** — create one `DbConfig` and pass that exact
+   config as `db_config=...` alongside a shared `EngineProvider`
 
 ```python
-from azure_functions_db import DbBindings
+from azure_functions_db import DbBindings, DbConfig, EngineProvider
 
 db = DbBindings()
+config = DbConfig(
+    connection_url="oracle+oracledb://user:pass@host:1521/mydb",
+    engine_kwargs={"pool_pre_ping": True},
+    connect_args={"timeout": 30},
+)
+provider = EngineProvider()
 
-@db.input("rows", url="oracle+oracledb://user:pass@host:1521/mydb",
+@db.input("rows", db_config=config, engine_provider=provider,
           query="SELECT * FROM orders WHERE status = :status",
           params={"status": "pending"})
 def read_oracle_orders(rows: list[dict]) -> None:
@@ -544,7 +551,15 @@ Notes:
 
 ## Engine configuration
 
-Binding decorators accept an optional `engine_provider` for sharing a configured engine pool. They do not accept `engine_kwargs` or `connect_args` directly. For imperative use, `DbConfig` supports `engine_kwargs` and `connect_args`, which `EngineProvider` forwards to `sqlalchemy.create_engine`.
+Binding decorators and `SqlAlchemySource` accept either `url=` for the default
+configuration or `db_config=` for complete engine settings. The arguments are
+mutually exclusive. Pass the same `DbConfig` and `EngineProvider` to bindings
+that should share an engine; equivalent configurations share a cache entry,
+while different pool, credential, or connection settings remain isolated.
+
+Environment placeholders in `DbConfig.connection_url` are resolved before the
+provider lookup. Bindings borrow provider-managed engines and never dispose
+them; instances without a provider own and dispose their engine.
 
 > **Note:** In `DbConfig`, pass driver-level `connect_args` via the dedicated `connect_args` field, **not** nested inside `engine_kwargs`. Nesting `connect_args` inside `engine_kwargs` raises `ConfigurationError` because `EngineProvider` already owns that argument and silently overriding it would mask user intent.
 
