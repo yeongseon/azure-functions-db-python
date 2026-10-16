@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -124,3 +125,20 @@ def test_required_gate_rejects_unknown_unsuccessful_job(result: str) -> None:
 
     # Then: the unknown dependency must succeed.
     assert failed == ["new-job"]
+
+
+def test_codecov_failure_is_required_only_when_a_token_is_configured() -> None:
+    import yaml
+
+    workflow = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci-test.yml").read_text()
+    )
+    job = workflow["jobs"]["test"]
+    steps = {step["name"]: step for step in job["steps"] if "name" in step}
+    upload = steps["Upload coverage to Codecov"]
+    skipped = steps["Report skipped Codecov upload"]
+
+    assert job["env"]["CODECOV_TOKEN"] == "${{ secrets.CODECOV_TOKEN }}"
+    assert upload["with"]["fail_ci_if_error"] is True
+    assert "env.CODECOV_TOKEN != ''" in upload["if"]
+    assert "env.CODECOV_TOKEN == ''" in skipped["if"]
