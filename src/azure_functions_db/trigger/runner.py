@@ -666,7 +666,7 @@ class PollRunner:
             batch_id=ctx.batch_id,
             lease_owner=ctx.lease_id,
             checkpoint_before=copy.deepcopy(ctx.checkpoint),
-            checkpoint_after_candidate=new_checkpoint,
+            checkpoint_after_candidate=copy.deepcopy(new_checkpoint),
             tick_started_at=ctx.tick_started_at,
             source_name=descriptor.name,
         )
