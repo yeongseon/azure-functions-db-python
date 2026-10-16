@@ -164,6 +164,12 @@ class PollContext:
     source_name: str
 ```
 
+Both checkpoint dictionaries on `PollContext` are observational snapshots.
+They are deep copies of runner-owned state: handlers may inspect them, but
+mutating either dictionary or a nested value cannot override the checkpoint
+that the runner commits. Application-controlled acknowledgements and partial
+batch checkpoint overrides are not part of this API.
+
 ### 3.4 RowChange
 ```python
 @dataclass

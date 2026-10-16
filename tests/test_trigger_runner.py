@@ -946,6 +946,26 @@ class TestPollRunner:
         assert ctx.source_name == "test_table"
         assert isinstance(ctx.tick_started_at, datetime)
 
+    def test_handler_checkpoint_mutation_cannot_change_committed_state(self) -> None:
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        store = FakeStateStore()
+
+        def handler(events: list[RowChange], context: PollContext) -> None:
+            context.checkpoint_before["nested"] = {"changed": True}
+            assert context.checkpoint_after_candidate is not None
+            context.checkpoint_after_candidate["cursor"] = (999, 999)
+
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[records]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=handler,
+        )
+
+        assert runner.tick() == 1
+        assert store.checkpoints["test_poller"]["cursor"] == 100
+
     def test_lease_acquire_failure_raises(self) -> None:
         source = FakeSourceAdapter(batches=[])
         store = FakeStateStore()
