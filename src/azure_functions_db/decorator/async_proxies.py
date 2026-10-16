@@ -168,11 +168,29 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
         loop = asyncio.get_running_loop()
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="db-tx")
         cm = self._target.transaction()
+        entered = False
         try:
-            await loop.run_in_executor(executor, cm.__enter__)
-        except BaseException:
-            executor.shutdown(wait=False)
+            enter_future = loop.run_in_executor(executor, cm.__enter__)
+            await asyncio.shield(enter_future)
+            entered = True
+        except asyncio.CancelledError as exc:
+            await self._wait_for_completion(enter_future)
+            entered = True
+            await self._async_exit(
+                loop,
+                executor,
+                cm,
+                type(exc),
+                exc,
+                exc.__traceback__,
+                swallow=True,
+            )
             raise
+        except BaseException:
+            raise
+        finally:
+            if not entered:
+                executor.shutdown(wait=False)
 
         try:
             try:
@@ -187,7 +205,7 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
                 # Commit on the pinned thread; let commit failures propagate.
                 await self._async_exit(loop, executor, cm, None, None, None, swallow=False)
         finally:
-            executor.shutdown(wait=True)
+            executor.shutdown(wait=False)
 
     @staticmethod
     async def _async_exit(
@@ -208,19 +226,19 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
         otherwise (commit path) they propagate.
         """
         call = functools.partial(cm.__exit__, exc_type, exc, tb)
+        future = loop.run_in_executor(executor, call)
+        cancellation: asyncio.CancelledError | None = None
         try:
-            await asyncio.shield(loop.run_in_executor(executor, call))
+            while True:
+                try:
+                    await asyncio.shield(future)
+                    break
+                except asyncio.CancelledError as exc:
+                    if cancellation is None:
+                        cancellation = exc
+            if cancellation is not None:
+                raise cancellation
         except asyncio.CancelledError:
-            # Cleanup was cancelled: force synchronous completion on the
-            # still-alive worker thread so the transaction is not left open.
-            future = executor.submit(call)
-            try:
-                future.result(timeout=5.0)
-            except Exception:
-                logger.warning(
-                    "async transaction cleanup failed after cancellation",
-                    exc_info=True,
-                )
             raise
         except BaseException:
             if not swallow:
@@ -229,6 +247,16 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
                 "async transaction rollback raised; original exception preserved",
                 exc_info=True,
             )
+
+    @staticmethod
+    async def _wait_for_completion(future: asyncio.Future[Any]) -> None:
+        """Await retained worker ownership despite repeated task cancellation."""
+        while not future.done():
+            try:
+                await asyncio.shield(future)
+            except asyncio.CancelledError:
+                continue
+        await asyncio.shield(future)
 
 
 class _AsyncTxWriterProxy:

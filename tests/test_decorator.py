@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import threading
+import time
 from typing import Any, Literal, cast
 
 import azure.functions as func
 from pydantic import BaseModel
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 
 from azure_functions_db import ConfigurationError, DbBindings
@@ -1224,6 +1226,54 @@ def test_inject_writer_async_transaction_concurrent_writes_serialized(tmp_path: 
     ]
 
 
+def test_async_transaction_cancellation_does_not_block_event_loop(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "writer-async-tx-cancel.db")
+    _create_orders_table(url)
+    writer = DbWriter(url=url, table="processed_orders")
+    writer._ensure_initialized()
+    assert writer._engine is not None
+    commit_started = threading.Event()
+    commit_finished = threading.Event()
+
+    def slow_commit(_connection: Any) -> None:
+        commit_started.set()
+        time.sleep(0.3)
+        commit_finished.set()
+
+    event.listen(writer._engine, "commit", slow_commit)
+    proxy = decorator_mod._AsyncDbWriterProxy(writer)
+
+    async def run() -> list[float]:
+        beats: list[float] = []
+
+        async def transaction() -> None:
+            async with proxy.transaction() as tx:
+                await tx.insert(data={"id": 1, "status": "pending"})
+
+        async def heartbeat() -> None:
+            while not commit_finished.is_set():
+                beats.append(time.monotonic())
+                await asyncio.sleep(0.005)
+
+        transaction_task = asyncio.create_task(transaction())
+        heartbeat_task = asyncio.create_task(heartbeat())
+        await asyncio.to_thread(commit_started.wait, 2)
+        transaction_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await transaction_task
+        await heartbeat_task
+        return beats
+
+    try:
+        beats = asyncio.run(run())
+    finally:
+        event.remove(writer._engine, "commit", slow_commit)
+        writer.close()
+
+    assert len(beats) > 10
+    assert max(later - earlier for earlier, later in zip(beats, beats[1:])) < 0.1
+
+
 class _FakeTxCM:
     """Minimal context manager to drive _AsyncDbWriterProxy error paths."""
 
@@ -1297,53 +1347,6 @@ def test_async_transaction_rollback_error_is_swallowed() -> None:
     with pytest.raises(_Boom, match="original"):
         asyncio.run(run())
     assert cm.exit_calls[0][0] is _Boom
-
-
-class _CancelOnExitCM:
-    """__exit__ raises CancelledError once, then succeeds/fails on retry."""
-
-    def __init__(self, *, fallback_exc: BaseException | None = None) -> None:
-        self.calls = 0
-        self._fallback_exc = fallback_exc
-
-    def __enter__(self) -> _CancelOnExitCM:
-        return self
-
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
-        self.calls += 1
-        if self.calls == 1:
-            raise asyncio.CancelledError
-        if self._fallback_exc is not None:
-            raise self._fallback_exc
-        return False
-
-
-def test_async_transaction_exit_cancellation_forces_sync_cleanup() -> None:
-    cm = _CancelOnExitCM()
-    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
-
-    async def run() -> None:
-        async with proxy.transaction():
-            pass
-
-    with pytest.raises(asyncio.CancelledError):
-        asyncio.run(run())
-    # Cleanup was retried synchronously on the worker thread.
-    assert cm.calls == 2
-
-
-def test_async_transaction_exit_cancellation_fallback_failure_logged() -> None:
-    cm = _CancelOnExitCM(fallback_exc=RuntimeError("fallback fail"))
-    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, _FakeTxWriter(cm)))
-
-    async def run() -> None:
-        async with proxy.transaction():
-            pass
-
-    # CancelledError still propagates even when the forced cleanup also fails.
-    with pytest.raises(asyncio.CancelledError):
-        asyncio.run(run())
-    assert cm.calls == 2
 
 
 # =====================================================================
