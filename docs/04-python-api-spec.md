@@ -123,6 +123,7 @@ class SqlAlchemySource(SourceAdapter):
         self,
         *,
         url: str,
+        db_config: DbConfig | None = None,
         table: str | None = None,
         schema: str | None = None,
         query: str | None = None,
@@ -135,6 +136,13 @@ class SqlAlchemySource(SourceAdapter):
         cursor_types: list[type] | None = None,
     ): ...
 ```
+
+Constructors and binding decorators accept exactly one of `url` or
+`db_config`. `url` preserves the default engine configuration. `db_config`
+propagates the complete connection, pool, and engine settings to the engine
+actually used by the binding/source. With an `EngineProvider`, equal effective
+configs share an engine and distinct configs remain isolated. Provider engines
+are borrowed; engines created without a provider are owned by the instance.
 
 Checkpoint cursor parts are persisted as JSON scalars. In table mode,
 `SqlAlchemySource` restores those parts to the Python types declared by the

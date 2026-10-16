@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import os
 import re
 from typing import Any
@@ -32,3 +32,18 @@ class DbConfig:
     echo: bool = False
     connect_args: dict[str, object] | None = None
     engine_kwargs: dict[str, Any] = field(default_factory=dict)
+
+
+def resolve_db_config(*, url: str | None, db_config: DbConfig | None) -> DbConfig:
+    if url is not None and db_config is not None:
+        msg = "url and db_config are mutually exclusive"
+        raise ConfigurationError(msg)
+    if db_config is not None:
+        return replace(db_config, connection_url=resolve_env_vars(db_config.connection_url))
+    if url == "":
+        msg = "url must not be empty"
+        raise ConfigurationError(msg)
+    if url is None:
+        msg = "exactly one of url or db_config is required"
+        raise ConfigurationError(msg)
+    return DbConfig(connection_url=resolve_env_vars(url))

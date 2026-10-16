@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ..binding.writer import DbWriter
+from ..core.config import DbConfig
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError
 from .validation import _normalize_output_row
@@ -38,7 +39,8 @@ class DbOut:
     def __init__(
         self,
         *,
-        url: str,
+        url: str | None,
+        db_config: DbConfig | None,
         table: str,
         schema: str | None,
         action: Literal["insert", "upsert"],
@@ -46,6 +48,7 @@ class DbOut:
         engine_provider: EngineProvider | None,
     ) -> None:
         self._url = url
+        self._db_config = db_config
         self._table = table
         self._schema = schema
         self._action = action
@@ -73,6 +76,7 @@ class DbOut:
 
         writer = DbWriter(
             url=self._url,
+            db_config=self._db_config,
             table=self._table,
             schema=self._schema,
             engine_provider=self._engine_provider,

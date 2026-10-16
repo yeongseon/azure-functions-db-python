@@ -15,7 +15,7 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.schema import Table
 from sqlalchemy.sql import and_, literal_column, or_, select, text
 
-from ..core.config import DbConfig, resolve_env_vars
+from ..core.config import DbConfig, resolve_db_config, resolve_env_vars
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError
 from ..core.metadata import reflect_table
@@ -69,7 +69,7 @@ class SqlAlchemySource:
     def __init__(
         self,
         *,
-        url: str,
+        url: str | None = None,
         table: str | None = None,
         schema: str | None = None,
         query: str | None = None,
@@ -81,10 +81,12 @@ class SqlAlchemySource:
         operation_mode: str = "upsert_only",
         engine_provider: EngineProvider | None = None,
         cursor_types: list[CursorPythonType] | None = None,
+        db_config: DbConfig | None = None,
     ) -> None:
-        if not url:
-            msg = "url must not be empty"
-            raise SourceConfigurationError(msg)
+        try:
+            effective_config = resolve_db_config(url=url, db_config=db_config)
+        except ConfigurationError as exc:
+            raise SourceConfigurationError(str(exc)) from exc
         if table and query:
             msg = "Exactly one of 'table' or 'query' must be provided, not both"
             raise SourceConfigurationError(msg)
@@ -106,7 +108,7 @@ class SqlAlchemySource:
             )
             raise SourceConfigurationError(msg)
 
-        self._url = _resolve_env_vars(url)
+        self._url = effective_config.connection_url
         self._table_name = table
         self._schema = schema
         self._query = query
@@ -119,7 +121,7 @@ class SqlAlchemySource:
         self._engine_provider = engine_provider
         self._cursor_types = list(cursor_types) if cursor_types is not None else None
         self._owns_engine = False
-        self._db_config = DbConfig(connection_url=self._url)
+        self._db_config = effective_config
 
         self._engine: Engine | None = None
         self._table: Table | None = None

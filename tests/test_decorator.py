@@ -1153,6 +1153,59 @@ def test_inject_writer_async_proxy_delete(tmp_path: Path) -> None:
     assert _read_orders(url) == []
 
 
+def test_inject_reader_uses_complete_db_config(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "reader-config.db")
+    _create_orders_table(url)
+    provider = EngineProvider()
+    config = DbConfig(connection_url=url, engine_kwargs={"pool_pre_ping": True})
+    used_engine: list[Engine] = []
+
+    @DbBindings().inject_reader(
+        "reader",
+        db_config=config,
+        table="processed_orders",
+        engine_provider=provider,
+    )
+    def handler(reader: DbReader) -> None:
+        reader.query("SELECT 1", params={})
+        assert reader._engine is not None
+        used_engine.append(reader._engine)
+
+    handler()
+
+    assert used_engine == [provider.get_engine(config)]
+    assert used_engine[0].pool._pre_ping is True
+    provider.dispose_all()
+
+
+def test_inject_reader_rejects_url_with_db_config(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "reader-conflict.db")
+
+    @DbBindings().inject_reader(
+        "reader",
+        url=url,
+        db_config=DbConfig(connection_url=url),
+    )
+    def handler(reader: DbReader) -> None:
+        pass
+
+    with pytest.raises(ConfigurationError, match="mutually exclusive"):
+        handler()
+
+
+def test_db_config_resolves_environment_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CONFIG_DB_URL", "sqlite:///:memory:")
+
+    reader = DbReader(db_config=DbConfig(connection_url="%CONFIG_DB_URL%"))
+
+    assert reader._url == "sqlite:///:memory:"
+
+
+def test_reader_requires_url_or_db_config() -> None:
+    with pytest.raises(ConfigurationError, match="exactly one"):
+        DbReader()
+
+
 def test_inject_writer_async_transaction_commit(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "writer-async-tx-commit.db")
     _create_orders_table(url)
