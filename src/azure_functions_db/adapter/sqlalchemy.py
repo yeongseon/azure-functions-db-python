@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import logging
-from typing import Any
+from typing import Any, TypeAlias
+from uuid import UUID
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import Engine, create_engine
@@ -20,6 +23,10 @@ from ..core.types import CursorValue, RawRecord, SourceDescriptor
 from ..trigger.errors import FetchError, SourceConfigurationError
 
 logger = logging.getLogger(__name__)
+
+CursorPythonType: TypeAlias = (
+    type[str] | type[int] | type[float] | type[bool] | type[datetime] | type[Decimal] | type[UUID]
+)
 
 
 def _resolve_env_vars(value: str) -> str:
@@ -73,6 +80,7 @@ class SqlAlchemySource:
         strategy: str = "cursor",
         operation_mode: str = "upsert_only",
         engine_provider: EngineProvider | None = None,
+        cursor_types: list[CursorPythonType] | None = None,
     ) -> None:
         if not url:
             msg = "url must not be empty"
@@ -109,6 +117,7 @@ class SqlAlchemySource:
         self._strategy = strategy
         self._operation_mode = operation_mode
         self._engine_provider = engine_provider
+        self._cursor_types = list(cursor_types) if cursor_types is not None else None
         self._owns_engine = False
         self._db_config = DbConfig(connection_url=self._url)
 
@@ -148,6 +157,7 @@ class SqlAlchemySource:
             "parameters": self._parameters,
             "strategy": self._strategy,
             "operation_mode": self._operation_mode,
+            "cursor_types": [cursor_type.__name__ for cursor_type in self._cursor_types or []],
         }
         serialized = json.dumps(config, sort_keys=True, default=str)
         return hashlib.sha256(serialized.encode()).hexdigest()
@@ -318,15 +328,69 @@ class SqlAlchemySource:
 
         cols_values = self._cursor_cols_values(cursor)
         col_exprs = [self._table.c[name] for name, _ in cols_values]
-        vals = [val for _, val in cols_values]
+        vals = [
+            self._decode_cursor_part(
+                value,
+                self._table.c[name].type.python_type,
+                column_name=name,
+                timezone_enabled=getattr(self._table.c[name].type, "timezone", None),
+            )
+            for name, value in cols_values
+        ]
         return self._build_or_and_expansion(col_exprs, vals)
 
     def _build_cursor_filter_subquery(self, cursor: CursorValue) -> Any:
         """Build lexicographic cursor predicate for raw-query mode."""
         cols_values = self._cursor_cols_values(cursor)
         col_exprs: list[Any] = [literal_column(f"source.{name}") for name, _ in cols_values]
-        vals = [val for _, val in cols_values]
+        if self._cursor_types is None:
+            vals = [value for _, value in cols_values]
+        else:
+            if len(self._cursor_types) != len(cols_values):
+                msg = (
+                    f"cursor_types has {len(self._cursor_types)} parts but expected "
+                    f"{len(cols_values)} (cursor_column + pk_columns)"
+                )
+                raise FetchError(msg)
+            vals = [
+                self._decode_cursor_part(value, cursor_type, column_name=name)
+                for (name, value), cursor_type in zip(cols_values, self._cursor_types)
+            ]
         return self._build_or_and_expansion(col_exprs, vals)
+
+    @staticmethod
+    def _decode_cursor_part(
+        value: object,
+        expected_type: CursorPythonType,
+        *,
+        column_name: str,
+        timezone_enabled: bool | None = None,
+    ) -> object:
+        """Restore a JSON-safe checkpoint part to its database Python type."""
+        if value is None or isinstance(value, expected_type):
+            return value
+        try:
+            if expected_type is datetime and isinstance(value, str):
+                decoded = datetime.fromisoformat(value)
+                if timezone_enabled is False and decoded.tzinfo is not None:
+                    msg = f"timezone-aware checkpoint for naive DateTime column '{column_name}'"
+                    raise FetchError(msg)
+                if timezone_enabled is True and decoded.tzinfo is None:
+                    msg = f"naive checkpoint for timezone-aware DateTime column '{column_name}'"
+                    raise FetchError(msg)
+                return decoded
+            if expected_type is Decimal and isinstance(value, (str, int, float)):
+                return Decimal(str(value))
+            if expected_type is UUID and isinstance(value, str):
+                return UUID(value)
+        except (InvalidOperation, ValueError) as exc:
+            msg = f"Invalid checkpoint value for column '{column_name}'"
+            raise FetchError(msg) from exc
+        msg = (
+            f"Checkpoint value for column '{column_name}' cannot be decoded as "
+            f"{expected_type.__name__}"
+        )
+        raise FetchError(msg)
 
     def _cursor_cols_values(self, cursor: CursorValue) -> list[tuple[str, object]]:
         """Map cursor value(s) to (column_name, value) pairs.

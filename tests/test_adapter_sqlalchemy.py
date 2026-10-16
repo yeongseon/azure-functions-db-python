@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
 import logging
 import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
+from uuid import UUID
 
 import pytest
-from sqlalchemy import Column, Index, Integer, MetaData, String, Table, create_engine, insert
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    insert,
+)
 
 from azure_functions_db.adapter.sqlalchemy import SqlAlchemySource, _resolve_env_vars
 from azure_functions_db.core.types import SourceDescriptor
@@ -84,6 +97,37 @@ def _create_orders_db_with_cursor_index(db_path: Path, *, indexed: bool) -> str:
     if indexed:
         Index("ix_orders_updated_at", orders.c.updated_at)
     metadata.create_all(engine)
+    engine.dispose()
+    return url
+
+
+def _create_datetime_events_db(db_path: Path) -> str:
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
+    metadata = MetaData()
+    events = Table(
+        "events",
+        metadata,
+        Column("tenant_id", Integer, primary_key=True),
+        Column("id", Integer, primary_key=True),
+        Column("occurred_at", DateTime, nullable=False),
+    )
+    metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(events),
+            [
+                {"tenant_id": 1, "id": 1, "occurred_at": datetime(2026, 10, 16, 10)},
+                {"tenant_id": 1, "id": 2, "occurred_at": datetime(2026, 10, 16, 10)},
+                {
+                    "tenant_id": 1,
+                    "id": 3,
+                    "occurred_at": datetime(2026, 10, 16, 10, 0, 0, 123456),
+                },
+                {"tenant_id": 2, "id": 1, "occurred_at": datetime(2026, 10, 16, 11)},
+                {"tenant_id": 2, "id": 2, "occurred_at": datetime(2026, 10, 17, 10)},
+            ],
+        )
     engine.dispose()
     return url
 
@@ -249,6 +293,77 @@ class TestResolveEnvVars:
 
 
 class TestSqlAlchemySourceFetch:
+    def test_datetime_checkpoint_round_trip_preserves_table_order(self, tmp_path: Path) -> None:
+        url = _create_datetime_events_db(tmp_path / "datetime-events.db")
+        source = SqlAlchemySource(
+            url=url,
+            table="events",
+            cursor_column="occurred_at",
+            pk_columns=["tenant_id", "id"],
+        )
+        cursor: tuple[str | int, ...] | None = None
+        seen: list[tuple[int, int]] = []
+
+        for _ in range(6):
+            rows = source.fetch(cursor=cursor, batch_size=1)
+            if not rows:
+                break
+            row = rows[0]
+            tenant_id = row["tenant_id"]
+            event_id = row["id"]
+            occurred_at = row["occurred_at"]
+            assert isinstance(tenant_id, int)
+            assert isinstance(event_id, int)
+            assert isinstance(occurred_at, datetime)
+            seen.append((tenant_id, event_id))
+            cursor = (occurred_at.isoformat(), tenant_id, event_id)
+
+        assert seen == [(1, 1), (1, 2), (1, 3), (2, 1), (2, 2)]
+
+    def test_datetime_checkpoint_rejects_timezone_mismatch(self, tmp_path: Path) -> None:
+        url = _create_datetime_events_db(tmp_path / "datetime-timezone.db")
+        source = SqlAlchemySource(
+            url=url,
+            table="events",
+            cursor_column="occurred_at",
+            pk_columns=["tenant_id", "id"],
+        )
+
+        with pytest.raises(FetchError, match="timezone-aware checkpoint"):
+            source.fetch(
+                cursor=(datetime(2026, 10, 16, 10, tzinfo=UTC).isoformat(), 1, 1),
+                batch_size=1,
+            )
+
+    @pytest.mark.parametrize(
+        ("raw", "cursor_type", "expected"),
+        [
+            ("12.50", Decimal, Decimal("12.50")),
+            (
+                "12345678-1234-5678-1234-567812345678",
+                UUID,
+                UUID(int=0x12345678123456781234567812345678),
+            ),
+        ],
+    )
+    def test_cursor_decoder_restores_supported_types(
+        self,
+        raw: str,
+        cursor_type: type[Decimal] | type[UUID],
+        expected: Decimal | UUID,
+    ) -> None:
+        assert (
+            SqlAlchemySource._decode_cursor_part(raw, cursor_type, column_name="cursor") == expected
+        )
+
+    def test_cursor_decoder_rejects_invalid_datetime(self) -> None:
+        with pytest.raises(FetchError, match="Invalid checkpoint value"):
+            SqlAlchemySource._decode_cursor_part(
+                "not-a-datetime",
+                datetime,
+                column_name="occurred_at",
+            )
+
     def test_fetch_all_no_cursor(self, orders_url: str) -> None:
         src = _make_source(url=orders_url)
         rows = src.fetch(cursor=None, batch_size=10)
@@ -393,6 +508,37 @@ class TestSqlAlchemySourceFetch:
         rows = src.fetch(cursor=(200, 3), batch_size=10)
         assert len(rows) == 2
         assert rows[0]["id"] == 4
+
+    def test_fetch_query_mode_decodes_declared_cursor_types(self, tmp_path: Path) -> None:
+        url = _create_datetime_events_db(tmp_path / "query-datetime.db")
+        source = SqlAlchemySource(
+            url=url,
+            query="SELECT tenant_id, id, occurred_at FROM events",
+            cursor_column="occurred_at",
+            pk_columns=["tenant_id", "id"],
+            cursor_types=[datetime, int, int],
+        )
+
+        rows = source.fetch(cursor=("2026-10-16T10:00:00", 1, 1), batch_size=10)
+
+        assert [(row["tenant_id"], row["id"]) for row in rows] == [
+            (1, 2),
+            (1, 3),
+            (2, 1),
+            (2, 2),
+        ]
+
+    def test_fetch_query_mode_rejects_incomplete_cursor_types(self, orders_url: str) -> None:
+        source = SqlAlchemySource(
+            url=orders_url,
+            query="SELECT id, updated_at FROM orders",
+            cursor_column="updated_at",
+            pk_columns=["id"],
+            cursor_types=[int],
+        )
+
+        with pytest.raises(FetchError, match="cursor_types has 1 parts but expected 2"):
+            source.fetch(cursor=(100, 1), batch_size=1)
 
     def test_fetch_query_mode_with_parameters(self, orders_url: str) -> None:
         src = SqlAlchemySource(
