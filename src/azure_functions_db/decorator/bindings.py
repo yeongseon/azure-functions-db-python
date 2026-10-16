@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..binding.reader import DbReader
 from ..binding.writer import DbWriter
+from ..core.config import DbConfig
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError
 from ..observability import MetricsCollector
@@ -222,7 +223,8 @@ class DbBindings:
         self,
         arg_name: str,
         *,
-        url: str,
+        url: str | None = None,
+        db_config: DbConfig | None = None,
         table: str | None = None,
         schema: str | None = None,
         pk: dict[str, object] | Callable[..., dict[str, object]] | None = None,
@@ -364,6 +366,7 @@ class DbBindings:
                 """Execute DB I/O (blocking — run in worker thread for async)."""
                 reader = DbReader(
                     url=url,
+                    db_config=db_config,
                     table=table,
                     schema=schema,
                     engine_provider=resolved_engine_provider,
@@ -434,7 +437,8 @@ class DbBindings:
         self,
         arg_name: str,
         *,
-        url: str,
+        url: str | None = None,
+        db_config: DbConfig | None = None,
         table: str,
         schema: str | None = None,
         action: Literal["insert", "upsert"] = "insert",
@@ -485,6 +489,7 @@ class DbBindings:
             _validate_arg_name(arg_name, fn, "output")
             out = DbOut(
                 url=url,
+                db_config=db_config,
                 table=table,
                 schema=schema,
                 action=action,
@@ -524,7 +529,8 @@ class DbBindings:
         self,
         arg_name: str,
         *,
-        url: str,
+        url: str | None = None,
+        db_config: DbConfig | None = None,
         table: str | None = None,
         schema: str | None = None,
         engine_provider: EngineProvider | None = None,
@@ -563,6 +569,7 @@ class DbBindings:
             def _acquire() -> DbReader:
                 return DbReader(
                     url=url,
+                    db_config=db_config,
                     table=table,
                     schema=schema,
                     engine_provider=engine_provider,
@@ -589,7 +596,8 @@ class DbBindings:
         self,
         arg_name: str,
         *,
-        url: str,
+        url: str | None = None,
+        db_config: DbConfig | None = None,
         table: str,
         schema: str | None = None,
         engine_provider: EngineProvider | None = None,
@@ -628,6 +636,7 @@ class DbBindings:
             def _acquire() -> DbWriter:
                 return DbWriter(
                     url=url,
+                    db_config=db_config,
                     table=table,
                     schema=schema,
                     engine_provider=engine_provider,

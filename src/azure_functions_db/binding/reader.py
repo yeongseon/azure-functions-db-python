@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.schema import Table
 from sqlalchemy.sql import and_, select, text
 
-from ..core.config import DbConfig, resolve_env_vars
+from ..core.config import DbConfig, resolve_db_config
 from ..core.engine import EngineProvider
 from ..core.errors import ConfigurationError, DbConnectionError, QueryError
 from ..core.metadata import reflect_table
@@ -48,24 +48,18 @@ class DbReader:
     def __init__(
         self,
         *,
-        url: str,
+        url: str | None = None,
         table: str | None = None,
         schema: str | None = None,
         engine_provider: EngineProvider | None = None,
+        db_config: DbConfig | None = None,
     ) -> None:
-        if not url:
-            msg = "url must not be empty"
-            raise ConfigurationError(msg)
-
-        try:
-            self._url = resolve_env_vars(url)
-        except ConfigurationError:
-            raise
+        self._db_config = resolve_db_config(url=url, db_config=db_config)
+        self._url = self._db_config.connection_url
 
         self._table_name = table
         self._schema = schema
         self._engine_provider = engine_provider
-        self._db_config = DbConfig(connection_url=self._url)
 
         self._engine: Engine | None = None
         self._table: Table | None = None
