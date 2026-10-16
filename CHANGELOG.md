@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.3](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.2...v0.8.3) (2026-10-16)
+
+
+### Bug Fixes
+
+* **ci:** require Codecov delivery only when a token is configured ([#434](https://github.com/yeongseon/azure-functions-db-python/issues/434)) ([b62252c](https://github.com/yeongseon/azure-functions-db-python/commit/b62252c14f4b48b0fa1281bf054991fa68c7a9ed))
+
 ## [0.8.2](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.1...v0.8.2) (2026-10-16)
 
 
