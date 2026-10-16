@@ -132,8 +132,23 @@ class SqlAlchemySource(SourceAdapter):
         parameters: dict[str, object] | None = None,
         strategy: str = "cursor",
         operation_mode: str = "upsert_only",
+        cursor_types: list[type] | None = None,
     ): ...
 ```
+
+Checkpoint cursor parts are persisted as JSON scalars. In table mode,
+`SqlAlchemySource` restores those parts to the Python types declared by the
+reflected cursor and primary-key columns before binding them to a query. This
+preserves `datetime` (including microseconds and any existing UTC offset),
+`Decimal`, and `UUID` ordering across checkpoint reloads. A timezone-aware
+checkpoint is rejected for a naive `DateTime` column, and vice versa; the
+source never invents a timezone.
+
+Raw-query mode has no reflected column metadata. Set `cursor_types` in
+`(cursor_column, *pk_columns)` order when a checkpoint part needs typed query
+binding, for example `cursor_types=[datetime, int]`. Omitting it preserves the
+legacy JSON-scalar binding contract. Invalid or ambiguous conversions raise
+`FetchError` before handler invocation and checkpoint advancement.
 
 ### 3.3 PollContext
 ```python
