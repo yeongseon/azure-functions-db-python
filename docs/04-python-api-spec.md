@@ -198,6 +198,12 @@ def handler(events, context): ...
 > runtime guard, `PollTrigger.run()` also raises `TypeError` if it is ever handed an
 > async callable (`src/azure_functions_db/trigger/poll.py`). Async support may be added in a future version.
 
+The runtime also rejects any awaitable returned by an otherwise synchronous
+function, callable object, partial, or decorator wrapper. Such a return value
+means the handler work has not completed, so the batch is failed before metrics
+or checkpoint acknowledgement. Newly created coroutine objects are closed to
+avoid resource warnings; externally managed tasks and futures are not cancelled.
+
 Rules:
 - `events` may be empty. Default behavior is **empty batch skip**.
 - If the handler raises an exception, the batch is treated as failed.

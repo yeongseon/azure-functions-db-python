@@ -181,9 +181,17 @@ class PollRunner:
         for attempt in range(max_attempts):
             try:
                 if self._handler_arity >= 2:
-                    self._handler(events, context)
+                    result = self._handler(events, context)
                 else:
-                    self._handler(events)
+                    result = self._handler(events)
+                if inspect.isawaitable(result):
+                    if inspect.iscoroutine(result):
+                        result.close()
+                    msg = (
+                        "Async handler results are not supported. "
+                        "Pass a synchronous handler that completes before returning."
+                    )
+                    raise TypeError(msg)
                 return
             except Exception as exc:
                 remaining = max_attempts - attempt - 1
