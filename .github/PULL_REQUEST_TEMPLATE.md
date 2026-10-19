@@ -33,3 +33,14 @@
 ## Related Issues
 
 <!-- Link to related issues: Closes #123, Fixes #456 -->
+
+## Review Evidence
+
+<!-- See docs/review-evidence-policy.md (advisory, not a required check).
+     Record review source/SHA so evidence can be checked against the
+     commit it actually evaluated, not just the PR as a whole. -->
+
+- Review source and reviewed commit SHA:
+- Material findings and disposition (fixed / acknowledged-wont-fix / deferred-with-issue), or "none":
+- Unresolved blockers, or "none":
+- R3 (workflow permissions, release/publishing, checkpoint/transaction/retry/lease behavior, security-sensitive credential/data-access, review-policy files): yes/no — if yes, human authorization record:
