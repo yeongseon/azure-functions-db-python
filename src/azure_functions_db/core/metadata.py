@@ -143,9 +143,7 @@ class MetadataCache:
                 if event is not None:
                     event.set()
 
-    def invalidate(
-        self, *, engine: Engine, url: str, schema: str | None, table_name: str
-    ) -> None:
+    def invalidate(self, *, engine: Engine, url: str, schema: str | None, table_name: str) -> None:
         """Evict the cached entry for *engine*/*url* (already resolved --
         see :meth:`get_or_reflect`)."""
         cache_key: _CacheKey = (id(engine), url, schema, table_name)
