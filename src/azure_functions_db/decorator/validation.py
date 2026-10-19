@@ -40,6 +40,39 @@ def _build_host_signature(
     return sig.replace(parameters=params)
 
 
+def _bind_host_args(
+    host_sig: inspect.Signature, args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> inspect.BoundArguments:
+    """Bind caller-supplied ``(args, kwargs)`` against the exposed host
+    signature, so a positional call against the advertised ``(request)``
+    shape is resolved to its parameter NAME before the injected argument is
+    reinserted (#446) -- forwarding the raw ``args`` tuple unchanged would
+    instead bind by raw position against the original function's real
+    signature, which still contains the hidden injected parameter.
+    """
+    bound = host_sig.bind(*args, **kwargs)
+    bound.apply_defaults()
+    return bound
+
+
+def _finalize_injected_call(
+    fn: Callable[..., Any],
+    host_bound: inspect.BoundArguments,
+    arg_name: str,
+    injected_value: Any,
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    """Combine the host-bound caller arguments with the injected value and
+    return a call shape that matches *fn*'s own real signature -- respecting
+    each parameter's original kind (positional-only, positional-or-keyword,
+    keyword-only) regardless of how the caller invoked the exposed wrapper.
+    """
+    full_sig = inspect.signature(fn, follow_wrapped=False)
+    full_bound = full_sig.bind_partial()
+    full_bound.arguments.update(host_bound.arguments)
+    full_bound.arguments[arg_name] = injected_value
+    return full_bound.args, full_bound.kwargs
+
+
 def _validate_resolver(
     resolver: Callable[..., dict[str, object]],
     fn: Callable[..., Any],
