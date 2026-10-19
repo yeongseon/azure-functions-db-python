@@ -182,10 +182,59 @@ jobs:
           echo "Installed func: ${FUNC_VERSION}"
           test "${FUNC_VERSION}" = "${FUNCTIONS_CORE_TOOLS_VERSION}"
 
+      - name: Resolve source candidate version
+        id: candidate
+        run: |
+          FILE_VERSION=$(grep -Po '(?<=__version__ = ")[^"]*' src/azure_functions_db/__init__.py)
+          REQ_VERSION="${{ inputs.version }}"
+          if [ -n "$REQ_VERSION" ] && [ "$REQ_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error ::Requested certification version ($REQ_VERSION) != source version ($FILE_VERSION)"
+            exit 1
+          fi
+          echo "version=${REQ_VERSION:-$FILE_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Install library from source + test deps
         run: |
           pip install -e ".[all,dev]"
-          pip install requests pytest pytest-html
+          pip install requests pytest pytest-html build
+
+      - name: Resolve candidate wheel
+        # When this workflow runs as the azure-e2e gate inside publish-pypi.yml
+        # (workflow_call), the parent `build` job already produced and uploaded
+        # the exact candidate wheel in this same run -- download it so the
+        # deployed app installs that identical artifact instead of whatever
+        # version the remote Azure build would otherwise resolve from PyPI
+        # (#442). A standalone workflow_dispatch has no parent `build` job and
+        # therefore no such artifact; build one locally from this checkout so
+        # standalone verification stays self-contained and does not require a
+        # prior release run.
+        id: wheel_download
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: candidate-dist
+
+      - name: Build candidate wheel locally (standalone verification only)
+        if: steps.wheel_download.outcome != 'success'
+        run: |
+          rm -rf candidate-dist
+          python -m build --outdir candidate-dist
+
+      - name: Stage candidate wheel for deployment
+        working-directory: examples/e2e_app
+        run: |
+          WHEEL=$(ls ../../candidate-dist/*.whl | head -n1)
+          echo "Deploying candidate wheel: $WHEEL"
+          cp "$WHEEL" .
+          WHEEL_FILE=$(basename "$WHEEL")
+          # Replace the registry dependency with the exact candidate wheel +
+          # its extras, so the remote Oryx build installs this artifact
+          # instead of resolving azure-functions-db from PyPI (#442). This
+          # mutates only the CI checkout's copy of the example app; nothing
+          # here is committed back to the repository.
+          sed -i "s|^azure-functions-db\[all\]$|./${WHEEL_FILE}[all]|" requirements.txt
+          cat requirements.txt
 
       - name: Publish function app
         working-directory: examples/e2e_app
@@ -197,21 +246,27 @@ jobs:
         env:
           E2E_BASE_URL: https://${{ steps.names.outputs.app }}.azurewebsites.net
 
+      - name: Verify deployed package identity
+        # Fails closed if the deployed app's /api/version is missing, errors,
+        # or reports anything other than the exact candidate version (#442) --
+        # this is what actually proves the live e2e run above exercised this
+        # candidate, not an older/newer published release resolved by the
+        # remote Azure build.
+        run: python tools/check_deployed_version.py
+        env:
+          E2E_BASE_URL: https://${{ steps.names.outputs.app }}.azurewebsites.net
+          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
+
       - name: Record certification
         # Produce the SHA+version-matched certification record that
         # audit trail of the azure-e2e gate in publish-pypi.yml. Mirrors the
         # sibling pattern in azure-functions-openapi's e2e-azure.yml. Runs only
-        # after the live e2e suite above has passed, so the record attests a real
-        # deploy + live-e2e success for this exact commit.
+        # after the live e2e suite and the deployed-identity check above have
+        # passed, so the record attests a real deploy + live-e2e success for
+        # this exact, identity-verified candidate.
         run: |
           SHA=$(git rev-parse HEAD)
-          FILE_VERSION=$(grep -Po '(?<=__version__ = ")[^"]*' src/azure_functions_db/__init__.py)
-          REQ_VERSION="${{ inputs.version }}"
-          if [ -n "$REQ_VERSION" ] && [ "$REQ_VERSION" != "$FILE_VERSION" ]; then
-            echo "::error ::Requested certification version ($REQ_VERSION) != source version ($FILE_VERSION)"
-            exit 1
-          fi
-          VERSION="${REQ_VERSION:-$FILE_VERSION}"
+          VERSION="${{ steps.candidate.outputs.version }}"
           mkdir -p cert
           cat > cert/certification.json <<EOF
           {
