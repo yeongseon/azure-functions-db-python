@@ -58,6 +58,17 @@ class TestScalar:
             result = reader.scalar("SELECT name, id FROM users WHERE id = 1")
         assert result == "Alice"
 
+    def test_scalar_duplicate_column_labels_returns_positional_first(self, users_url: str) -> None:
+        """Regression (#444): scalar() converted the row to a dict before
+        choosing the first value, so a duplicate SQL column label silently
+        collapsed onto the later value instead of the documented first
+        positional column -- a join can produce duplicate labels without an
+        invalid SQL statement."""
+        with DbReader(url=users_url) as reader:
+            assert reader.scalar("SELECT 11 AS value, 22 AS other") == 11
+            assert reader.scalar("SELECT 11 AS value, 22 AS value") == 11
+            assert reader.scalar("SELECT NULL AS value, 22 AS value") is None
+
     def test_scalar_no_match_returns_none(self, users_url: str) -> None:
         with DbReader(url=users_url) as reader:
             result = reader.scalar("SELECT name FROM users WHERE id = 999")

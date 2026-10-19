@@ -237,19 +237,16 @@ class DbReader:
         if len(rows) > 1:
             msg = "scalar() expected at most 1 row but the query returned multiple rows"
             raise QueryError(msg)
-        # First column of the single row.
+        # First column of the single row, by position -- not via a dict
+        # conversion. Duplicate SQL column labels (e.g. from a join) collapse
+        # under a dict's unique keys, which could silently return the LAST
+        # value sharing the first column's label instead of the documented
+        # first column (#444).
         first_row = rows[0]
-        if hasattr(first_row, "_mapping"):
-            mapping: dict[str, object] = dict(first_row._mapping)
-            if not mapping:
-                return None
-            value: object = next(iter(mapping.values()))
-            return value
-        # Defensive fallback: row is a plain tuple-like.
-        if len(first_row):
-            fallback: object = first_row[0]
-            return fallback
-        return None
+        if len(first_row) == 0:
+            return None
+        value: object = first_row[0]
+        return value
 
     def one(
         self,
