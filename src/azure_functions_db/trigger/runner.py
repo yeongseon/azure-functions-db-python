@@ -121,6 +121,12 @@ class PollRunner:
         if asyncio.iscoroutinefunction(handler):
             msg = "Async handlers are not supported. Pass a synchronous function instead."
             raise TypeError(msg)
+        if inspect.isgeneratorfunction(handler) or inspect.isasyncgenfunction(handler):
+            msg = (
+                "Generator and async generator handlers are not supported. "
+                "Pass an ordinary synchronous function that completes before returning."
+            )
+            raise TypeError(msg)
         if batch_size < 1:
             msg = "batch_size must be >= 1"
             raise ValueError(msg)
@@ -191,6 +197,22 @@ class PollRunner:
                     result = self._handler(attempt_events, context)
                 else:
                     result = self._handler(attempt_events)
+                if inspect.isgenerator(result) or inspect.isasyncgen(result):
+                    # Neither is awaitable, so the isawaitable() guard below
+                    # never sees them -- and both are lazy: nothing in the
+                    # handler body has executed yet (#439). A plain .close()
+                    # is safe for a not-yet-started generator; an async
+                    # generator's aclose() is itself a coroutine, and
+                    # starting an event loop just to run it here would
+                    # violate the sync, no-event-loop contract of this
+                    # runner, so it is left for garbage collection instead.
+                    if inspect.isgenerator(result):
+                        result.close()
+                    msg = (
+                        "Generator and async generator handler results are not supported. "
+                        "Pass an ordinary synchronous function that completes before returning."
+                    )
+                    raise TypeError(msg)
                 if inspect.isawaitable(result):
                     if inspect.iscoroutine(result):
                         result.close()
