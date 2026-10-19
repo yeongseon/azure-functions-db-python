@@ -8,7 +8,7 @@ import inspect
 from typing import Any
 
 from .composition import _mark_decorator, _merge_toolkit_metadata
-from .validation import _build_host_signature
+from .validation import _bind_host_args, _build_host_signature, _finalize_injected_call
 
 
 def _finalize_wrapper(
@@ -47,14 +47,18 @@ def _wrap_handler(
     stay identical to a plain wrapper.
     """
     is_async = inspect.iscoroutinefunction(fn)
+    host_sig = _build_host_signature(fn, {arg_name})
 
     if release is None:
         if is_async:
 
             @functools.wraps(fn)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                kwargs[arg_name] = to_async_arg(acquire())
-                return await fn(*args, **kwargs)
+                host_bound = _bind_host_args(host_sig, args, kwargs)
+                call_args, call_kwargs = _finalize_injected_call(
+                    fn, host_bound, arg_name, to_async_arg(acquire())
+                )
+                return await fn(*call_args, **call_kwargs)
 
             return _finalize_wrapper(
                 async_wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
@@ -62,8 +66,11 @@ def _wrap_handler(
 
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            kwargs[arg_name] = to_sync_arg(acquire())
-            return fn(*args, **kwargs)
+            host_bound = _bind_host_args(host_sig, args, kwargs)
+            call_args, call_kwargs = _finalize_injected_call(
+                fn, host_bound, arg_name, to_sync_arg(acquire())
+            )
+            return fn(*call_args, **call_kwargs)
 
         return _finalize_wrapper(wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata)
 
@@ -73,8 +80,11 @@ def _wrap_handler(
         async def async_wrapper_rel(*args: Any, **kwargs: Any) -> Any:
             resource = acquire()
             try:
-                kwargs[arg_name] = to_async_arg(resource)
-                return await fn(*args, **kwargs)
+                host_bound = _bind_host_args(host_sig, args, kwargs)
+                call_args, call_kwargs = _finalize_injected_call(
+                    fn, host_bound, arg_name, to_async_arg(resource)
+                )
+                return await fn(*call_args, **call_kwargs)
             finally:
                 release(resource)
 
@@ -86,8 +96,11 @@ def _wrap_handler(
     def wrapper_rel(*args: Any, **kwargs: Any) -> Any:
         resource = acquire()
         try:
-            kwargs[arg_name] = to_sync_arg(resource)
-            return fn(*args, **kwargs)
+            host_bound = _bind_host_args(host_sig, args, kwargs)
+            call_args, call_kwargs = _finalize_injected_call(
+                fn, host_bound, arg_name, to_sync_arg(resource)
+            )
+            return fn(*call_args, **call_kwargs)
         finally:
             release(resource)
 

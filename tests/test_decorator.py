@@ -448,6 +448,79 @@ def test_input_params_callable_resolves_positional_handler_argument(tmp_path: Pa
     assert handler(FakeReq(0)) == [{"id": 2, "name": "Bob"}]
 
 
+# =====================================================================
+# Regression (#446): positional calls against the exposed host signature
+# must be equivalent to keyword calls, regardless of where the injected
+# parameter sits in the original function's real parameter order.
+# =====================================================================
+
+
+def test_input_positional_call_with_injected_param_first(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-injected-first.db")
+    _create_users_table(url)
+
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
+    def handler(user: dict[str, object] | None, label: str) -> dict[str, object | str | None]:
+        return {"label": label, "user": user}
+
+    assert handler("review-request") == {
+        "label": "review-request",
+        "user": {"id": 1, "name": "Alice"},
+    }
+
+
+def test_input_async_positional_call_with_injected_param_first(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "input-async-injected-first.db")
+    _create_users_table(url)
+
+    @DbBindings().input("user", url=url, table="users", pk={"id": 1})
+    async def handler(user: dict[str, object] | None, label: str) -> dict[str, object | str | None]:
+        return {"label": label, "user": user}
+
+    assert asyncio.run(handler("review-request")) == {
+        "label": "review-request",
+        "user": {"id": 1, "name": "Alice"},
+    }
+
+
+def test_output_positional_call_with_injected_param_first(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "output-injected-first.db")
+    _create_orders_table(url)
+
+    @DbBindings().output("out", url=url, table="processed_orders")
+    def handler(out: DbOut, label: str) -> str:
+        out.set({"id": 1, "status": label})
+        return label
+
+    assert handler("shipped") == "shipped"
+    assert _read_orders(url) == [{"id": 1, "status": "shipped"}]
+
+
+def test_inject_reader_positional_call_with_injected_param_between(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "inject-reader-injected-between.db")
+    _create_users_table(url)
+
+    @DbBindings().inject_reader("reader", url=url, table="users")
+    def handler(label: str, reader: DbReader, other: str) -> dict[str, object] | None:
+        del label, other
+        return reader.get(pk={"id": 1})
+
+    assert handler("prefix", "suffix") == {"id": 1, "name": "Alice"}
+
+
+def test_inject_writer_positional_call_with_injected_param_first(tmp_path: Path) -> None:
+    url = _sqlite_url(tmp_path, "inject-writer-injected-first.db")
+    _create_orders_table(url)
+
+    @DbBindings().inject_writer("writer", url=url, table="processed_orders")
+    def handler(writer: DbWriter, label: str) -> str:
+        writer.insert(data={"id": 1, "status": label})
+        return label
+
+    assert handler("delivered") == "delivered"
+    assert _read_orders(url) == [{"id": 1, "status": "delivered"}]
+
+
 def test_input_query_returns_empty_list(tmp_path: Path) -> None:
     url = _sqlite_url(tmp_path, "input-query-empty.db")
     _create_users_table(url)

@@ -33,7 +33,9 @@ from .composition import (
 from .out import DbOut
 from .validation import (
     _apply_input_model,
+    _bind_host_args,
     _build_host_signature,
+    _finalize_injected_call,
     _resolve_callable,
     _validate_arg_name,
     _validate_model_type,
@@ -324,7 +326,11 @@ class DbBindings:
                 )
 
             is_async = inspect.iscoroutinefunction(fn)
-            handler_signature = inspect.signature(fn)
+            # Bind against the exposed host signature (#446), not fn's own
+            # full signature -- otherwise a positional caller argument could
+            # bind by raw position into the hidden injected parameter slot
+            # whenever `arg_name` is not the last parameter.
+            host_sig = _build_host_signature(fn, {arg_name})
 
             binding_info: dict[str, Any] = {
                 "kind": "input",
@@ -401,11 +407,13 @@ class DbBindings:
 
                 @functools.wraps(fn)
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    bound_args = handler_signature.bind_partial(*args, **kwargs)
-                    r_pk, r_params = _resolve_read_args(bound_args.arguments)
+                    host_bound = _bind_host_args(host_sig, args, kwargs)
+                    r_pk, r_params = _resolve_read_args(host_bound.arguments)
                     data = await asyncio.to_thread(_execute_read, r_pk, r_params)
-                    kwargs[arg_name] = _apply_input_model(data, model)
-                    return await fn(*args, **kwargs)
+                    call_args, call_kwargs = _finalize_injected_call(
+                        fn, host_bound, arg_name, _apply_input_model(data, model)
+                    )
+                    return await fn(*call_args, **call_kwargs)
 
                 return _finalize_wrapper(
                     async_wrapper,
@@ -417,11 +425,13 @@ class DbBindings:
 
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                bound_args = handler_signature.bind_partial(*args, **kwargs)
-                r_pk, r_params = _resolve_read_args(bound_args.arguments)
+                host_bound = _bind_host_args(host_sig, args, kwargs)
+                r_pk, r_params = _resolve_read_args(host_bound.arguments)
                 data = _execute_read(r_pk, r_params)
-                kwargs[arg_name] = _apply_input_model(data, model)
-                return fn(*args, **kwargs)
+                call_args, call_kwargs = _finalize_injected_call(
+                    fn, host_bound, arg_name, _apply_input_model(data, model)
+                )
+                return fn(*call_args, **call_kwargs)
 
             return _finalize_wrapper(
                 wrapper,
