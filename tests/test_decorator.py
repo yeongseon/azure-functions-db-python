@@ -448,6 +448,47 @@ def test_input_params_callable_resolves_positional_handler_argument(tmp_path: Pa
     assert handler(FakeReq(0)) == [{"id": 2, "name": "Bob"}]
 
 
+def test_input_pk_resolver_uses_omitted_handler_default(tmp_path: Path) -> None:
+    """Regression (#445): a resolver callable required an argument the
+    handler itself declares a default for. An omitted call must resolve
+    using the handler's own default, not raise for a "missing" argument
+    the handler never required the caller to supply."""
+    url = _sqlite_url(tmp_path, "input-pk-default.db")
+    _create_users_table(url)
+
+    @DbBindings().input("row", url=url, table="users", pk=lambda requested_id: {"id": requested_id})
+    def handler(
+        row: dict[str, object] | None, requested_id: int = 1
+    ) -> dict[str, object | int | None]:
+        return {"handler_id": requested_id, "row": row}
+
+    assert handler() == {"handler_id": 1, "row": {"id": 1, "name": "Alice"}}
+    assert handler(requested_id=1) == {"handler_id": 1, "row": {"id": 1, "name": "Alice"}}
+
+
+def test_input_params_resolver_default_cannot_override_handler_default(
+    tmp_path: Path,
+) -> None:
+    """Regression (#445): the resolver's OWN default (2) previously filled
+    in for a parameter the handler already defaults to a DIFFERENT value
+    (1), silently selecting a different row than the one the handler
+    observed itself requesting."""
+    url = _sqlite_url(tmp_path, "input-params-default.db")
+    _create_users_table_with_data(url)
+
+    @DbBindings().input(
+        "rows",
+        url=url,
+        query="SELECT id, name FROM users WHERE id = :wanted",
+        params=lambda requested_id=2: {"wanted": requested_id},
+    )
+    def handler(rows: list[dict[str, object]], requested_id: int = 1) -> dict[str, object | int]:
+        return {"handler_id": requested_id, "rows": rows}
+
+    assert handler() == {"handler_id": 1, "rows": [{"id": 1, "name": "Alice"}]}
+    assert handler(requested_id=1) == {"handler_id": 1, "rows": [{"id": 1, "name": "Alice"}]}
+
+
 # =====================================================================
 # Regression (#446): positional calls against the exposed host signature
 # must be equivalent to keyword calls, regardless of where the injected
