@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import AsyncGenerator, Generator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 import logging
 
@@ -1054,6 +1054,115 @@ class TestPollRunner:
 
         assert store.commit_calls == 0
 
+    def test_wrapper_returning_generator_is_not_acknowledged(self) -> None:
+        """Regression (#439): a generator object is not awaitable, so the
+        existing isawaitable() guard let it through uninvoked and the batch
+        was checkpointed without the handler body ever running."""
+        seen: list[int] = []
+
+        def actual_handler(events: list[RowChange]) -> Generator[None, None, None]:
+            for event in events:
+                event_id = event.pk["id"]
+                assert isinstance(event_id, int)
+                seen.append(event_id)
+            yield None
+
+        def wrapper(events: list[RowChange]) -> object:
+            return actual_handler(events)
+
+        store = FakeStateStore()
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=wrapper,
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert seen == []
+        assert store.commit_calls == 0
+
+    def test_context_wrapper_returning_generator_is_not_acknowledged(self) -> None:
+        """Regression (#439): the arity-2 (context-accepting) invocation path
+        must reject a generator result exactly like the arity-1 path."""
+
+        def actual_handler(
+            events: list[RowChange], context: PollContext
+        ) -> Generator[None, None, None]:
+            yield None
+
+        def wrapper(events: list[RowChange], context: PollContext) -> object:
+            return actual_handler(events, context)
+
+        store = FakeStateStore()
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=wrapper,
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert store.commit_calls == 0
+
+    def test_wrapper_returning_async_generator_is_not_acknowledged(self) -> None:
+        """Regression (#439): async generator objects are also not
+        awaitable and must be rejected without starting an event loop."""
+        seen: list[int] = []
+
+        async def actual_handler(events: list[RowChange]) -> AsyncGenerator[None, None]:
+            for event in events:
+                event_id = event.pk["id"]
+                assert isinstance(event_id, int)
+                seen.append(event_id)
+            yield None
+
+        def wrapper(events: list[RowChange]) -> object:
+            return actual_handler(events)
+
+        store = FakeStateStore()
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=wrapper,
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert seen == []
+        assert store.commit_calls == 0
+
+    def test_callable_object_returning_generator_is_not_acknowledged(self) -> None:
+        """Regression (#439): a callable object (not a plain function) that
+        returns a generator must be rejected the same way."""
+
+        class GeneratorReturningHandler:
+            def __call__(self, events: list[RowChange]) -> Generator[None, None, None]:
+                yield None
+
+        store = FakeStateStore()
+        runner = PollRunner(
+            name="test_poller",
+            source=FakeSourceAdapter(batches=[[{"id": 1, "updated_at": 100}]]),
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=GeneratorReturningHandler(),
+        )
+
+        with pytest.raises(HandlerError, match="Handler failed"):
+            runner.tick()
+
+        assert store.commit_calls == 0
+
     def test_handler_checkpoint_mutation_cannot_change_committed_state(self) -> None:
         records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
         store = FakeStateStore()
@@ -1315,6 +1424,43 @@ class TestPollRunner:
                 state_store=store,
                 normalizer=_default_normalizer,
                 handler=async_handler,
+            )
+
+    def test_generator_function_handler_rejected_at_declaration(self) -> None:
+        """Regression (#439): a generator-function handler must be rejected
+        up front, the same way an async-function handler already is --
+        `isawaitable()` at invocation time does not catch it."""
+        source = FakeSourceAdapter(batches=[])
+        store = FakeStateStore()
+
+        def generator_handler(events: list[RowChange]) -> Generator[None, None, None]:
+            yield None
+
+        with pytest.raises(TypeError, match="generator"):
+            PollRunner(
+                name="test_poller",
+                source=source,
+                state_store=store,
+                normalizer=_default_normalizer,
+                handler=generator_handler,
+            )
+
+    def test_async_generator_function_handler_rejected_at_declaration(self) -> None:
+        """Regression (#439): an async-generator-function handler must also
+        be rejected up front."""
+        source = FakeSourceAdapter(batches=[])
+        store = FakeStateStore()
+
+        async def async_generator_handler(events: list[RowChange]) -> AsyncGenerator[None, None]:
+            yield None
+
+        with pytest.raises(TypeError, match="generator"):
+            PollRunner(
+                name="test_poller",
+                source=source,
+                state_store=store,
+                normalizer=_default_normalizer,
+                handler=async_generator_handler,
             )
 
     def test_invalid_batch_size_rejected(self) -> None:
