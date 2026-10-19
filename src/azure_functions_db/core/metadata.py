@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import weakref
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.schema import MetaData, Table
@@ -41,11 +42,48 @@ def reflect_table(
     return table
 
 
+_SubKey = tuple[str, "str | None", str]
+_CacheKey = tuple[int, str, "str | None", str]
+
+
 class MetadataCache:
+    """Process-wide reflected-table cache, scoped by engine identity.
+
+    Keying by URL/schema/table alone is unsound (#436): two independent
+    physical databases can share the exact same textual URL (e.g. two
+    separate ``sqlite:///:memory:`` engines), so a second reader would
+    silently receive the first database's reflected columns. Every cache
+    entry is therefore additionally scoped by ``id(engine)``.
+
+    ``id()`` is safe here specifically because entries for a given engine
+    are purged via a ``weakref.finalize`` callback that runs when that
+    *exact* engine object is garbage collected -- so a later, unrelated
+    object can never reuse that id while stale entries for it still exist.
+    """
+
     def __init__(self) -> None:
         self._lock: threading.Lock = threading.Lock()
-        self._cache: dict[tuple[str, str | None, str], Table] = {}
-        self._inflight: dict[tuple[str, str | None, str], threading.Event] = {}
+        self._cache: dict[_CacheKey, Table] = {}
+        self._inflight: dict[_CacheKey, threading.Event] = {}
+        self._engine_keys: dict[int, set[_CacheKey]] = {}
+
+    def _track_key(self, engine: Engine, cache_key: _CacheKey) -> None:
+        engine_id = id(engine)
+        keys = self._engine_keys.get(engine_id)
+        if keys is None:
+            keys = set()
+            self._engine_keys[engine_id] = keys
+            weakref.finalize(engine, self._purge_engine, engine_id)
+        keys.add(cache_key)
+
+    def _purge_engine(self, engine_id: int) -> None:
+        with self._lock:
+            keys = self._engine_keys.pop(engine_id, None)
+            if not keys:
+                return
+            for key in keys:
+                self._cache.pop(key, None)
+                self._inflight.pop(key, None)
 
     def get_or_reflect(
         self,
@@ -56,7 +94,7 @@ class MetadataCache:
         table_name: str,
     ) -> Table | None:
         resolved_url = resolve_env_vars(url)
-        cache_key = (resolved_url, schema, table_name)
+        cache_key: _CacheKey = (id(engine), resolved_url, schema, table_name)
 
         should_reflect = False
         wait_event: threading.Event | None = None
@@ -70,6 +108,7 @@ class MetadataCache:
             if wait_event is None:
                 wait_event = threading.Event()
                 self._inflight[cache_key] = wait_event
+                self._track_key(engine, cache_key)
                 should_reflect = True
 
         if not should_reflect:
@@ -98,15 +137,20 @@ class MetadataCache:
                 if event is not None:
                     event.set()
 
-    def invalidate(self, *, url: str, schema: str | None, table_name: str) -> None:
+    def invalidate(self, *, engine: Engine, url: str, schema: str | None, table_name: str) -> None:
         resolved_url = resolve_env_vars(url)
-        cache_key = (resolved_url, schema, table_name)
+        cache_key: _CacheKey = (id(engine), resolved_url, schema, table_name)
         with self._lock:
             _ = self._cache.pop(cache_key, None)
+            keys = self._engine_keys.get(id(engine))
+            if keys is not None:
+                keys.discard(cache_key)
 
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
+            self._inflight.clear()
+            self._engine_keys.clear()
 
 
 _metadata_cache = MetadataCache()
