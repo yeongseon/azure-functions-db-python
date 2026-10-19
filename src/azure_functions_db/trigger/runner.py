@@ -180,10 +180,17 @@ class PollRunner:
         max_attempts = 1 if policy is None else policy.max_retries + 1
         for attempt in range(max_attempts):
             try:
+                # Each attempt gets its own deep copy (#440): the handler
+                # contract allows consuming/mutating the supplied list and
+                # its RowChange payloads in place. Handing out the shared
+                # `events` reference let a partial consume-then-fail attempt
+                # silently shrink the batch the next retry (and the
+                # downstream processed-count accounting) ever sees.
+                attempt_events = copy.deepcopy(events)
                 if self._handler_arity >= 2:
-                    result = self._handler(events, context)
+                    result = self._handler(attempt_events, context)
                 else:
-                    result = self._handler(events)
+                    result = self._handler(attempt_events)
                 if inspect.isawaitable(result):
                     if inspect.iscoroutine(result):
                         result.close()

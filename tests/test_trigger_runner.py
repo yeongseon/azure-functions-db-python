@@ -341,6 +341,45 @@ class TestPollRunner:
             pytest.approx(2.0),
         ]  # noqa: S101
 
+    def test_retry_gives_each_attempt_an_isolated_batch_copy(self) -> None:
+        """Regression (#440): a handler that mutates its input list/events
+        across a transient failure must not lose rows on retry, and the
+        committed processed-count must reflect the original batch, not
+        whatever the handler's own list mutation left behind."""
+        from azure_functions_db.trigger.retry import RetryPolicy
+
+        records: list[RawRecord] = [{"id": 1, "updated_at": 100}]
+        source = FakeSourceAdapter(batches=[records])
+        store = FakeStateStore()
+        attempts: list[list[object]] = []
+        delivered: list[object] = []
+
+        def consume_then_write(events: list[RowChange]) -> None:
+            attempts.append([event.pk["id"] for event in events])
+            while events:
+                event = events.pop()
+                if len(attempts) == 1:
+                    msg = "simulated transient write failure"
+                    raise RuntimeError(msg)
+                delivered.append(event.pk["id"])
+
+        runner = PollRunner(
+            name="mutating_poller",
+            source=source,
+            state_store=store,
+            normalizer=_default_normalizer,
+            handler=consume_then_write,
+            retry_policy=RetryPolicy(max_retries=1, base_delay_seconds=0.001),
+        )
+        runner._sleep = lambda _delay: None  # noqa: SLF001
+
+        processed = runner.tick()
+
+        assert attempts == [[1], [1]]  # noqa: S101
+        assert delivered == [1]  # noqa: S101
+        assert processed == 1  # noqa: S101
+        assert store.commit_calls == 1  # noqa: S101
+
     def test_retry_policy_respects_max_delay_cap(self) -> None:
         """delay_for_attempt is clamped to max_delay_seconds."""
         from azure_functions_db.trigger.retry import RetryPolicy
