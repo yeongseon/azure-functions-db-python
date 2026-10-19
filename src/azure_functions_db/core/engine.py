@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import atexit
+import inspect
 import json
 import threading
 
 from sqlalchemy.engine import Engine, create_engine
+from sqlalchemy.pool import Pool
 
-from .config import DbConfig, resolve_env_vars
+from .config import DbConfig
 from .errors import ConfigurationError
 
 
@@ -38,14 +40,36 @@ class EngineProvider:
             raise ConfigurationError(msg)
 
         kwargs: dict[str, object] = {
-            "pool_size": config.pool_size,
             "pool_recycle": config.pool_recycle,
             "echo": config.echo,
         }
+        if self._pool_size_supported(config.engine_kwargs.get("poolclass")):
+            kwargs["pool_size"] = config.pool_size
         if config.connect_args is not None:
             kwargs["connect_args"] = dict(config.connect_args)
         kwargs.update(config.engine_kwargs)
-        return create_engine(resolve_env_vars(config.connection_url), **kwargs)
+        # config.connection_url is already fully resolved -- every DbConfig
+        # reaching this provider was constructed through resolve_db_config(),
+        # which resolves %VAR% tokens exactly once. Re-resolving here (#438)
+        # would reinterpret the ALREADY-EXPANDED connection string (which may
+        # itself legitimately contain %-looking substrings, e.g. a
+        # percent-encoded password) as if it still needed expansion.
+        return create_engine(config.connection_url, **kwargs)
+
+    @staticmethod
+    def _pool_size_supported(poolclass: type[Pool] | None) -> bool:
+        """Return whether *poolclass* accepts a ``pool_size`` constructor
+        argument. ``pool_size`` is a ``QueuePool``-specific sizing option;
+        SQLAlchemy's ``create_engine()`` rejects it outright for pool
+        classes that don't accept it (``StaticPool``, ``NullPool``,
+        ``AssertionPool``), so it must only be forwarded when the effective
+        poolclass actually supports it (#437). When no override is given,
+        SQLAlchemy's own default poolclass selection is assumed to support
+        it, preserving today's default behavior.
+        """
+        if poolclass is None:
+            return True
+        return "pool_size" in inspect.signature(poolclass).parameters
 
     def dispose_all(self) -> None:
         with self._lock:
@@ -57,8 +81,10 @@ class EngineProvider:
 
     @staticmethod
     def _cache_key(config: DbConfig) -> str:
+        # config.connection_url is already resolved -- see the matching note
+        # in create_isolated_engine (#438).
         normalized = {
-            "connection_url": resolve_env_vars(config.connection_url),
+            "connection_url": config.connection_url,
             "pool_size": config.pool_size,
             "pool_recycle": config.pool_recycle,
             "echo": config.echo,

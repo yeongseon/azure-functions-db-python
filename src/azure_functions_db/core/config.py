@@ -7,7 +7,16 @@ from typing import Any
 
 from .errors import ConfigurationError
 
-_ENV_TOKEN = re.compile(r"%%|%(\w+)%")
+# A %VAR% token's name must start with a letter or underscore (standard
+# POSIX environment-variable naming), not `\w+` (which also allows a
+# leading digit). This is the unambiguous boundary against URL percent-
+# escapes (#438): a percent-encoded byte is always exactly two hex digits,
+# and virtually every URL-reserved character encodes to a hex pair starting
+# with a digit (e.g. '@' -> %40, '/' -> %2F, ':' -> %3A), so a digit-led
+# %...% match can only ever be an accidental escape collision -- never an
+# intended token, since no POSIX environment variable name starts with a
+# digit in the first place.
+_ENV_TOKEN = re.compile(r"%%|%([A-Za-z_]\w*)%")
 
 
 def resolve_env_vars(value: str) -> str:

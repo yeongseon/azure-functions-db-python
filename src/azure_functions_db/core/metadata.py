@@ -6,8 +6,6 @@ import weakref
 from sqlalchemy.engine import Engine
 from sqlalchemy.schema import MetaData, Table
 
-from .config import resolve_env_vars
-
 
 def reflect_table(
     *,
@@ -93,8 +91,16 @@ class MetadataCache:
         schema: str | None,
         table_name: str,
     ) -> Table | None:
-        resolved_url = resolve_env_vars(url)
-        cache_key: _CacheKey = (id(engine), resolved_url, schema, table_name)
+        """Reflect and cache *table_name*, keyed by engine identity and *url*.
+
+        *url* is expected to already be fully resolved (every caller passes
+        a ``DbConfig.connection_url``, which ``resolve_db_config()`` resolves
+        exactly once at construction) -- re-resolving it here would
+        reinterpret an already-expanded connection string, which may itself
+        legitimately contain %-looking substrings such as a percent-encoded
+        password (#438).
+        """
+        cache_key: _CacheKey = (id(engine), url, schema, table_name)
 
         should_reflect = False
         wait_event: threading.Event | None = None
@@ -137,9 +143,12 @@ class MetadataCache:
                 if event is not None:
                     event.set()
 
-    def invalidate(self, *, engine: Engine, url: str, schema: str | None, table_name: str) -> None:
-        resolved_url = resolve_env_vars(url)
-        cache_key: _CacheKey = (id(engine), resolved_url, schema, table_name)
+    def invalidate(
+        self, *, engine: Engine, url: str, schema: str | None, table_name: str
+    ) -> None:
+        """Evict the cached entry for *engine*/*url* (already resolved --
+        see :meth:`get_or_reflect`)."""
+        cache_key: _CacheKey = (id(engine), url, schema, table_name)
         with self._lock:
             _ = self._cache.pop(cache_key, None)
             keys = self._engine_keys.get(id(engine))

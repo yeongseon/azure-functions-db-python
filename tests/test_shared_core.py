@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, insert, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.pool import QueuePool
 
 from azure_functions_db import SqlAlchemySource
 from azure_functions_db.core.config import DbConfig, resolve_env_vars
@@ -85,6 +86,25 @@ class TestDbConfig:
     def test_env_var_missing_raises(self) -> None:
         with pytest.raises(ConfigurationError, match="not set"):
             resolve_env_vars("%NONEXISTENT_VAR_XYZ%")
+
+    def test_env_var_preserves_percent_encoded_password(self) -> None:
+        """Regression (#438): a percent-encoded password spanning two escape
+        sequences (e.g. '@' -> %40, '/' -> %2F) was misread as a single
+        %VAR% token ('40ss') because the token regex accepted a digit-led
+        name -- POSIX environment variable names must start with a letter
+        or underscore, so a digit-led match can only ever be an accidental
+        percent-escape collision, never an intended token."""
+        url = "postgresql://user:p%40ss%2Fword@localhost/example"
+        assert resolve_env_vars(url) == url
+
+    def test_env_var_preserves_percent_encoded_alongside_real_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REVIEW_HOST", "myhost")
+        assert (
+            resolve_env_vars("postgresql://user:p%40ss@%REVIEW_HOST%/db")
+            == "postgresql://user:p%40ss@myhost/db"
+        )
 
     def test_env_var_no_tokens_returns_unchanged(self) -> None:
         assert resolve_env_vars("sqlite:///plain.db") == "sqlite:///plain.db"
@@ -174,6 +194,57 @@ class TestEngineProvider:
 
         engine = provider.get_engine(config)
         assert engine.pool._pre_ping is True
+        provider.dispose_all()
+
+    def test_staticpool_override_is_usable(self) -> None:
+        """Regression (#437): EngineProvider unconditionally forwarded
+        pool_size, which StaticPool's create_engine() path rejects --
+        the documented shared in-memory SQLite configuration
+        (engine_kwargs={'poolclass': StaticPool}) could not create an
+        engine at all."""
+        from sqlalchemy.pool import StaticPool
+
+        provider = EngineProvider()
+        config = DbConfig(
+            connection_url="sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            engine_kwargs={"poolclass": StaticPool},
+        )
+
+        engine = provider.get_engine(config)
+        assert type(engine.pool).__name__ == "StaticPool"
+
+        # Shared in-memory access under its intended threading configuration.
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE t (id INTEGER PRIMARY KEY)"))
+            conn.execute(text("INSERT INTO t (id) VALUES (1)"))
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT id FROM t")).scalar() == 1
+        provider.dispose_all()
+
+    def test_nullpool_override_is_usable(self, tmp_path: Path) -> None:
+        """Regression (#437): NullPool has the same pool_size incompatibility
+        as StaticPool -- confirm the fix is general, not StaticPool-specific."""
+        from sqlalchemy.pool import NullPool
+
+        url = _create_orders_db(tmp_path / "nullpool.db")
+        provider = EngineProvider()
+        config = DbConfig(connection_url=url, engine_kwargs={"poolclass": NullPool})
+
+        engine = provider.get_engine(config)
+        assert type(engine.pool).__name__ == "NullPool"
+        provider.dispose_all()
+
+    def test_pool_size_still_forwarded_without_poolclass_override(self, tmp_path: Path) -> None:
+        """Control for #437: the default pooling path (no poolclass
+        override) must still receive the configured pool_size."""
+        url = _create_orders_db(tmp_path / "default_pool.db")
+        provider = EngineProvider()
+        config = DbConfig(connection_url=url, pool_size=11)
+
+        engine = provider.get_engine(config)
+        assert isinstance(engine.pool, QueuePool)
+        assert engine.pool.size() == 11
         provider.dispose_all()
 
     def test_different_engine_kwargs_create_separate_engines(self, tmp_path: Path) -> None:
