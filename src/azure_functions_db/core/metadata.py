@@ -60,7 +60,14 @@ class MetadataCache:
     """
 
     def __init__(self) -> None:
-        self._lock: threading.Lock = threading.Lock()
+        # RLock, not Lock (#436): weakref.finalize callbacks can run
+        # SYNCHRONOUSLY, in this same thread, at essentially any point an
+        # object's refcount happens to drop to zero -- including while this
+        # very lock is already held (e.g. a dict mutation below drops the
+        # last reference to some unrelated, already-disposed engine). A
+        # plain Lock would deadlock the moment _purge_engine tried to
+        # re-acquire it from inside that nested call.
+        self._lock: threading.RLock = threading.RLock()
         self._cache: dict[_CacheKey, Table] = {}
         self._inflight: dict[_CacheKey, threading.Event] = {}
         self._engine_keys: dict[int, set[_CacheKey]] = {}

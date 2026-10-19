@@ -144,6 +144,40 @@ class TestMetadataCache:
         assert second is tables[1]
         assert len(metadata_instances) == 2
 
+    def test_purge_callback_reentering_lock_does_not_deadlock(self) -> None:
+        """Regression (#436): weakref.finalize callbacks can run
+        synchronously, in whatever thread happens to drop the last
+        reference to the finalized object -- including a thread that
+        already holds this cache's lock (e.g. inside get_or_reflect's
+        critical section, if an unrelated engine's refcount drops to zero
+        as a side effect of a dict mutation there). A plain threading.Lock
+        would deadlock the moment _purge_engine tried to re-acquire it from
+        that nested call; this reproduces exactly that nesting directly."""
+        cache = MetadataCache()
+        engine = Mock(spec=Engine)
+        table = _make_table("users")
+        metadata = Mock()
+        metadata.tables = {"users": table}
+
+        with patch("azure_functions_db.core.metadata.MetaData", return_value=metadata):
+            cache.get_or_reflect(
+                engine=engine, url="sqlite:///:memory:", schema=None, table_name="users"
+            )
+
+        engine_id = id(engine)
+
+        def reenter_while_holding_lock() -> None:
+            with cache._lock:  # noqa: SLF001
+                # Simulates a finalizer firing mid-critical-section, in the
+                # same thread, for an unrelated engine.
+                cache._purge_engine(engine_id)  # noqa: SLF001
+
+        thread = threading.Thread(target=reenter_while_holding_lock)
+        thread.start()
+        thread.join(timeout=2)
+
+        assert not thread.is_alive(), "lock re-entry from the same thread deadlocked"
+
     def test_clear_removes_all_entries(self) -> None:
         cache = MetadataCache()
         engine = Mock(spec=Engine)
