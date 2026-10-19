@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -354,6 +354,43 @@ class TestBlobCheckpointStoreReleaseLease:
 
         state = _read_blob_state(container, "test_poller")
         assert state["lease"]["fencing_token"] == 1
+
+    def test_release_then_immediate_acquire_succeeds(self) -> None:
+        """Regression (#441): a voluntarily released lease is otherwise
+        indistinguishable from a naturally expired one, so acquisition
+        applied the abandoned-lease clock-skew grace (min(ttl*0.5, 5.0)
+        seconds) to it too -- an explicit release should be immediately
+        reacquirable, with no waiting, even under a frozen clock."""
+        store, container = _make_store()
+        now = datetime(2026, 10, 17, tzinfo=UTC)
+        with patch("azure_functions_db.state.blob._now_utc", return_value=now):
+            lease_id = store.acquire_lease("test_poller", 120)
+            store.release_lease("test_poller", lease_id)
+            reacquired = store.acquire_lease("test_poller", 120)
+
+        assert reacquired.rsplit(":", 1)[1] == "2"
+        state = _read_blob_state(container, "test_poller")
+        assert state["lease"]["fencing_token"] == 2
+
+    def test_naturally_expired_lease_still_retains_grace(self) -> None:
+        """Control for #441: a lease that was never released (heartbeat
+        simply stopped) must still honor the abandoned-lease clock-skew
+        grace -- the fix must not remove grace for genuine abandonment,
+        only for explicit release."""
+        store, container = _make_store()
+        now = datetime(2026, 10, 17, tzinfo=UTC)
+        with patch("azure_functions_db.state.blob._now_utc", return_value=now):
+            store.acquire_lease("test_poller", 10)  # ttl=10 -> grace = min(5.0, 5.0) = 5.0s
+
+        just_past_ttl = now + timedelta(seconds=10, milliseconds=500)
+        with patch("azure_functions_db.state.blob._now_utc", return_value=just_past_ttl):
+            with pytest.raises(LeaseConflictError):
+                store.acquire_lease("test_poller", 10)
+
+        past_grace = now + timedelta(seconds=16)
+        with patch("azure_functions_db.state.blob._now_utc", return_value=past_grace):
+            reacquired = store.acquire_lease("test_poller", 10)
+        assert reacquired.rsplit(":", 1)[1] == "2"
 
     def test_release_raises_lost_lease_on_wrong_owner(self) -> None:
         store, container = _make_store()

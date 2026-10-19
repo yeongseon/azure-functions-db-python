@@ -210,7 +210,17 @@ class BlobCheckpointStore:
 
     @staticmethod
     def _is_lease_expired(lease: dict[str, Any], grace_seconds: float) -> bool:
-        """Return ``True`` if the lease is past ``expires_at + grace``."""
+        """Return ``True`` if the lease is past ``expires_at + grace``.
+
+        A voluntarily released lease (``released=True``) is always
+        immediately reacquirable, with no clock-skew grace -- the grace
+        period exists to protect an *abandoned* lease (one whose owner
+        stopped heartbeating without warning) from being stolen on a
+        borderline clock read, not one the owner explicitly relinquished
+        (#441).
+        """
+        if lease.get("released"):
+            return True
         expires_at_str = lease.get("expires_at")
         if expires_at_str is None:
             return True
@@ -365,6 +375,7 @@ class BlobCheckpointStore:
         self._verify_lease(state, owner_id, fencing_token, check_expiry=False)
 
         state["lease"]["expires_at"] = _iso(_now_utc())
+        state["lease"]["released"] = True
 
         try:
             self._write_state_conditional(poller_name, state, etag)
