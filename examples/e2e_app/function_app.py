@@ -14,6 +14,7 @@ import os
 
 import azure.functions as func
 
+import azure_functions_db
 from azure_functions_db import DbBindings, DbOut, DbReader, DbWriter
 
 app = func.FunctionApp()
@@ -29,6 +30,20 @@ DB_URL = os.environ.get("E2E_DB_URL", "sqlite:///e2e_test.db")
 def health(req: func.HttpRequest) -> func.HttpResponse:
     """Liveness probe used by e2e warmup loop."""
     return func.HttpResponse(json.dumps({"status": "ok"}), mimetype="application/json")
+
+
+# ── Package identity (#442: proves the deployed app runs the exact
+# certified candidate, not whatever `azure-functions-db` the remote
+# Azure build happened to resolve from PyPI) ──────────────────────────────
+
+
+@app.route(route="version", auth_level=func.AuthLevel.ANONYMOUS)
+def version(req: func.HttpRequest) -> func.HttpResponse:
+    """Report the installed azure_functions_db version for deployment
+    identity verification by the e2e-azure release-certification workflow."""
+    return func.HttpResponse(
+        json.dumps({"version": azure_functions_db.__version__}), mimetype="application/json"
+    )
 
 
 # ── Setup (creates table for tests) ───────────────────────────────────────
