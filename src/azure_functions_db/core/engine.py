@@ -67,10 +67,19 @@ class EngineProvider:
         }
 
         def _encode(obj: object) -> str:
-            # Include the fully-qualified type name so that two non-JSON-
-            # serializable objects whose str() representations are identical
-            # but whose types differ still produce distinct cache keys.
+            # A type name plus str()/repr() is not enough: two different
+            # instances of the SAME class can legitimately produce the same
+            # str() (e.g. a custom SQLAlchemy `creator` callable that embeds
+            # per-instance state without overriding __str__), and such
+            # instances can resolve to entirely different physical
+            # databases (#156). Fall back to object identity instead. This
+            # stays safe here specifically because the cache only maps a key
+            # to a *live* Engine, and SQLAlchemy's connection pool retains
+            # its own reference to a `creator` for as long as the Engine it
+            # belongs to exists -- so the id() of a cached non-JSON value
+            # cannot be reused by an unrelated object while its cache entry
+            # is still present.
             qualified = f"{type(obj).__module__}.{type(obj).__qualname__}"
-            return f"<{qualified}:{str(obj)!r}>"
+            return f"<{qualified}:{id(obj)}>"
 
         return json.dumps(normalized, sort_keys=True, default=_encode)
