@@ -168,31 +168,27 @@ class _AsyncDbWriterProxy(_AsyncProxyBase[DbWriter]):
         loop = asyncio.get_running_loop()
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="db-tx")
         cm = self._target.transaction()
-        entered = False
+        # One unconditional shutdown covers every exit path -- entry
+        # cancellation, entry error, body error/cancellation, and normal
+        # commit -- so cleanup never depends on a particular branch being
+        # reached or on context-manager/traceback garbage collection (#447).
         try:
-            enter_future = loop.run_in_executor(executor, cm.__enter__)
-            await asyncio.shield(enter_future)
-            entered = True
-        except asyncio.CancelledError as exc:
-            await self._wait_for_completion(enter_future)
-            entered = True
-            await self._async_exit(
-                loop,
-                executor,
-                cm,
-                type(exc),
-                exc,
-                exc.__traceback__,
-                swallow=True,
-            )
-            raise
-        except BaseException:
-            raise
-        finally:
-            if not entered:
-                executor.shutdown(wait=False)
+            try:
+                enter_future = loop.run_in_executor(executor, cm.__enter__)
+                await asyncio.shield(enter_future)
+            except asyncio.CancelledError as exc:
+                await self._wait_for_completion(enter_future)
+                await self._async_exit(
+                    loop,
+                    executor,
+                    cm,
+                    type(exc),
+                    exc,
+                    exc.__traceback__,
+                    swallow=True,
+                )
+                raise
 
-        try:
             try:
                 yield _AsyncTxWriterProxy(self._target, loop, executor)
             except BaseException as exc:
