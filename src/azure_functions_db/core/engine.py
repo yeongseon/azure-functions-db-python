@@ -8,7 +8,7 @@ import threading
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.pool import Pool
 
-from .config import DbConfig, resolve_env_vars
+from .config import DbConfig
 from .errors import ConfigurationError
 
 
@@ -48,7 +48,13 @@ class EngineProvider:
         if config.connect_args is not None:
             kwargs["connect_args"] = dict(config.connect_args)
         kwargs.update(config.engine_kwargs)
-        return create_engine(resolve_env_vars(config.connection_url), **kwargs)
+        # config.connection_url is already fully resolved -- every DbConfig
+        # reaching this provider was constructed through resolve_db_config(),
+        # which resolves %VAR% tokens exactly once. Re-resolving here (#438)
+        # would reinterpret the ALREADY-EXPANDED connection string (which may
+        # itself legitimately contain %-looking substrings, e.g. a
+        # percent-encoded password) as if it still needed expansion.
+        return create_engine(config.connection_url, **kwargs)
 
     @staticmethod
     def _pool_size_supported(poolclass: type[Pool] | None) -> bool:
@@ -75,8 +81,10 @@ class EngineProvider:
 
     @staticmethod
     def _cache_key(config: DbConfig) -> str:
+        # config.connection_url is already resolved -- see the matching note
+        # in create_isolated_engine (#438).
         normalized = {
-            "connection_url": resolve_env_vars(config.connection_url),
+            "connection_url": config.connection_url,
             "pool_size": config.pool_size,
             "pool_recycle": config.pool_recycle,
             "echo": config.echo,

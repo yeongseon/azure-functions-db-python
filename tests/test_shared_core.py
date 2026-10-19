@@ -87,6 +87,25 @@ class TestDbConfig:
         with pytest.raises(ConfigurationError, match="not set"):
             resolve_env_vars("%NONEXISTENT_VAR_XYZ%")
 
+    def test_env_var_preserves_percent_encoded_password(self) -> None:
+        """Regression (#438): a percent-encoded password spanning two escape
+        sequences (e.g. '@' -> %40, '/' -> %2F) was misread as a single
+        %VAR% token ('40ss') because the token regex accepted a digit-led
+        name -- POSIX environment variable names must start with a letter
+        or underscore, so a digit-led match can only ever be an accidental
+        percent-escape collision, never an intended token."""
+        url = "postgresql://user:p%40ss%2Fword@localhost/example"
+        assert resolve_env_vars(url) == url
+
+    def test_env_var_preserves_percent_encoded_alongside_real_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REVIEW_HOST", "myhost")
+        assert (
+            resolve_env_vars("postgresql://user:p%40ss@%REVIEW_HOST%/db")
+            == "postgresql://user:p%40ss@myhost/db"
+        )
+
     def test_env_var_no_tokens_returns_unchanged(self) -> None:
         assert resolve_env_vars("sqlite:///plain.db") == "sqlite:///plain.db"
 
