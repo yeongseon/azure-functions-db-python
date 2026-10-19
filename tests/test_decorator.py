@@ -1402,6 +1402,84 @@ def test_async_transaction_rollback_error_is_swallowed() -> None:
     assert cm.exit_calls[0][0] is _Boom
 
 
+def test_async_transaction_cancellation_during_entry_shuts_down_executor() -> None:
+    """Regression (#447): cancelling the task while `transaction()` is still
+    waiting for the pinned-thread `__enter__` rolls back and preserves
+    ``CancelledError`` correctly, but the dedicated executor for that
+    transaction must still be shut down explicitly -- it must not be left to
+    depend on garbage collection of the context-manager/traceback."""
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from unittest.mock import patch
+
+    class TrackedExecutor(ThreadPoolExecutor):
+        instances: list[TrackedExecutor] = []
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            self.shutdown_calls: list[dict[str, Any]] = []
+            TrackedExecutor.instances.append(self)
+
+        def shutdown(self, *args: Any, **kwargs: Any) -> None:
+            self.shutdown_calls.append({"args": list(args), "kwargs": kwargs})
+            super().shutdown(*args, **kwargs)
+
+    class DummyWriter:
+        def __init__(self) -> None:
+            self.entering = threading.Event()
+            self.release = threading.Event()
+            self.exits: list[str] = []
+
+        @contextmanager
+        def transaction(self) -> Any:
+            self.entering.set()
+            if not self.release.wait(timeout=2):
+                msg = "probe controller did not release transaction entry"
+                raise TimeoutError(msg)
+            try:
+                yield self
+            except BaseException as exc:
+                self.exits.append(type(exc).__name__)
+                raise
+            else:
+                self.exits.append("normal")
+
+    TrackedExecutor.instances = []
+    target = DummyWriter()
+    proxy = decorator_mod._AsyncDbWriterProxy(cast(Any, target))
+    body_entered = False
+
+    async def operation() -> None:
+        nonlocal body_entered
+        async with proxy.transaction():
+            body_entered = True
+
+    async def run() -> None:
+        with patch(
+            "azure_functions_db.decorator.async_proxies.ThreadPoolExecutor", TrackedExecutor
+        ):
+            task = asyncio.create_task(operation())
+            deadline = asyncio.get_running_loop().time() + 2
+            while not target.entering.is_set():
+                if asyncio.get_running_loop().time() >= deadline:
+                    msg = "worker did not enter"
+                    raise TimeoutError(msg)
+                await asyncio.sleep(0.001)
+            task.cancel()
+            await asyncio.sleep(0)
+            target.release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, timeout=2)
+
+    asyncio.run(run())
+
+    assert body_entered is False
+    assert target.exits == ["CancelledError"]
+    executor = TrackedExecutor.instances[-1]
+    assert len(executor.shutdown_calls) == 1
+    assert executor.shutdown_calls[0]["kwargs"] == {"wait": False}
+
+
 # =====================================================================
 # Stacking tests
 # =====================================================================
