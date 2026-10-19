@@ -98,3 +98,14 @@ def test_inject_reader_writer() -> None:
     assert r.status_code == 200
     data = r.json()
     assert data["name"] == "azure-inject"
+
+
+@pytest.mark.skipif(not BASE_URL, reason=SKIP_REASON)
+def test_version_endpoint_reports_a_version_string() -> None:
+    """Smoke-check the identity endpoint the e2e-azure workflow's deployed-
+    version gate relies on (#442) -- the hard version-match assertion itself
+    lives in the workflow step (tools/check_deployed_version.py), not here."""
+    r = _get("/api/version")
+    assert r.status_code == 200
+    assert isinstance(r.json().get("version"), str)
+    assert r.json()["version"]
