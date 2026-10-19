@@ -316,6 +316,73 @@ class TestEngineProvider:
         assert key_a != key_b, "str '42' and int 42 must produce distinct cache keys"
         provider.dispose_all()
 
+    def test_cache_key_distinguishes_same_class_instances_with_equal_str(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression (#156, reopened): the type-name fix alone does not
+        distinguish two DIFFERENT instances of the SAME class whose str()
+        happens to be equal -- SQLAlchemy's public `creator` hook can be such
+        an object, and two instances pointing at different physical
+        databases must never collide into the same cached engine."""
+
+        class Creator:
+            def __init__(self, path: Path) -> None:
+                self.path = path
+
+            def __call__(self) -> object:
+                import sqlite3
+
+                return sqlite3.connect(self.path)
+
+            def __str__(self) -> str:
+                return "connection creator"
+
+        path_a = tmp_path / "a.db"
+        path_b = tmp_path / "b.db"
+        import sqlite3
+
+        for path, marker in [(path_a, "A"), (path_b, "B")]:
+            with sqlite3.connect(path) as setup_conn:
+                setup_conn.execute("CREATE TABLE marker(value TEXT)")
+                setup_conn.execute("INSERT INTO marker VALUES (?)", (marker,))
+
+        config_a = DbConfig(connection_url="sqlite://", engine_kwargs={"creator": Creator(path_a)})
+        config_b = DbConfig(connection_url="sqlite://", engine_kwargs={"creator": Creator(path_b)})
+
+        provider = EngineProvider()
+        key_a = provider._cache_key(config_a)
+        key_b = provider._cache_key(config_b)
+        assert key_a != key_b, "distinct creator instances must not share a cache key"
+
+        engine_a = provider.get_engine(config_a)
+        engine_b = provider.get_engine(config_b)
+        assert engine_a is not engine_b
+
+        with engine_b.connect() as conn:
+            actual = conn.exec_driver_sql("SELECT value FROM marker").scalar()
+        assert actual == "B"
+        provider.dispose_all()
+
+    def test_cache_key_still_reuses_same_creator_instance(self, tmp_path: Path) -> None:
+        """The same intended creator (and equivalent primitive configs) must
+        still share one cached engine -- the fix for #156 must not defeat
+        normal cache reuse."""
+
+        class Creator:
+            def __call__(self) -> object:
+                import sqlite3
+
+                return sqlite3.connect(":memory:")
+
+        creator = Creator()
+        config_first = DbConfig(connection_url="sqlite://", engine_kwargs={"creator": creator})
+        config_second = DbConfig(connection_url="sqlite://", engine_kwargs={"creator": creator})
+
+        provider = EngineProvider()
+        assert provider._cache_key(config_first) == provider._cache_key(config_second)
+        assert provider.get_engine(config_first) is provider.get_engine(config_second)
+        provider.dispose_all()
+
 
 class TestSerializers:
     def test_serialize_cursor_part_datetime(self) -> None:
