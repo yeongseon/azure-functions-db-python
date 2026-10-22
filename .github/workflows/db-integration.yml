@@ -6,6 +6,8 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "tools/**"
+      - "Makefile"
       - ".github/workflows/db-integration.yml"
       - "pyproject.toml"
       - "*.lock"
@@ -14,6 +16,8 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "tools/**"
+      - "Makefile"
       - ".github/workflows/db-integration.yml"
       - "pyproject.toml"
       - "*.lock"
@@ -80,11 +84,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Start Azurite with skipApiVersionCheck
-        run: |
-          npm install -g azurite
-          azurite --skipApiVersionCheck --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 &
-          sleep 3
+      - name: Install Azurite for the required managed checkpoint-store lane
+        run: npm install -g azurite
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -105,9 +106,7 @@ jobs:
           /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPass1!' -C -Q "CREATE DATABASE testdb"
 
       - name: Install package with all extras
-        run: |
-          pip install hatch
-          pip install -e ".[all,dev]"
+        run: make install-ci
 
       - name: Set test DB URL
         run: |
@@ -126,33 +125,17 @@ jobs:
               ;;
           esac
 
-      - name: Set Azurite connection string
-        run: |
-          echo "TEST_AZURITE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;" >> "$GITHUB_ENV"
-
       - name: Run integration tests
-        run: |
-          pytest tests/integration -m "integration and ${{ matrix.db }}" \
-            -v --no-cov --tb=short \
-            --html=integration-report/report.html --self-contained-html \
-            || pytest tests/integration -m "integration" \
-            -v --no-cov --tb=short \
-            --html=integration-report/report.html --self-contained-html
+        run: python -m tools.verification backend "${{ matrix.db }}"
 
       - name: Run Azurite tests
-        if: always()
-        run: |
-          pytest tests/integration -m "azurite" \
-            -v --no-cov --tb=short \
-            --html=azurite-report/report.html --self-contained-html \
-            || true
+        # Required in every backend cell; never optional or an Azure certificate.
+        run: python -m tools.verification backend azurite --owned
 
       - name: Upload integration test report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-report-${{ matrix.db }}-${{ github.run_id }}
-          path: |
-            integration-report/
-            azurite-report/
+          path: test-results/**
           retention-days: 14
