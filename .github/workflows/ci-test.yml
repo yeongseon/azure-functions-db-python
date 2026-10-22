@@ -80,23 +80,21 @@ jobs:
         # Editable install builds the package from source on each matrix
         # interpreter (the 3.13/3.14 wheel/build lane) and pulls the dev extra
         # (pytest, pytest-cov) so tests run on the real interpreter.
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+        run: make install-ci
 
       - name: Run tests on the matrix interpreter
         # coverage.xml is emitted automatically via pytest addopts (--cov ...).
-        run: python -m pytest tests
+        run: python -m tools.verification test
 
       - name: Verify coverage output
-        run: ls -lh coverage.xml
+        run: ls -lh test-results/test/coverage.xml
 
       - name: Retain coverage report
         if: matrix.python-version == '3.11'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-python-3.11
-          path: coverage.xml
+          path: test-results/test/coverage.xml
           if-no-files-found: error
 
       - name: Report skipped Codecov upload
@@ -110,15 +108,22 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
+          files: ./test-results/test/coverage.xml
           verbose: true
           fail_ci_if_error: true
         env:
           CODECOV_RETRIES: 3
 
+      - name: Upload offline verification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-evidence-py${{ matrix.python-version }}
+          path: test-results/**
+
   quality:
     # Lint, type-check, workflow-lint and security run once on the single
-    # pinned interpreter (3.11) through Hatch -- these are interpreter-agnostic
+    # selected interpreter (3.11) -- these are interpreter-agnostic
     # gates, so running them per matrix cell would only duplicate reporting.
     needs: changes
     if: needs.changes.outputs.full_required == 'true'
@@ -138,15 +143,10 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install Hatch and dependencies via Makefile
-        run: |
-          pip install hatch
-          make install
+      - name: Install selected-interpreter quality dependencies
+        run: make install-ci
 
-      - name: Lint release, pin and hatch-matrix workflow guards
-        run: make lint-workflows
-
-      - name: Lint and type check
+      - name: Complete non-mutating quality gate
         run: make check
 
       - name: Ruff format check (changed Python files)
@@ -155,9 +155,6 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: make format-check-changed BASE="$PR_BASE_SHA" HEAD="$PR_HEAD_SHA"
-
-      - name: Security scan
-        run: make security
 
   sqlalchemy-latest-types:
     needs: changes
@@ -181,7 +178,7 @@ jobs:
         run: pip show sqlalchemy
 
       - name: Type check against latest accepted SQLAlchemy
-        run: mypy src tests
+        run: make typecheck
 
   shellcheck:
     needs: changes
@@ -234,7 +231,14 @@ jobs:
           PY
 
       - name: Run full suite against minimum runtime dependencies
-        run: pytest tests/ --no-cov
+        run: python -m tools.verification test --no-cov
+
+      - name: Upload minimum-dependency evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: minimum-dependency-evidence
+          path: test-results/**
 
   artifact-build:
     name: Build compatibility artifacts
@@ -385,47 +389,18 @@ jobs:
 
       - name: Install Functions host, Azurite, and checkout package
         run: |
-          npm install --global azure-functions-core-tools@4 --unsafe-perm true
-          python -m venv tests/host_smoke/.venv
-          tests/host_smoke/.venv/bin/python -m pip install --upgrade pip
-          tests/host_smoke/.venv/bin/python -m pip install .
+          npm install --global azure-functions-core-tools@4 azurite --unsafe-perm true
+          make install-ci
 
       - name: Run real Functions host smoke
-        run: |
-          npx --yes azurite --silent > "$RUNNER_TEMP/azurite.log" 2>&1 &
-          azurite_pid=$!
-          trap 'kill "$azurite_pid" 2>/dev/null || true' EXIT
+        run: make host-smoke
 
-          cd tests/host_smoke
-          export PATH="$PWD/.venv/bin:$PATH"
-          timeout 120s func start --verbose > "$RUNNER_TEMP/host-smoke.log" 2>&1 &
-          host_pid=$!
-
-          observed=false
-          for _ in {1..60}; do
-            if grep -q "DB_TRIGGER_HOST_SMOKE_OK" "$RUNNER_TEMP/host-smoke.log"; then
-              observed=true
-              break
-            fi
-            if ! kill -0 "$host_pid" 2>/dev/null; then
-              break
-            fi
-            sleep 2
-          done
-
-          kill "$host_pid" 2>/dev/null || true
-          wait "$host_pid" 2>/dev/null || true
-          cat "$RUNNER_TEMP/host-smoke.log"
-
-          if [ "$observed" != true ]; then
-            echo "::error::The database trigger did not execute"
-            exit 1
-          fi
-          if grep -Eq "Executed 'Functions\.db_trigger_host_smoke' \(Failed|without a \\$return binding.*returned a non-None value" "$RUNNER_TEMP/host-smoke.log"; then
-            echo "::error::The Functions host reported a failed trigger invocation"
-            exit 1
-          fi
-          grep -q "Executed 'Functions.db_trigger_host_smoke' (Succeeded" "$RUNNER_TEMP/host-smoke.log"
+      - name: Upload real host evidence (not Azure certification)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: host-evidence-py${{ matrix.python-version }}
+          path: test-results/**
 
   # azure-functions 2.x compatibility proof lane (issue #287), following the
   # sibling proof-lane pattern (azure-functions-openapi #508/#525,
@@ -493,7 +468,7 @@ jobs:
         # installed wheel with the source tree. We drop `src` (so the
         # wheel-installed package is genuinely exercised) but keep the repo root
         # `.` on the path for conftest/fixtures.
-        run: pytest tests/ --no-cov -q -o "pythonpath=."
+        run: python -m tools.verification test --no-cov -q -o "pythonpath=."
 
   docs-check:
     needs: changes
@@ -514,7 +489,14 @@ jobs:
         run: python -m pip install -e ".[docs]" pytest pytest-cov
 
       - name: Build docs strictly
-        run: mkdocs build --strict
+        run: make docs
+
+      - name: Upload documentation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-evidence
+          path: test-results/**
 
       - name: Run documentation drift tests
         run: >-
