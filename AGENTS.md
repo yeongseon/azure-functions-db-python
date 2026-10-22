@@ -21,7 +21,7 @@
 
 ### Test Coverage
 - Maintain test coverage at **95% or above** for committed changes and PRs.
-- Run `hatch run pytest --cov --cov-report=term-missing -q` to verify before submitting changes.
+- Run `make test` to verify the offline suite and coverage before submitting changes.
 - Any PR that drops coverage below 95% must include additional tests to compensate.
 - Preserve the package's Python compatibility and public API behavior unless the change explicitly updates the contract.
 - Keep documentation, examples, and tests synchronized.
@@ -110,10 +110,11 @@ This repository is **issue-based, not milestone-based**. Track and group work us
 - Before adding any organizational structure, check whether the repository already has an established convention. A category being empty or unused (zero milestones, no `epic:*` labels) is evidence to follow the existing pattern, not to introduce a new one.
 
 ## Validation
-- `make test`
-- `make lint`
-- `make typecheck`
-- `make build`
+- `make doctor` (read-only required prerequisites)
+- `make check` (non-mutating quality and workflow policy checks)
+- `make test` (offline, coverage >=95%)
+- `make integration` (strict required run-owned database/Azurite lanes)
+- `make verify` (`make check-all` is an exact alias)
 
 ## Release Process
 
@@ -189,15 +190,31 @@ Use Makefile entry points only. Do not bypass the Makefile in CI or contributor 
 | Purpose | Command |
 | --- | --- |
 | Environment setup | `make install` |
+| CI-selected interpreter setup | `make install-ci` |
+| Read-only prerequisites | `make doctor` |
 | Format code | `make format` |
 | Check formatting (`src`, `tests`) | `make format-check` |
 | Lint | `make lint` |
 | Type check | `make typecheck` |
-| Tests | `make test` |
+| Offline tests, coverage >=95% | `make test` |
+| Complete non-mutating quality | `make check` |
+| Run-owned database/Azurite integration | `make integration` |
+| Dedicated externally managed test database | `make integration-local` |
 | Coverage | `make cov` |
-| Full validation | `make check-all` |
+| Full local validation | `make verify` (`make check-all` exact alias) |
+| Existing deployed Azure candidate | `make e2e-azure` |
+| Render saved evidence only | `make report` |
+| Generated artifact cleanup only | `make clean` |
 | Docs build | `make docs` |
 | Package build | `make build` |
+
+See CONTRIBUTING.md for status/scope and `test-results/` evidence semantics.
+`DB_BACKEND` integration selections are PARTIAL; verify always requires all five
+backends plus separate host/wheel lanes. Required missing URLs/tools, zero selection
+and unexpected skips never pass. `integration-local` needs
+`DB_TEST_DATABASE_CONFIRMED=1`: fixtures mutate test tables but never drop a user
+database or remove external containers. `clean-all` retains deep cleanup including
+the project-local `.venv`. Local success never certifies real Azure.
 
 ## Commit Rules
 

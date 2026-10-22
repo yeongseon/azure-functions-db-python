@@ -36,12 +36,12 @@ Recommended branch prefixes:
 
 The package supports Python 3.11 through 3.14. Install Python 3.11 for the
 Makefile workflow because the default Hatch environment runs on Python 3.11.
-The standard checks do not require a running database, Docker, Azurite, or Azure
-Functions Core Tools; tests that need those services skip when their connection
-settings are absent.
+Offline quality checks and unit tests need no services. Full local verification
+requires Docker or Podman with a reachable daemon, Azurite, Functions Core Tools,
+the database driver extras and ODBC Driver 18 for SQL Server.
 
-From a fresh clone, bootstrap the project-managed virtual environment and Hatch
-environment with:
+Install Hatch once in an isolated tool environment. From a fresh clone, create
+the project-managed Hatch environment with:
 
 ```bash
 make install
@@ -51,30 +51,104 @@ Then run the standard verification commands:
 
 ```bash
 make test
-make lint
-make typecheck
-make build
+make check
+make verify
 ```
 
-Database integration tests require the corresponding `TEST_POSTGRES_URL`,
-`TEST_MYSQL_URL`, or `TEST_MSSQL_URL`. Live checkpoint-store tests require
-`TEST_AZURITE_CONN_STR`. CI supplies service-backed coverage for these paths;
-they are not required for the standard local workflow above.
+Routine commands never upgrade pip or reinstall Hatch. `make install-ci` installs
+into CI's selected interpreter, never Hatch's Python 3.11 default. `make doctor`
+checks prerequisites without installing anything; missing required tools exit nonzero.
 
 ## Project Commands
 
+| Command | Contract |
+| --- | --- |
+| `make install` | Idempotent Hatch dev/docs/database-driver setup and local hooks |
+| `make install-ci` | Install extras into the explicitly selected `PYTHON` |
+| `make doctor` | Read-only prerequisites; nonzero for missing required components |
+| `make format` / `make format-check` | Mutating Ruff format / non-mutating check |
+| `make check` | Ruff lint/format, strict mypy once, Bandit and all workflow policy guards |
+| `make test` | Offline SQLite/mock/unit suite, coverage >=95%, no live auto-skips |
+| `make integration` | Run-owned SQLite, PostgreSQL 16, MySQL 8, SQL Server 2022 and private Azurite |
+| `make integration-local` | Strict existing-URL tests; explicit dedicated-test-database confirmation |
+| `make verify` | Always check + test + every backend + real host + installed wheel + build + strict docs |
+| `make e2e-azure` | Existing deployed candidate only; explicit URL and expected version, no provisioning |
+| `make report` | Render saved evidence only; no tests or services |
+| `make clean` | Generated artifacts only; preserve environments and external resources |
+
+`make check-all` is an exact backward-compatible alias of `make verify`.
+`make clean-all` retains historical deep cleanup, including bytecode and `.venv`.
+`lint`, `style`, `typecheck`, `security`, `cov`, `lint-workflows`, `build`, `docs`,
+`host-smoke`, and `wheel-smoke` are focused/partial commands, not full verification.
+`make check` has no Docker, browser, host or emulator prerequisite.
+
+### Integration ownership and strict gates
+
+`DB_BACKEND=sqlite make integration` selects one backend and records **PARTIAL**
+evidence. Supported values: `sqlite`, `postgres`, `mysql`, `mssql`, `azurite`.
+`make verify` explicitly clears that focus and requires every backend; an absent
+container daemon or driver is INCOMPLETE/nonzero, never silently omitted.
+Owned runs use random service names, loopback ports, temporary SQLite/Azurite
+storage and bounded connection readiness. Cleanup removes only the exact containers
+and process groups created by this run, including interruption and timeout paths.
+
+For externally managed services, provide `TEST_POSTGRES_URL`, `TEST_MYSQL_URL`,
+`TEST_MSSQL_URL`, `TEST_SQLITE_URL`, or `TEST_AZURITE_CONN_STR` for the selected lane:
+
 ```bash
-make format      # Format code with ruff
-make lint        # Lint with ruff
-make typecheck   # Type check with mypy
-make test        # Run tests
-make cov         # Run tests with coverage
-make check-all   # Run the full local gate
+DB_BACKEND=postgres DB_TEST_DATABASE_CONFIRMED=1 make integration-local
 ```
+
+Use a **dedicated disposable test database**, never production or shared tables.
+Existing fixtures create/seed/drop test tables (including `users`, `orders`,
+`order_items`, and `typed_cursor_events`). Neither the runner nor cleanup ever
+drops/deletes a user database or stops/removes user-managed containers. Azurite tests
+delete only uniquely named test containers they created. Confirmation protects
+against accidentally pointing these table-mutating tests at a user database.
+
+Casual ad-hoc pytest discovery retains automatic missing-URL skips. Required lanes
+instead preflight the actual connection, select only the intended `db_key`/marker,
+and classify JUnit with executed >0 and **zero unexpected skips**. No broader
+selector fallback exists. Azurite checkpoint-store tests are required in every CI
+backend cell; there are no optional DB/Azurite cells in full local verification.
+
+### Evidence and certification boundaries
+
+```text
+test-results/
+  test/{junit.xml,coverage.xml,summary.json,environment.json,logs/}
+  integration/{summary.json,environment.json,lanes.json,junit/,logs/}
+  integration/<backend>/{junit.xml,summary.json,environment.json,logs/}
+  host-smoke/{summary.json,environment.json,junit.xml,logs/}
+  wheel-smoke/{summary.json,environment.json,logs/}
+  verify/{summary.json,environment.json,lanes.json,logs/}
+  azure-e2e/{junit.xml,summary.json,environment.json,logs/}
+```
+
+Each summary contains `schema_version`, command/lane, required status,
+selected/passed/failed/skipped counts, scope, exit code and supporting artifact
+paths. Backend summaries additionally record service version, driver, readiness and
+cleanup. Environment metadata records actual Python/SDK/driver versions and source
+commit, never an environment dump. Connection URLs, credentials, AccountKey, SAS,
+`sig` and tokens are redacted in JUnit failures, logs, JSON, console and Job Summary.
+CI uploads available `test-results/**` with `if: always()` even on failure.
+
+- **PASS**: successful executed checks; only `verify` carries FULL_LOCAL scope.
+- **FAIL**: failing tests/processes, collection errors, readiness failure or timeout.
+- **INCOMPLETE**: missing tools/URLs/results, zero tests, all skipped or any unexpected
+  required skip; always nonzero.
+- **NOT_APPLICABLE**: only explicitly unsupported capabilities, never absent services.
+
+Database integration, real Functions-host execution, wheel-install SQLite smoke and
+real Azure/PostgreSQL certification are separate evidence lanes. Local success is
+not Azure certification. `make e2e-azure` requires `E2E_BASE_URL` and
+`EXPECTED_VERSION`; it verifies the deployed identity before live tests. It never
+provisions Azure. Release certification retains its existing exact-candidate wheel,
+source/ref/version record, OIDC and explicit infrastructure cleanup workflow.
 
 Before opening a PR, run `ruff format --check <changed-python-files>` (or
 `ruff format <changed-python-files>` to fix them). `make format-check` checks
-`src` and `tests` without changing files. CI checks those same trees and also
+`src`, `tests`, `tools`, `examples` and `benchmarks` without changing files. CI checks those trees and also
 reports formatting failures on changed Python files in a dedicated step.
 
 ## GitHub Actions Pinning
@@ -110,8 +184,6 @@ context never drifts from the pinned commit.
 permitted in this repository and are flagged with an inline comment at
 the call site:
 
-- `pypa/gh-action-pypi-publish@release/v1` — PyPA-maintained stable
-  release channel; this pinning style is explicitly recommended upstream.
 - Local composite actions (`uses: ./...`) — versioned with the repo.
 
 When adding a new external Action, resolve the SHA with

@@ -27,7 +27,13 @@ This also applies when using the API or CLI.
 
 ## Validation
 - `make test`
-- `make lint`
-- `make typecheck`
-- `make security`
-- `make build`
+- `make doctor`: read-only prerequisites.
+- `make check`: complete non-mutating quality and policy gate.
+- `make integration`: all required run-owned database/Azurite lanes.
+- `make verify`: full local gate; `make check-all` is an exact alias.
+- `make report`: saved evidence only; `make clean`: generated artifacts only.
+
+See [Testing](testing.md#command-and-evidence-contract). Focused integration is
+PARTIAL, missing/zero/all-skipped required lanes never pass, and local evidence is
+not real Azure certification. `integration-local` never drops user databases or
+removes external containers; dedicated test-table mutation requires confirmation.

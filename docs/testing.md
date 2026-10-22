@@ -5,7 +5,7 @@ How to run and write tests for `azure-functions-db-python`.
 ## Running Tests
 
 ```bash
-make test        # Run all tests with pytest
+make test        # Offline suite with coverage >=95%
 make lint        # Run Ruff linter
 make typecheck   # Run mypy type checker
 make build       # Verify package builds cleanly
@@ -19,12 +19,12 @@ make check-all
 
 ## Coverage
 
-The project enforces a **90% coverage threshold**. Coverage is measured by
+The project enforces a **95% coverage threshold**. Coverage is measured by
 `pytest-cov` and configured in `pyproject.toml`:
 
 ```toml
 [tool.coverage.report]
-fail_under = 90
+fail_under = 95
 ```
 
 ## Three-Layer Test Architecture
@@ -82,7 +82,7 @@ variable — when not set, the corresponding tests are skipped.
 **Run locally** (SQLite only):
 
 ```bash
-pytest tests/integration -m "integration and sqlite" -v --no-cov
+DB_BACKEND=sqlite make integration
 ```
 
 **Run all** (requires running database containers):
@@ -92,8 +92,55 @@ export TEST_POSTGRES_URL="postgresql+psycopg://postgres:postgres@localhost:5432/
 export TEST_MYSQL_URL="mysql+pymysql://root:root@localhost:3306/testdb"
 export TEST_MSSQL_URL="mssql+pyodbc://sa:Password1!@localhost:1433/testdb?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
 export TEST_AZURITE_CONN_STR="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
-pytest tests/integration -m integration -v --no-cov
+DB_TEST_DATABASE_CONFIRMED=1 make integration-local
 ```
+
+`make integration` starts private SQLite, PostgreSQL 16, MySQL 8, SQL Server 2022
+and Azurite with unique names, ports and storage; it cleans up only run-owned
+resources. Connection preflight, nonzero test selection and no unexpected skips
+are mandatory. Missing Docker/Podman, drivers, URLs or tools are never PASS.
+Casual ad-hoc pytest retains missing-URL auto-skips, but required runners classify
+the actual JUnit outcomes strictly. Reader/source parametrized `db_key` cases and
+marked writer cases are both selected, without a broad-selector fallback.
+
+`integration-local` never drops/deletes user databases or external containers.
+It requires dedicated disposable test databases and explicit
+`DB_TEST_DATABASE_CONFIRMED=1`: existing fixtures create/seed/drop test tables.
+Azurite fixtures delete only their uniquely named test containers.
+
+### Command and evidence contract
+
+`make check` is non-mutating quality/policies; `make test` is entirely offline.
+`make verify` always combines check, test, every backend, separate real-host,
+installed-wheel SQLite smoke, build and strict docs. `make check-all` is an exact
+alias. A focused `DB_BACKEND=<name>` run is PARTIAL; verify clears that focus.
+`make doctor` checks required prerequisites without installing anything.
+`make report` renders saved JSON without running tests. `make clean` removes
+generated artifacts only; `clean-all` also performs historical deep environment
+cleanup. See [Contributing](contributing.md) for the complete target table.
+
+Generated evidence is gitignored under `test-results/`:
+
+- `test/`: `junit.xml`, `coverage.xml`, `summary.json`, `environment.json`, logs.
+- `integration/`: aggregate summary, backend summaries, copied `junit/` and `logs/`.
+- `host-smoke/`, `wheel-smoke/`: separate execution and installed-artifact summaries.
+- `verify/`: aggregate summary, `lanes.json`, environment and per-target logs.
+- `azure-e2e/`: separate live JUnit, summary, identity-check logs and environment.
+
+Schema-versioned summaries carry command/lane, required status, scope, counts,
+exit code and artifact paths. Backend/version/driver/readiness/cleanup are retained
+without credentials. URL passwords/userinfo, AccountKey, SAS, `sig` and tokens are
+redacted even in JUnit failure messages and logs. CI uses the same runner on its
+actual selected Python and uploads available artifacts with `if: always()`;
+console and Actions Job Summary use the same counts/status.
+
+PASS requires execution; test/process/readiness failures and timeouts are FAIL.
+Missing prerequisites/evidence, zero/all-skipped tests and unexpected required
+skips are INCOMPLETE/nonzero. NOT_APPLICABLE is only explicitly unsupported scope,
+not a missing backend. Only verify has FULL_LOCAL scope; local success is never
+Azure certification. `make e2e-azure` requires `E2E_BASE_URL` and `EXPECTED_VERSION`,
+checks deployed identity, and never provisions resources. Real Azure/PostgreSQL
+release certification retains its separate exact-artifact/OIDC/cleanup workflow.
 
 ### Layer 3 — End-to-End Tests (`tests/e2e/`)
 
