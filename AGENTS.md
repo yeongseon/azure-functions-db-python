@@ -110,6 +110,7 @@ This repository is **issue-based, not milestone-based**. Track and group work us
 - Before adding any organizational structure, check whether the repository already has an established convention. A category being empty or unused (zero milestones, no `epic:*` labels) is evidence to follow the existing pattern, not to introduce a new one.
 
 ## Validation
+- Follow [SECURITY.md](SECURITY.md) for scan inventory, expiring exceptions, redacted evidence and release-time dependency gates; required DB/Azurite security lanes must not pass through missing-environment skips.
 - `make test`
 - `make lint`
 - `make typecheck`
