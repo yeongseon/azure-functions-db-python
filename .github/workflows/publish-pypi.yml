@@ -97,12 +97,17 @@ jobs:
           python-version: "3.11"
 
       - name: Install package with dev extras
-        run: |
-          pip install hatch
-          pip install -e ".[dev]"
+        run: make install-ci
 
       - name: Run unit test suite (no external services)
-        run: pytest -v -m "not integration and not azurite and not host_e2e and not azure_e2e" --no-cov --disable-warnings
+        run: python -m tools.verification test
+
+      - name: Upload release library evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-library-evidence
+          path: test-results/**
 
   db-runtime-gate:
     name: Package runtime gate (live checkpoint store against Azurite, candidate wheel)
@@ -119,11 +124,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Start Azurite (Blob endpoint)
-        run: |
-          npm install -g azurite
-          azurite --skipApiVersionCheck --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 &
-          sleep 3
+      - name: Install Azurite for managed candidate runtime tests
+        run: npm install -g azurite
 
       - name: Install package with test extras (source, for deps)
         run: |
@@ -169,35 +171,15 @@ jobs:
           )
           PY
 
-      - name: Set Azurite connection string
-        run: |
-          echo "TEST_AZURITE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;" >> "$GITHUB_ENV"
-
       - name: Run live checkpoint-store test against candidate wheel (fail-closed)
-        run: |
-          # Exercises the package's primary runtime surface (the blob-backed
-          # checkpoint store) from the installed wheel - not the source tree.
-          # Fail closed: the gate must actually RUN the live test and never pass
-          # by silently skipping (a missing dep or unset conn str would skip).
-          pytest tests/integration/test_checkpoint_store_live.py -m "azurite" \
-            -v --no-cov --tb=short -o addopts="" -o "pythonpath=." \
-            --junitxml=runtime-gate.xml
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET, sys
-          root = ET.parse("runtime-gate.xml").getroot()
-          suites = root.findall("testsuite") or [root]
-          tests = sum(int(s.get("tests", 0)) for s in suites)
-          skipped = sum(int(s.get("skipped", 0)) for s in suites)
-          failures = sum(int(s.get("failures", 0)) for s in suites)
-          errors = sum(int(s.get("errors", 0)) for s in suites)
-          print(f"runtime-gate: tests={tests} skipped={skipped} failures={failures} errors={errors}")
-          if tests == 0:
-              print("::error ::runtime gate collected 0 tests"); sys.exit(1)
-          if skipped:
-              print("::error ::runtime gate SKIPPED tests (must run live, not skip)"); sys.exit(1)
-          if failures or errors:
-              print("::error ::runtime gate had failures/errors"); sys.exit(1)
-          PY
+        run: python -m tools.verification backend azurite --owned -o "pythonpath=."
+
+      - name: Upload installed candidate runtime evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-runtime-evidence
+          path: test-results/**
 
   azure-e2e:
     name: Azure release certification
@@ -250,10 +232,7 @@ jobs:
           /tmp/verify-wheel/bin/python -c "import azure_functions_db; print('import OK', azure_functions_db.__version__)"
 
       - name: Publish to PyPI
-        # Documented exception to the SHA-pinning policy: PyPA officially
-        # recommends pinning to the rolling `release/v1` branch. See
-        # CONTRIBUTING.md "GitHub Actions Pinning" for rationale.
-        uses: pypa/gh-action-pypi-publish@release/v1 # pin-exempt: PyPA official publisher (trusted-publisher OIDC); tracks release/v1 by design
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
 
   notify-cookbook:
     name: Trigger cookbook e2e re-verification
