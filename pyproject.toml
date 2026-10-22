@@ -116,6 +116,8 @@ docs = "mkdocs serve"
 precommit = "pre-commit run --all-files"
 precommit-install = "pre-commit install"
 security = "python -m bandit -r src"
+security-evidence = "python -m tools.security_evidence bandit"
+security-typecheck = "mypy --strict tools/security_report.py tools/security_exceptions.py tools/security_evidence.py tools/dependency_audit_policy.py"
 
 [tool.ruff]
 line-length = 100
