@@ -51,7 +51,10 @@ def test_doctor_without_existing_environment_requests_explicit_install(tmp_path:
     environment.pop("VIRTUAL_ENV", None)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "python3.11").symlink_to(Path(sys.executable).resolve())
+    runtime = tmp_path / "bare-runtime"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(runtime)], check=True)
+    (bin_dir / "python3.11").write_text(f'#!/bin/sh\nexec "{runtime / "bin/python"}" "$@"\n')
+    (bin_dir / "python3.11").chmod(0o755)
     environment["PATH"] = str(bin_dir)
     result = subprocess.run(
         [sys.executable, str(ROOT / "tools/verification_maintenance.py"), "doctor"],
