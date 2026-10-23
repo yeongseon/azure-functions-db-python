@@ -130,7 +130,11 @@ selected/passed/failed/skipped counts, scope, exit code and supporting artifact
 paths. Backend summaries additionally record service version, driver, readiness and
 cleanup. Environment metadata records actual Python/SDK/driver versions and source
 commit, never an environment dump. Connection URLs, credentials, AccountKey, SAS,
-`sig` and tokens are redacted in JUnit failures, logs, JSON, console and Job Summary.
+`sig` and tokens are redacted in decoded XML text/attributes and sensitive JSON fields,
+logs, console and Job Summary. HTML reports are retained as escaped static views of
+sanitized report content (including pytest-html's embedded JSON); interactive scripts
+and styling are discarded. Text evidence includes `.xml`, `.html`, `.json`, `.log`,
+`.txt`, `.md` and `.out`; binary assets and symlinks are not rewritten.
 CI uploads available `test-results/**` with `if: always()` even on failure.
 
 - **PASS**: successful executed checks; only `verify` carries FULL_LOCAL scope.
