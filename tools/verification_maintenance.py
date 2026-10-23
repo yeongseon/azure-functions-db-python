@@ -15,7 +15,7 @@ def main() -> int:
     candidates = []
     if active := os.environ.get("VIRTUAL_ENV"):
         candidates.append(str(Path(active) / "bin/python"))
-    candidates.append(str(Path(".venv/bin/python").resolve()))
+    candidates.append(str(Path(".venv/bin/python").absolute()))
     hatch = shutil.which("hatch")
     if hatch:
         found = subprocess.run([hatch, "env", "find"], capture_output=True, text=True, check=False)
