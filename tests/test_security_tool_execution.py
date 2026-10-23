@@ -14,14 +14,20 @@ def test_tool_failure_never_exports_raw_diagnostics(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: OSError | subprocess.TimeoutExpired
 ) -> None:
     # Given unavailable tools; When invoked; Then no raw diagnostics are retained.
-    (tmp_path / "example.dist-info").mkdir()
+    from tests.test_dependency_candidate import install_metadata
+
+    install_metadata(tmp_path, "candidate", "1")
+    install_metadata(tmp_path, "example", "1")
 
     def fail(*args: str, **kwargs: str) -> subprocess.CompletedProcess[str]:
         raise failure
 
     monkeypatch.setattr(subprocess, "run", fail)
     assert security_evidence.run_bandit().status == Status.TOOL_ERROR
-    assert dependency_audit_policy.run_audit(tmp_path, tmp_path).status == Status.TOOL_ERROR
+    assert (
+        dependency_audit_policy.run_audit(tmp_path, tmp_path, candidate=("candidate", "1")).status
+        == Status.TOOL_ERROR
+    )
 
 
 def test_bandit_inventory_matches_every_declared_surface(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,12 +56,15 @@ def test_audit_scans_only_candidate_installation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # Given an isolated runtime; When audited; Then tooling cannot contaminate the closure.
-    (tmp_path / "example.dist-info").mkdir()
+    from tests.test_dependency_candidate import install_metadata
+
+    install_metadata(tmp_path, "candidate", "1")
+    install_metadata(tmp_path, "example", "1")
     policy = tmp_path / "policy.json"
     policy.write_text('{"schema_version":1,"blocking":"all-known-runtime","exceptions":[]}')
 
     def complete(command: list[str], **kwargs: str) -> subprocess.CompletedProcess[str]:
-        assert command[command.index("--path") + 1] == str(tmp_path)
+        assert Path(command[command.index("--requirement") + 1]).read_text() == "example==1\n"
         return subprocess.CompletedProcess(
             command,
             0,
@@ -65,7 +74,10 @@ def test_audit_scans_only_candidate_installation(
 
     monkeypatch.setattr(subprocess, "run", complete)
     monkeypatch.setattr(dependency_audit_policy, "version", lambda name: "2.10.1")
-    assert dependency_audit_policy.run_audit(tmp_path, policy).status == Status.PASS
+    assert (
+        dependency_audit_policy.run_audit(tmp_path, policy, candidate=("candidate", "1")).status
+        == Status.PASS
+    )
 
 
 @pytest.mark.parametrize(
@@ -79,7 +91,9 @@ def test_cli_preserves_non_success_codes(
         sys, "argv", ["audit", "--site-packages", str(tmp_path), "--output", str(tmp_path)]
     )
     monkeypatch.setattr(
-        dependency_audit_policy, "run_audit", lambda path, policy: Check("audit", (), status, 1)
+        dependency_audit_policy,
+        "run_audit",
+        lambda path, policy, **kwargs: Check("audit", (), status, 1),
     )
     assert dependency_audit_policy.main() == code
     assert json.loads((tmp_path / "summary.json").read_text())["checks"][0]["status"] == status
