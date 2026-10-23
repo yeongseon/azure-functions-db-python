@@ -96,6 +96,8 @@ checks prerequisites without installing anything; missing required tools exit no
 
 `make check-all` is an exact backward-compatible alias of `make verify`.
 `make clean-all` retains historical deep cleanup, including bytecode and `.venv`.
+Run `make clean` from the real checkout directory. Cleanup refuses a repository
+root that is itself a symlink before any deletion; symlinked ancestors are supported.
 `lint`, `style`, `typecheck`, `security`, `cov`, `lint-workflows`, `build`, `docs`,
 `host-smoke`, and `wheel-smoke` are focused/partial commands, not full verification.
 `make check` has no Docker, browser, host or emulator prerequisite.
@@ -206,6 +208,8 @@ context never drifts from the pinned commit.
 permitted in this repository and are flagged with an inline comment at
 the call site:
 
+- `pypa/gh-action-pypi-publish@release/v1` — PyPA-maintained stable
+  release channel; this pinning style is explicitly recommended upstream.
 - Local composite actions (`uses: ./...`) — versioned with the repo.
 
 When adding a new external Action, resolve the SHA with
