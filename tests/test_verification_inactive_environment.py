@@ -39,7 +39,7 @@ def test_doctor_discovers_existing_venv_without_dereferencing_python(
         timeout=60,
     )
     assert "ruff REQUIRED for check/test: found" in result.stdout, result.stdout + result.stderr
-    assert "development environment not created" not in result.stdout
+    assert "pytest REQUIRED for check/test: found" in result.stdout
     assert str(venv / "bin/python") in result.stdout
     assert not (tmp_path / "hatch-data/env").exists()
 
