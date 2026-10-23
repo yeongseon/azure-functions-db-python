@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from html import unescape
 from importlib.metadata import PackageNotFoundError, version
 import json
 import os
@@ -10,6 +11,8 @@ import re
 import subprocess
 from typing import Literal
 import xml.etree.ElementTree as ET
+
+from tools.verification_html import static_report
 
 Status = Literal["PASS", "FAIL", "INCOMPLETE", "NOT_APPLICABLE"]
 
@@ -59,7 +62,12 @@ _SECRET_FIELD = re.compile(
 _SECRET_ENV_NAME = re.compile(
     r"(?i)secret|token|password|conn|_URL$|string|accountkey|functions.key|api.?key|sas"
 )
-_TEXT_SUFFIXES = frozenset({".log", ".txt", ".xml", ".json", ".md"})
+_SENSITIVE_NAME = re.compile(
+    r"(?i)^(?:(?:proxy-)?authorization|[\w.-]*(?:password|passwd|secret|token|api[_-]?key|"
+    r"connection[_-]?string)|accountkey|sharedaccesskey|sharedaccesssignature|"
+    r"azurewebjobsstorage|instrumentationkey|sig|sas|code|x-functions-key|(?:set-)?cookie)$"
+)
+_TEXT_SUFFIXES = frozenset({".log", ".txt", ".xml", ".html", ".json", ".md", ".out"})
 
 
 def _mask(match: re.Match[str]) -> str:
@@ -82,6 +90,8 @@ def redact(text: str) -> str:
     """Mask complete known secrets before consuming quoted credential values."""
     for value in _known_secrets():
         text = text.replace(value, _REDACTED)
+    while unescape(text) != text:
+        text = unescape(text)
     text = _AUTHORIZATION.sub(_mask, text)
     text = _URL_CREDENTIALS.sub(r"\1" + _REDACTED + "@", text)
     return _SECRET_FIELD.sub(_mask, text)
@@ -94,7 +104,12 @@ def redact_json(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return [redact_json(item) for item in value]
     if isinstance(value, dict):
-        return {redact(str(key)): redact_json(item) for key, item in value.items()}
+        return {
+            redact(str(key)): _REDACTED
+            if _SENSITIVE_NAME.fullmatch(str(key))
+            else redact_json(item)
+            for key, item in value.items()
+        }
     return value
 
 
@@ -103,6 +118,29 @@ def dump_json(value: object) -> str:
 
 
 def _redact_file_text(suffix: str, text: str) -> str:
+    if suffix == ".xml":
+        if "<!ENTITY" in text.upper():
+            return "<redacted-report>Entity declarations refused</redacted-report>"
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            return "<redacted-report>Malformed XML discarded</redacted-report>"
+        for element in root.iter():
+            element.text = redact(element.text) if element.text else element.text
+            element.tail = redact(element.tail) if element.tail else element.tail
+            sensitive_property = _SENSITIVE_NAME.fullmatch(element.get("name", ""))
+            for key, value in element.attrib.items():
+                element.set(
+                    key,
+                    _REDACTED
+                    if _SENSITIVE_NAME.fullmatch(key) or (key == "value" and sensitive_property)
+                    else redact(value),
+                )
+        return ET.tostring(root, encoding="unicode")
+    if suffix == ".html":
+        # A static escaped view retains the report without executing embedded scripts or
+        # reintroducing credentials through HTML attributes or pytest-html's JSON payload.
+        return static_report(text, lambda value: _redact_file_text(".json", value))
     if suffix == ".json":
         try:
             return dump_json(json.loads(text))
@@ -199,7 +237,7 @@ def save(directory: Path, summary: Summary) -> Summary:
         supporting_files=tuple(
             str(path)
             for path in sorted(directory.rglob("*"))
-            if path.is_file() and path.name != "summary.json"
+            if not path.is_symlink() and path.is_file() and path.name != "summary.json"
         ),
     )
     serialized = dump_json(asdict(summary))

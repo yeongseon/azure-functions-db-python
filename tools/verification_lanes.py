@@ -10,7 +10,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-from tools.verification_evidence import Summary, collect, publish, redact, save
+from tools.verification_evidence import Summary, _redact_file_text, collect, publish, save
 from tools.verification_process import run
 from tools.verification_services import (
     MissingPrerequisite,
@@ -68,7 +68,7 @@ def backend_lane(backend: str, owned: bool = False, extra: tuple[str, ...] = ())
                 actual = [*command[:-1], "--junitxml=" + str(raw)]
                 code = run(actual, directory / "logs/runner.log")
                 if raw.exists():
-                    (directory / "junit.xml").write_text(redact(raw.read_text()))
+                    (directory / "junit.xml").write_text(_redact_file_text(".xml", raw.read_text()))
         cleanup = "complete" if owned else "external resources untouched"
     except MissingPrerequisite as error:
         blocked, code, reason = True, 2, str(error)
