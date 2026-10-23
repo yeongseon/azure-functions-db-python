@@ -155,6 +155,20 @@ logs, console and Job Summary. HTML reports are retained as escaped static views
 sanitized report content (including pytest-html's embedded JSON); interactive scripts
 and styling are discarded. Text evidence includes `.xml`, `.html`, `.json`, `.log`,
 `.txt`, `.md` and `.out`; binary assets and symlinks are not rewritten.
+Free-text redaction inspects plain, percent/form, HTML-entity and backslash-escaped
+JSON/Python views through three decoding levels, mapping only secret value spans
+back to the original representation. Azure-style values assigned to `code`, `key`,
+`x-functions-key`, `master`, `default`, `function`, `host`, `secret` or `token` are
+masked when they contain 40–64 URL-safe base64 characters with optional padding.
+This is deliberately broader than one generated-key format: Functions supports
+[custom keys and signed/checksummed generated keys](https://learn.microsoft.com/azure/azure-functions/function-keys-how-to#access-key-requirements).
+Unlabelled hashes, UUIDs, paths and long identifiers are not treated as secrets;
+hashes explicitly assigned to these credential labels may be masked conservatively.
+Short status/error/percentage `code` values remain unchanged outside `?code=`/`&code=`
+queries. Known environment secrets and explicit password/header/query credentials
+remain masked irrespective of the Azure-style shape. Unknown unlabelled secrets,
+custom short ambiguous keys and encodings deeper than three levels are not claimed
+covered; avoid logging secrets even when evidence redaction is enabled.
 CI uploads available `test-results/**` with `if: always()` even on failure.
 
 - **PASS**: successful executed checks; only `verify` carries FULL_LOCAL scope.
