@@ -57,8 +57,15 @@ _URL_CREDENTIALS = re.compile(r"([\w+.-]+://)[^/\s<>\"']*@")
 _SECRET_FIELD = re.compile(
     r"(?i)(?<![\w-])(?P<key>(?:[\w.-]*(?:token|password|passwd|secret|api[_-]?key|"
     r"connection[_-]?string)|AccountKey|SharedAccessKey|SharedAccessSignature|"
-    r"AzureWebJobsStorage|InstrumentationKey|x-functions-key|code|sig|sas)"
+    r"AzureWebJobsStorage|InstrumentationKey|x-functions-key|sas)"
     r"[\"']?\s*[:=]\s*)(?P<value>" + _QUOTED + r"|[^\s;&<>\"',]+)"
+)
+_QUERY_CODE = re.compile(r"(?i)(?P<key>[?&]code=)(?P<value>" + _QUOTED + r"|[^\s;&<>\"'\]\)]+)")
+_SIGNATURE = re.compile(
+    r"(?i)(?<![\w-])(?P<key>sig[\"']?\s*[:=]\s*)(?P<value>"
+    + _QUOTED
+    + r"|(?=[A-Za-z0-9_+/=%.-]{8,}(?:[^\w+/=%.-]|$))"
+    r"(?=[A-Za-z0-9_+/=%.-]*[A-Za-z])[A-Za-z0-9_+/=%.-]+)"
 )
 _SECRET_ENV_NAME = re.compile(
     r"(?i)secret|token|password|conn|_URL$|string|accountkey|functions.key|api.?key|sas"
@@ -95,10 +102,14 @@ def redact(text: str) -> str:
         text = unescape(text)
     if "%" in text or "+" in text:
         text = redact_encoded(
-            text, (_AUTHORIZATION, _URL_CREDENTIALS, _SECRET_FIELD), _known_secrets()
+            text,
+            (_AUTHORIZATION, _URL_CREDENTIALS, _SECRET_FIELD, _QUERY_CODE, _SIGNATURE),
+            _known_secrets(),
         )
     text = _AUTHORIZATION.sub(_mask, text)
     text = _URL_CREDENTIALS.sub(r"\1" + _REDACTED + "@", text)
+    text = _QUERY_CODE.sub(_mask, text)
+    text = _SIGNATURE.sub(_mask, text)
     return _SECRET_FIELD.sub(_mask, text)
 
 
