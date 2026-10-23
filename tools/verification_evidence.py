@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 from tools.verification_encoding import redact_encoded
 from tools.verification_html import static_report
+from tools.verification_masks import masked
 
 Status = Literal["PASS", "FAIL", "INCOMPLETE", "NOT_APPLICABLE"]
 
@@ -52,12 +53,22 @@ _QUOTED = r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'"
 _AUTHORIZATION = re.compile(
     r"(?im)(?P<key>(?:proxy-)?authorization[\"']?\s*[:=]\s*)(?P<value>" + _QUOTED + r"|[^\r\n\"<]+)"
 )
-_URL_CREDENTIALS = re.compile(r"([\w+.-]+://)(?P<value>[^/\s<>\"']*)@")
+_URL_CREDENTIALS = re.compile(r"([\w+.-]{1,32}://)(?P<value>[^/\s\"']{1,4096})@")
 _SECRET_FIELD = re.compile(
-    r"(?i)(?<![\w-])(?P<key>(?:[\w.-]*(?:token|password|passwd|secret|api[_-]?key|"
+    r"(?i)(?<![\w-])(?P<key>(?:[\w.-]{0,64}(?:token|password|passwd|secret|api[_-]?key|"
     r"connection[_-]?string)|AccountKey|SharedAccessKey|SharedAccessSignature|"
     r"AzureWebJobsStorage|InstrumentationKey|x-functions-key|sas)"
     r"[\"']?\s*[:=]\s*)(?P<value>" + _QUOTED + r"|[^\s;&<>\"',]+)"
+)
+_ODBC_PASSWORD = re.compile(
+    r"(?i)(?<![\w-])(?P<key>pwd[\"']?\s*[:=]\s*)(?P<value>"
+    + _QUOTED
+    + r"|\{(?:[^}]|}}){1,4096}\}|(?![/\\]|[A-Za-z]:[\\/]|\d{1,7}%?(?:[\s;&\]\)]|$))"
+    r"[^\s;&<>\"',\]\)]{1,4096})"
+)
+_ODBC_CONTEXT = re.compile(
+    r"(?i)(?:driver|server|database|uid|user(?: id)?)=[^\r\n]{0,4096}?;"
+    r"(?:[^;\r\n]{0,256};){0,12}pwd=(?P<value>" + _QUOTED + r"|\{[^}]{1,4096}\}|[^;\s\"']{1,4096})"
 )
 _QUERY_CODE = re.compile(r"(?i)(?P<key>[?&]code=)(?P<value>" + _QUOTED + r"|[^\s;&<>\"'\]\)]+)")
 _SIGNATURE = re.compile(
@@ -74,7 +85,7 @@ _SECRET_ENV_NAME = re.compile(
     r"(?i)secret|token|password|conn|_URL$|string|accountkey|functions.key|api.?key|sas"
 )
 _SENSITIVE_NAME = re.compile(
-    r"(?i)^(?:(?:proxy-)?authorization|[\w.-]*(?:password|passwd|secret|token|api[_-]?key|"
+    r"(?i)^(?:(?:proxy-)?authorization|pwd|[\w.-]*(?:password|passwd|secret|token|api[_-]?key|"
     r"connection[_-]?string)|accountkey|sharedaccesskey|sharedaccesssignature|"
     r"azurewebjobsstorage|instrumentationkey|sig|sas|code|x-functions-key|(?:set-)?cookie)$"
 )
@@ -83,6 +94,8 @@ _TEXT_SUFFIXES = frozenset({".log", ".txt", ".xml", ".html", ".json", ".md", ".o
 
 def _mask(match: re.Match[str]) -> str:
     value = match.group("value")
+    if masked(value):
+        return match.group(0)
     quote = value[0] if value[:1] in {'"', "'"} else ""
     return f"{match.group('key')}{quote}{_REDACTED}{quote}"
 
@@ -103,13 +116,28 @@ def redact(text: str) -> str:
         text = text.replace(value, _REDACTED)
     text = redact_encoded(
         text,
-        (_AUTHORIZATION, _URL_CREDENTIALS, _SECRET_FIELD, _QUERY_CODE, _SIGNATURE, _FUNCTION_KEY),
+        (
+            _AUTHORIZATION,
+            _URL_CREDENTIALS,
+            _SECRET_FIELD,
+            _QUERY_CODE,
+            _SIGNATURE,
+            _FUNCTION_KEY,
+            _ODBC_PASSWORD,
+            _ODBC_CONTEXT,
+        ),
         _known_secrets(),
     )
     text = _AUTHORIZATION.sub(_mask, text)
-    text = _URL_CREDENTIALS.sub(r"\1" + _REDACTED + "@", text)
+    text = _URL_CREDENTIALS.sub(
+        lambda match: (
+            match.group(0) if masked(match.group("value")) else match.group(1) + _REDACTED + "@"
+        ),
+        text,
+    )
     text = _QUERY_CODE.sub(_mask, text)
     text = _SIGNATURE.sub(_mask, text)
+    text = _ODBC_PASSWORD.sub(_mask, text)
     return _SECRET_FIELD.sub(_mask, text)
 
 
