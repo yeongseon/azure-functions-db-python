@@ -67,7 +67,10 @@ def main() -> int:
                                 )
                             except sqlite3.OperationalError:
                                 observed = False
-                    if observed:
+                    completed = (
+                        "Executed 'Functions.db_trigger_host_smoke' (Succeeded" in log.read_text()
+                    )
+                    if observed and completed:
                         break
                     time.sleep(0.5)
             text = log.read_text()
