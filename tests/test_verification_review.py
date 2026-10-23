@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 from types import SimpleNamespace
+from typing import TextIO
 from unittest.mock import MagicMock
 
 import pytest
@@ -160,7 +161,9 @@ def test_host_waits_for_success_after_checkpoint(
     polls: list[int] = []
 
     @contextmanager
-    def fake_child(command: list[str], log: Path, app: Path) -> Iterator[SimpleNamespace]:
+    def fake_child(
+        command: list[str], log: Path, app: Path, *, output: TextIO
+    ) -> Iterator[SimpleNamespace]:
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("")
         with sqlite3.connect(app / "host-smoke.db") as connection:
@@ -170,10 +173,13 @@ def test_host_waits_for_success_after_checkpoint(
         def poll() -> None:
             polls.append(1)
             if len(polls) >= 2:
-                log.write_text("Executed 'Functions.db_trigger_host_smoke' (Succeeded")
+                output.write("Executed 'Functions.db_trigger_host_smoke' (Succeeded")
+                output.flush()
             return None
 
         yield SimpleNamespace(poll=poll)
+        output.seek(0)
+        log.write_text(output.read())
 
     monkeypatch.setattr(verification_host, "child", fake_child)
     monkeypatch.setattr("tools.verification_host.time.sleep", lambda duration: None)

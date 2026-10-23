@@ -52,7 +52,10 @@ def main() -> int:
             (app / "local.settings.json").write_text(json.dumps(settings))
             log = directory / "logs/host.log"
             command = ["func", "start", "--verbose", "--port", str(port())]
-            with child(command, log, app) as process:
+            with (
+                tempfile.TemporaryFile(mode="w+", encoding="utf-8") as output,
+                child(command, log, app, output=output) as process,
+            ):
                 deadline = time.monotonic() + 120
                 observed = False
                 while time.monotonic() < deadline and process.poll() is None:
@@ -67,9 +70,9 @@ def main() -> int:
                                 )
                             except sqlite3.OperationalError:
                                 observed = False
-                    completed = (
-                        "Executed 'Functions.db_trigger_host_smoke' (Succeeded" in log.read_text()
-                    )
+                    completed = "Executed 'Functions.db_trigger_host_smoke' (Succeeded" in os.pread(
+                        output.fileno(), os.fstat(output.fileno()).st_size, 0
+                    ).decode("utf-8", errors="replace")
                     if observed and completed:
                         break
                     time.sleep(0.5)

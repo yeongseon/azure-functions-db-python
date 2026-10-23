@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import os
 from pathlib import Path
 import signal
 import subprocess
 import tempfile
 from types import FrameType
+from typing import TextIO
 
 from tools.verification_evidence import redact
 
@@ -27,10 +28,20 @@ def terminate(process: subprocess.Popen[str]) -> None:
 
 @contextmanager
 def child(
-    command: list[str], log: Path, cwd: Path | None = None, *, quiet: bool = False
+    command: list[str],
+    log: Path,
+    cwd: Path | None = None,
+    *,
+    quiet: bool = False,
+    output: TextIO | None = None,
 ) -> Iterator[subprocess.Popen[str]]:
     log.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as output:
+    capture = (
+        nullcontext(output)
+        if output is not None
+        else tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+    )
+    with capture as output:
         with subprocess.Popen(
             command,
             cwd=cwd,
