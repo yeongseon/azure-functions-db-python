@@ -56,6 +56,11 @@ def doctor() -> int:
 
 
 def clean(root: Path) -> None:
+    if stat.S_ISLNK(root.lstat().st_mode):
+        raise ValueError(
+            "Refusing symlinked checkout root; run make clean from the real checkout directory"
+        )
+    root = root.resolve()
     for name in (
         "test-results",
         "dist",

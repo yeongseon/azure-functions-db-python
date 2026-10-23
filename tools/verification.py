@@ -155,7 +155,13 @@ def main() -> int:
         case "report":
             return report(Path("test-results"))
         case "clean":
-            clean(Path.cwd())
+            logical = Path(os.environ.get("PWD", str(Path.cwd())))
+            root = logical if logical.resolve() == Path.cwd() else Path.cwd()
+            try:
+                clean(root)
+            except ValueError as error:
+                print(str(error), file=sys.stderr)
+                return 1
             return 0
         case "verify":
             return verify()
