@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from html import unescape
 from importlib.metadata import PackageNotFoundError, version
 import json
 import os
@@ -53,7 +52,7 @@ _QUOTED = r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'"
 _AUTHORIZATION = re.compile(
     r"(?im)(?P<key>(?:proxy-)?authorization[\"']?\s*[:=]\s*)(?P<value>" + _QUOTED + r"|[^\r\n\"<]+)"
 )
-_URL_CREDENTIALS = re.compile(r"([\w+.-]+://)[^/\s<>\"']*@")
+_URL_CREDENTIALS = re.compile(r"([\w+.-]+://)(?P<value>[^/\s<>\"']*)@")
 _SECRET_FIELD = re.compile(
     r"(?i)(?<![\w-])(?P<key>(?:[\w.-]*(?:token|password|passwd|secret|api[_-]?key|"
     r"connection[_-]?string)|AccountKey|SharedAccessKey|SharedAccessSignature|"
@@ -66,6 +65,10 @@ _SIGNATURE = re.compile(
     + _QUOTED
     + r"|(?=[A-Za-z0-9_+/=%.-]{8,}(?:[^\w+/=%.-]|$))"
     r"(?=[A-Za-z0-9_+/=%.-]*[A-Za-z])[A-Za-z0-9_+/=%.-]+)"
+)
+_FUNCTION_KEY = re.compile(
+    r"(?i)(?<![\w-])(?:code|key|x-functions-key|_?master|default|function|host|secret|token)"
+    r"[\"']?\s*[:=]\s*[\"']?(?P<value>[A-Za-z0-9_-]{40,64}={0,2})(?![A-Za-z0-9_-])"
 )
 _SECRET_ENV_NAME = re.compile(
     r"(?i)secret|token|password|conn|_URL$|string|accountkey|functions.key|api.?key|sas"
@@ -98,14 +101,11 @@ def redact(text: str) -> str:
     """Mask complete known secrets before consuming quoted credential values."""
     for value in _known_secrets():
         text = text.replace(value, _REDACTED)
-    while unescape(text) != text:
-        text = unescape(text)
-    if "%" in text or "+" in text:
-        text = redact_encoded(
-            text,
-            (_AUTHORIZATION, _URL_CREDENTIALS, _SECRET_FIELD, _QUERY_CODE, _SIGNATURE),
-            _known_secrets(),
-        )
+    text = redact_encoded(
+        text,
+        (_AUTHORIZATION, _URL_CREDENTIALS, _SECRET_FIELD, _QUERY_CODE, _SIGNATURE, _FUNCTION_KEY),
+        _known_secrets(),
+    )
     text = _AUTHORIZATION.sub(_mask, text)
     text = _URL_CREDENTIALS.sub(r"\1" + _REDACTED + "@", text)
     text = _QUERY_CODE.sub(_mask, text)
