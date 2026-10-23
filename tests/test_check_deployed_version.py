@@ -118,5 +118,8 @@ class TestMain:
     def test_main_returns_one_when_version_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("E2E_BASE_URL", "https://example.azurewebsites.net")
         monkeypatch.setenv("EXPECTED_VERSION", "0.8.3")
-        with patch("tools.check_deployed_version.fetch_deployed_version", return_value=None):
+        with (
+            patch("tools.check_deployed_version.fetch_deployed_version", return_value=None),
+            patch("tools.check_deployed_version.time.monotonic", side_effect=[0, 0, 181]),
+        ):
             assert main() == 1

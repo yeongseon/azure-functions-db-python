@@ -13,9 +13,11 @@ comparison logic itself is unit-testable.
 
 from __future__ import annotations
 
+from http.client import HTTPException
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -51,7 +53,7 @@ def fetch_deployed_version(base_url: str, *, timeout: float = 30.0) -> str | Non
             if response.status != 200:  # noqa: PLR2004
                 return None
             payload = json.loads(response.read())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+    except (OSError, HTTPException, urllib.error.URLError, json.JSONDecodeError, ValueError):
         return None
     version = payload.get("version")
     return version if isinstance(version, str) else None
@@ -60,7 +62,15 @@ def fetch_deployed_version(base_url: str, *, timeout: float = 30.0) -> str | Non
 def main() -> int:
     base_url = os.environ["E2E_BASE_URL"]
     expected = os.environ["EXPECTED_VERSION"]
-    actual = fetch_deployed_version(base_url)
+    deadline = time.monotonic() + 180
+    actual = fetch_deployed_version(
+        base_url, timeout=min(30, max(0.1, deadline - time.monotonic()))
+    )
+    while actual is None and time.monotonic() < deadline:
+        time.sleep(min(1, max(0, deadline - time.monotonic())))
+        actual = fetch_deployed_version(
+            base_url, timeout=min(30, max(0.1, deadline - time.monotonic()))
+        )
     try:
         assert_version_matches(actual, expected)
     except VersionMismatchError as exc:
