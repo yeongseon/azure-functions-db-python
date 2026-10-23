@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -72,10 +74,16 @@ def clean(root: Path) -> None:
             path.unlink()
         elif path.is_dir():
             shutil.rmtree(path)
-    for tree in ("src", "tests", "tools", "examples", "benchmarks"):
-        for path in (root / tree).rglob("__pycache__"):
-            if not any(part in {".venv", "venv", "env"} for part in path.parts):
-                if path.is_symlink():
-                    path.unlink()
-                else:
+    for tree in ("src", "tests", "tools", "scripts", "examples", "benchmarks"):
+        start = root / tree
+        if not start.exists() or not stat.S_ISDIR(start.lstat().st_mode):
+            continue
+        for directory, names, _ in os.walk(start, followlinks=False):
+            for name in names[:]:
+                path = Path(directory) / name
+                mode = path.lstat().st_mode
+                if stat.S_ISLNK(mode) or name in {".venv", "venv", "env"}:
+                    names.remove(name)
+                elif name == "__pycache__" and stat.S_ISDIR(mode):
+                    names.remove(name)
                     shutil.rmtree(path)
