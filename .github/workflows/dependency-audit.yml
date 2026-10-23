@@ -36,14 +36,16 @@ jobs:
         continue-on-error: true
         run: |
           site_packages=$("$RUNNER_TEMP/runtime/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
-          python -m tools.dependency_audit_policy --site-packages "$site_packages" --output security-results/runtime
+          wheels=(dist/*.whl)
+          make security-audit-report SECURITY_PYTHON=python SECURITY_ARGS="--site-packages $site_packages --candidate-wheel ${wheels[0]} --output security-results/runtime"
 
       - name: Audit runtime and development dependencies
         if: always()
         continue-on-error: true
         run: |
           site_packages=$("$RUNNER_TEMP/development/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
-          python -m tools.dependency_audit_policy --site-packages "$site_packages" --development --output security-results/development
+          wheels=(dist/*.whl)
+          make security-audit-report SECURITY_PYTHON=python SECURITY_ARGS="--site-packages $site_packages --candidate-wheel ${wheels[0]} --development --output security-results/development"
 
       - name: Upload redacted reporting evidence
         if: always()
