@@ -25,6 +25,12 @@ def main() -> int:
     else:
         engine = create_engine(os.environ[f"TEST_{backend.upper()}_URL"])
         try:
+            expected = "postgresql" if backend == "postgres" else backend
+            if engine.dialect.name != expected:
+                print(
+                    f"Requested {backend}; received dialect {engine.dialect.name}", file=sys.stderr
+                )
+                return 1
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
                 metadata = {
