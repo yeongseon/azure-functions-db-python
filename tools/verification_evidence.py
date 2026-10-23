@@ -12,6 +12,7 @@ import subprocess
 from typing import Literal
 import xml.etree.ElementTree as ET
 
+from tools.verification_encoding import redact_encoded
 from tools.verification_html import static_report
 
 Status = Literal["PASS", "FAIL", "INCOMPLETE", "NOT_APPLICABLE"]
@@ -92,6 +93,10 @@ def redact(text: str) -> str:
         text = text.replace(value, _REDACTED)
     while unescape(text) != text:
         text = unescape(text)
+    if "%" in text or "+" in text:
+        text = redact_encoded(
+            text, (_AUTHORIZATION, _URL_CREDENTIALS, _SECRET_FIELD), _known_secrets()
+        )
     text = _AUTHORIZATION.sub(_mask, text)
     text = _URL_CREDENTIALS.sub(r"\1" + _REDACTED + "@", text)
     return _SECRET_FIELD.sub(_mask, text)
