@@ -169,6 +169,12 @@ queries. Known environment secrets and explicit password/header/query credential
 remain masked irrespective of the Azure-style shape. Unknown unlabelled secrets,
 custom short ambiguous keys and encodings deeper than three levels are not claimed
 covered; avoid logging secrets even when evidence redaction is enabled.
+ODBC/ADO `PWD` is masked case-insensitively in JSON and textual credentials,
+including braced passwords containing semicolons and encoded `odbc_connect` DSNs.
+Bare textual `pwd` values that are short numbers/percentages or start with a Unix
+or Windows path are preserved as shell/status evidence; structured `PWD` fields
+are always sensitive. Already-masked passwords (`***`, `****`, `<redacted>`,
+`[REDACTED]`, `xxxxx`) are left byte-identical, including SQLAlchemy URL userinfo.
 CI uploads available `test-results/**` with `if: always()` even on failure.
 
 - **PASS**: successful executed checks; only `verify` carries FULL_LOCAL scope.
