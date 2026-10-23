@@ -22,6 +22,8 @@ def doctor() -> int:
     for module in ("venv", "ruff", "mypy", "pytest", "bandit", "build", "mkdocs"):
         present = importlib.util.find_spec(module) is not None
         print(f"{module} REQUIRED for check/test: {'found' if present else 'MISSING'}")
+        if not present:
+            print("development environment not created: run make install")
         healthy = healthy and present
     for tool in ("func", "azurite"):
         executable = shutil.which(tool)

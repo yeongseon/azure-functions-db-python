@@ -46,12 +46,17 @@ lint-workflows:
 	@$(RUN) tools/lint_release_workflows.py
 	@$(RUN) tools/lint_workflow_pins.py
 	@$(RUN) tools/lint_hatch_matrix.py
-check: style typecheck security lint-workflows
+.PHONY: check-steps
+check:
+	@$(RUN) -m tools.verification focused check -m tools.verification_quality
+check-steps: style typecheck security lint-workflows
 check-all: verify
 
 .PHONY: test integration integration-local verify report doctor clean
-test integration integration-local verify report doctor clean:
+test integration integration-local verify:
 	@$(RUN) -m tools.verification $@
+report doctor clean:
+	@python3 tools/verification_maintenance.py $@
 
 .PHONY: cov e2e-azure host-smoke wheel-smoke build docs docs-serve
 cov:
