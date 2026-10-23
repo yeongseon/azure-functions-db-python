@@ -55,9 +55,10 @@ Unlisted findings at any severity block, including LOW.
 
 `PASS` (exit 0), `FAIL` (exit 1: policy finding/expired exception), `TOOL_ERROR`
 (exit 2: unusable scanner/policy evidence), and `INCOMPLETE` (exit 3: skipped or
-missing scope) are distinct. All non-PASS results block a required gate.
-Semgrep evidence records action outcome only, not a fabricated zero finding
-count: its failure can represent either findings or execution failure.
+missing scope) are distinct. All non-PASS results block a required policy gate.
+Semgrep evidence without structured output is INCOMPLETE, explicitly "action outcome only",
+not a fabricated clean scan. Only this evidence exit 3 is tolerated by its Makefile
+entry point; the pinned Semgrep action remains the gate and failure stays failure.
 
 The release policy blocks **all known runtime advisories**, including UNKNOWN
 severity: pip-audit does not consistently supply severity, so a severity-only
@@ -65,10 +66,20 @@ threshold would fail open. The audited wheel environments contain only the
 candidate and resolved runtime dependencies, not pip-audit/dev/docs tooling.
 `all` is audited independently as combined resolution can differ from individual
 driver closures. BYOD dependencies installed outside these extras remain the
-consumer's audit responsibility. The candidate's unpublished package may be
-reported as skipped by the advisory service; that is INCOMPLETE, never silently
-excluded. Required DB/Azurite lanes must treat missing-environment skips as
+consumer's audit responsibility. Wheel METADATA name/version must match the installed
+candidate exactly before excluding only that candidate. Each isolated closure is frozen
+to exact third-party name/version requirements and audited with no dependency resolution
+or pip execution. Third-party skips, empty inventory, missing scan entries and identity
+mismatches remain blocking. Required DB/Azurite lanes must treat missing-environment skips as
 non-success; the strict lane runner owns this rule, not a duplicate runner here.
+
+Use `make security` for local full security validation (also included in `make check-all`).
+`make security-inventory`, `make security-bandit`, and `make security-typecheck` expose
+the expanded scanner and strict tool checks. Set `SECURITY_PYTHON` to an existing tool
+interpreter; defaults to the existing Hatch interpreter without synchronizing it. `make security-semgrep` records
+`SCAN_OUTCOME`. `make security-audit SECURITY_ARGS="--site-packages PATH --candidate-wheel WHEEL"`
+enforces release policy; `make security-audit-report` uses the same fail-closed policy in
+scheduled reporting-only jobs. `make security-host` is the opt-in host test entry point.
 
 `publish` requires the audit matrix in addition to all existing verification and
 real-Azure certification gates. PyPI OIDC and exact-artifact reuse are unchanged.

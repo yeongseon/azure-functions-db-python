@@ -111,6 +111,7 @@ This repository is **issue-based, not milestone-based**. Track and group work us
 
 ## Validation
 - Follow [SECURITY.md](SECURITY.md) for scan inventory, expiring exceptions, redacted evidence and release-time dependency gates; required DB/Azurite security lanes must not pass through missing-environment skips.
+- `make security` includes the expanded executable inventory; use `make security-audit` for exact-wheel runtime policy and `make security-audit-report` in reporting jobs (see SECURITY.md for arguments).
 - `make test`
 - `make lint`
 - `make typecheck`
