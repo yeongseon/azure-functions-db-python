@@ -83,6 +83,18 @@ order_by = ORDER_BY[sort]  # KeyError for anything not listed: reject the reques
 rows = reader.query(f"SELECT id FROM users ORDER BY {order_by}", params={})
 ```
 
+!!! warning "Only some names are validated"
+    `DbReader.get()` and `DbWriter` check the column names you pass against the reflected table and
+    build SQLAlchemy expressions from them. `SqlAlchemySource` does not go that far:
+
+    - With `table=`, `cursor_column` and `pk_columns` must exist in the reflected table, but
+      `where` is raw SQL.
+    - With `query=`, `query` and `where` are raw SQL, and `cursor_column` and `pk_columns` are
+      written into the SQL as `source.<name>` without any check (`pk_columns=["id DESC"]` is
+      accepted).
+
+    Treat these settings as application-controlled configuration, never as end-user input.
+
 ### Use a read-only role
 
 Connect readers with a role that can only `SELECT` the tables they query (see
@@ -95,12 +107,15 @@ GRANT SELECT ON users, orders TO reports_reader;
 
 ### Diagnostics
 
-When a connection, engine creation or SQL execution fails, `query()` and `scalar()` raise
-`QueryError` (`DbConnectionError` if the engine cannot be created) with a fixed message that
-contains no connection URL, SQL, parameter values or driver message. The original exception is
-chained as `__cause__`, and SQLAlchemy's message includes the SQL and the bound parameter values:
-do not return tracebacks to callers or write `__cause__` to logs they can read. Leave `echo` off
-(`DbConfig.echo` defaults to `False`); SQLAlchemy's echo output includes SQL and parameter values.
+When SQL execution or the connection fails, `query()` and `scalar()` raise `QueryError`, or
+`DbConnectionError` if the engine cannot be created. A reader created with `table=` also reflects
+that table on first use, so an unreachable database or an unknown table raises `ConfigurationError`
+there instead. In every case the library's own message is fixed (the reflection one names only the
+table) and contains no connection URL, SQL, parameter values or driver message. The original
+exception is chained as `__cause__`, and SQLAlchemy's message includes the SQL and the bound
+parameter values: do not return tracebacks to callers or write `__cause__` to logs they can read.
+Leave `echo` off (`DbConfig.echo` defaults to `False`); SQLAlchemy's echo output includes SQL and
+parameter values.
 
 ## Data Minimization
 
