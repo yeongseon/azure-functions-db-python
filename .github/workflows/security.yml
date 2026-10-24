@@ -31,6 +31,14 @@ jobs:
       - name: Run Bandit
         run: make security
 
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bandit-report-${{ github.run_attempt }}
+          path: test-results/bandit.json
+          retention-days: 14
+
   semgrep:
     runs-on: ubuntu-latest
     steps:
