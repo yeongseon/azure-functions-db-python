@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.4](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.3...v0.8.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **async:** shut down the transaction executor after cancellation during entry ([#456](https://github.com/yeongseon/azure-functions-db-python/issues/456)) ([02e6ecc](https://github.com/yeongseon/azure-functions-db-python/commit/02e6ecc9aacedfe744caa17b0702a57221eccceb)), closes [#447](https://github.com/yeongseon/azure-functions-db-python/issues/447)
+* **ci:** fail required DB integration lanes instead of masking failures ([#478](https://github.com/yeongseon/azure-functions-db-python/issues/478)) ([04a81a4](https://github.com/yeongseon/azure-functions-db-python/commit/04a81a40aecfc7b7bb71e7edf7e5ba270c65d56f))
+* **config:** preserve percent-encoded connection URLs during environment expansion ([#461](https://github.com/yeongseon/azure-functions-db-python/issues/461)) ([dd05a80](https://github.com/yeongseon/azure-functions-db-python/commit/dd05a8002289f2f691fd64ad30a5ba1e51f42ae4)), closes [#438](https://github.com/yeongseon/azure-functions-db-python/issues/438)
+* **decorator:** honor exposed positional signatures when injecting database parameters ([#457](https://github.com/yeongseon/azure-functions-db-python/issues/457)) ([7bd0e74](https://github.com/yeongseon/azure-functions-db-python/commit/7bd0e74e475309468861bd89086bb933f9805425)), closes [#446](https://github.com/yeongseon/azure-functions-db-python/issues/446)
+* **engine:** allow the documented StaticPool configuration ([#462](https://github.com/yeongseon/azure-functions-db-python/issues/462)) ([4b22d7c](https://github.com/yeongseon/azure-functions-db-python/commit/4b22d7c9ae9a2e3012358701c667c98ccb88db93)), closes [#437](https://github.com/yeongseon/azure-functions-db-python/issues/437)
+* **engine:** distinguish same-type connection creators in the cache key ([#455](https://github.com/yeongseon/azure-functions-db-python/issues/455)) ([bc6524e](https://github.com/yeongseon/azure-functions-db-python/commit/bc6524e229da68e34ba3058e051cb20413416b35)), closes [#156](https://github.com/yeongseon/azure-functions-db-python/issues/156)
+* **lease:** permit immediate acquisition after explicit release ([#460](https://github.com/yeongseon/azure-functions-db-python/issues/460)) ([a59176d](https://github.com/yeongseon/azure-functions-db-python/commit/a59176d0aa6198908d63900356e833d16ebe5814)), closes [#441](https://github.com/yeongseon/azure-functions-db-python/issues/441)
+* **metadata:** isolate reflected tables by engine identity ([#463](https://github.com/yeongseon/azure-functions-db-python/issues/463)) ([d4f1b28](https://github.com/yeongseon/azure-functions-db-python/commit/d4f1b28c6801e6b5c860c93436e840b03c7ba95d))
+* **reader:** preserve the first scalar column when result labels repeat ([#459](https://github.com/yeongseon/azure-functions-db-python/issues/459)) ([e5a7b27](https://github.com/yeongseon/azure-functions-db-python/commit/e5a7b27586c2c20d7fe05d8d307dc14239fa1f0e)), closes [#444](https://github.com/yeongseon/azure-functions-db-python/issues/444)
+* **retry:** isolate batch inputs across handler attempts ([#451](https://github.com/yeongseon/azure-functions-db-python/issues/451)) ([84ca563](https://github.com/yeongseon/azure-functions-db-python/commit/84ca56314f242df573d0840081e0b1d89e651931)), closes [#440](https://github.com/yeongseon/azure-functions-db-python/issues/440)
+* **trigger:** reject generator handler results before checkpointing ([#454](https://github.com/yeongseon/azure-functions-db-python/issues/454)) ([dbc5fc5](https://github.com/yeongseon/azure-functions-db-python/commit/dbc5fc514be930b9c5512eda5b26f562aff2bdc0)), closes [#439](https://github.com/yeongseon/azure-functions-db-python/issues/439)
+
 ## [0.8.3](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.2...v0.8.3) (2026-10-16)
 
 
