@@ -166,6 +166,39 @@ def test_make_security_ignores_a_bandit_file_in_a_scanned_directory(
     assert "Found project level .bandit file" not in result.stderr
 
 
+@needs_make
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        pytest.param(
+            "import subprocess  # nosec\nsubprocess.run(['x'], check=True)  # nosec\n",
+            "names no Bandit test ID",
+            id="blanket-nosec-on-an-unreviewed-call",
+        ),
+        pytest.param("x = 1  # nosec\n", "names no Bandit test ID", id="blanket-on-a-clean-line"),
+        pytest.param(
+            "import subprocess  # nosec B999 # reason\n"
+            "subprocess.run(['x'], check=True)  # nosec B999 # reason\n",
+            "suppressed a finding",
+            id="unknown-test-id-bandit-treats-as-blanket",
+        ),
+    ],
+)
+def test_make_security_rejects_a_nosec_comment_that_names_no_bandit_test(
+    tmp_path: Path, source: str, message: str
+) -> None:
+    # Given the same comment in every scanned directory: Bandit itself exits 0 for each of them
+    _scratch_layout(tmp_path, {f"{name}/new_code.py": source for name in _SCANNED})
+
+    # When the real recipe runs
+    result = _make_security(tmp_path)
+
+    # Then the guard fails the target and names the file in every directory
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert all(f"{name}/new_code.py" in result.stderr for name in _SCANNED), result.stderr
+
+
 _VENDORED_DIRECTORIES = [".venv", "venv", "env", "node_modules", "site-packages"]
 
 
