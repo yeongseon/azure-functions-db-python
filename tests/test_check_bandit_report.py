@@ -64,6 +64,14 @@ def _scan(tmp_path: Path, files: dict[str, str] | None, *flags: str) -> tuple[st
         pytest.param({"empty.py": ""}, 1, "no code was analysed", id="only-empty-files"),
         pytest.param(None, 1, "skipped", id="missing-dir"),
         pytest.param({"bad.py": "def (:\n"}, 1, "syntax error", id="unparsable-file"),
+        # tokenize raises on these two, so the guard must report them, not crash before printing
+        pytest.param({"bad.py": 'x = """\n'}, 1, "cannot read its comments", id="open-string"),
+        pytest.param(
+            {"bad.py": "if 1:\n        x = 1\n    y = 2\n"},
+            1,
+            "cannot read its comments",
+            id="bad-dedent",
+        ),
         pytest.param(
             {"a.py": _OK, "gone.py": _OK, ".bandit": "[bandit]\nexclude = gone.py\n"},
             1,
