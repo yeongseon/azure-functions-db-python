@@ -40,6 +40,9 @@ param maximumInstanceCount int = 40
 @description('Provision a PostgreSQL Flexible Server as the e2e test database.')
 param enablePostgres bool = false
 
+@description('TEST ONLY: opt into broad Azure-service PostgreSQL access in an ephemeral resource group.')
+param allowAllAzureServicesToPostgres bool = false
+
 @description('Name of the e2e PostgreSQL Flexible Server (globally unique, 3-63 lowercase).')
 param postgresServerName string = '${functionAppName}-pg'
 
@@ -155,10 +158,9 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
 }
 
 // ── PostgreSQL Flexible Server (optional e2e database) ──────────────────────
-// Burstable B1ms / PG 16, with a firewall rule that allows access from Azure
-// services (the 0.0.0.0 sentinel rule) so the Flex Consumption Function App —
-// whose outbound IPs are dynamic — can reach it. SSL is required by default;
-// clients must connect with sslmode=require.
+// Burstable B1ms / PG 16. Broad Azure-service access is TEST-ONLY and opt-in;
+// see infra/README.md for private-network and Entra ID alternatives.
+// Clients must connect with sslmode=require.
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' = if (enablePostgres) {
   name: postgresServerName
   location: location
@@ -188,7 +190,7 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
   name: postgresDatabaseName
 }
 
-resource postgresAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = if (enablePostgres) {
+resource postgresAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = if (enablePostgres && allowAllAzureServicesToPostgres) {
   parent: postgres
   name: 'AllowAllAzureServices'
   properties: {
