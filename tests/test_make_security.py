@@ -20,6 +20,7 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCANNED = ("src", "examples", "tools", "benchmarks")
+_EXAMPLE = "examples/postgresql-poll-trigger"
 _OK = "x = 1\n"
 _SHELL_TRUE = "import subprocess\nsubprocess.call('echo', shell=True)\n"
 _NEW_CALL = "import subprocess\nimport sys\n\nsubprocess.run([sys.argv[1]], check=True)\n"
@@ -42,6 +43,21 @@ def _scratch_layout(root: Path, files: dict[str, str] | None = None) -> None:
     for name, text in (files or {}).items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(text, encoding="utf-8")
+
+
+def _example_venv(root: Path) -> Path:
+    """Run `python -m venv .venv` inside an example, as its README says, and vendor code in it."""
+    venv = root / _EXAMPLE / ".venv"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
+    site_packages = next(venv.glob("lib*/python*/site-packages"))
+    (site_packages / "vendored.py").write_text(_SHELL_TRUE, encoding="utf-8")
+    (site_packages / "python2.py").write_text("print 'x'\n", encoding="utf-8")
+    return venv
+
+
+def _reported(result: subprocess.CompletedProcess[str]) -> set[tuple[str, str]]:
+    """The (file, Bandit test ID) pairs the guard printed."""
+    return set(re.findall(r"^bandit: (\S+?):\d+ (B\d+) ", result.stderr, re.MULTILINE))
 
 
 def _make_security(
@@ -199,60 +215,54 @@ def test_make_security_rejects_a_nosec_comment_that_names_no_bandit_test(
     assert all(f"{name}/new_code.py" in result.stderr for name in _SCANNED), result.stderr
 
 
-_VENDORED_DIRECTORIES = [".venv", "venv", "env", "node_modules", "site-packages"]
-
-
 @needs_make
-@pytest.mark.parametrize("directory", _VENDORED_DIRECTORIES)
-def test_make_security_skips_generated_virtualenvs_and_vendored_packages(
-    tmp_path: Path, directory: str
-) -> None:
-    # Given the documented example setup, `python -m venv .venv` inside an example, whose vendored
-    # files have findings and a syntax error
-    example = "examples/postgresql-poll-trigger"
-    _scratch_layout(
-        tmp_path,
-        {
-            f"{example}/function_app.py": _OK,
-            f"{example}/{directory}/lib/pkg/vendored.py": _SHELL_TRUE,
-            f"{example}/{directory}/lib/pkg/python2.py": "print 'x'\n",
-        },
-    )
+def test_make_security_skips_the_venv_an_example_readme_creates(tmp_path: Path) -> None:
+    _scratch_layout(tmp_path, {f"{_EXAMPLE}/function_app.py": _OK})
+    venv = _example_venv(tmp_path)
 
-    # When the real recipe runs
     result = _make_security(tmp_path)
 
-    # Then the gate passes and counts the repository's own files, none of the vendored ones
-    parts = [path.relative_to(tmp_path).parts for path in tmp_path.rglob("*.py")]
-    own_files = [names for names in parts if directory not in names]
+    own = [path for path in tmp_path.rglob("*.py") if venv not in path.parents]
+    assert (venv / "pyvenv.cfg").is_file()
     assert result.returncode == 0, result.stderr
-    assert f"in {len(own_files)} files, no findings" in result.stdout
+    assert f"in {len(own)} files, no findings" in result.stdout
 
 
 @needs_make
-def test_make_security_still_scans_repository_code_beside_and_named_like_a_virtualenv(
+def test_make_security_scans_every_directory_but_the_example_venv(tmp_path: Path) -> None:
+    # an unannotated subprocess call in packages named like the directories once excluded
+    names = ["env", "venv", ".venv", "node_modules", "site-packages"]
+    packages = [f"src/azure_functions_db/{name}/zz.py" for name in names]
+    packages += [f"{_EXAMPLE}/env/zz.py", f"{_EXAMPLE}/venv/zz.py"]
+    _scratch_layout(tmp_path, dict.fromkeys(packages, _NEW_CALL))
+
+    result = _make_security(tmp_path)
+
+    expected = {(package, test) for package in packages for test in ("B404", "B603")}
+    assert result.returncode != 0, result.stdout
+    assert expected <= _reported(result), result.stderr
+
+
+@needs_make
+def test_make_security_still_scans_what_sits_beside_or_is_named_like_the_venv(
     tmp_path: Path,
 ) -> None:
-    # Given repository files with a finding: one beside a .venv, the others in paths that only
-    # contain an excluded name, and vendored files with the same finding in every excluded name
-    repository = [
-        "examples/postgresql-poll-trigger/function_app.py",
+    scanned = [
+        f"{_EXAMPLE}/function_app.py",
+        f"{_EXAMPLE}/venv_helpers.py",
         "examples/environment/app.py",
-        "examples/venv_demo/app.py",
         "src/envelope.py",
         "benchmarks/node_modules_notes/bench.py",
         "tools/site_packages_check.py",
     ]
-    vendored = [f"examples/postgresql-poll-trigger/{n}/lib/x.py" for n in _VENDORED_DIRECTORIES]
-    _scratch_layout(tmp_path, dict.fromkeys([*repository, *vendored], _SHELL_TRUE))
+    _scratch_layout(tmp_path, dict.fromkeys(scanned, _SHELL_TRUE))
+    _example_venv(tmp_path)
 
-    # When the real recipe runs
     result = _make_security(tmp_path)
 
-    # Then the gate fails on exactly the repository files: nothing of theirs is hidden
-    reported = set(re.findall(r"^bandit: (\S+?):\d+ B602 ", result.stderr, re.MULTILINE))
+    shell_true = {name for name, test in _reported(result) if test == "B602"}
     assert result.returncode != 0
-    assert reported == set(repository), result.stderr
+    assert shell_true == set(scanned), result.stderr
 
 
 @needs_make
