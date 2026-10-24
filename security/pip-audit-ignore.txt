@@ -1,3 +1,0 @@
-# Known runtime advisories excused from the release gate, one per line:
-# <ID> <owner> <expires YYYY-MM-DD (must be in the future)> <reason>
-# Empty by design: every known runtime advisory blocks the release.

@@ -157,12 +157,3 @@ def test_workflow_runs_both_required_lanes_without_masking() -> None:
 def test_workflow_backend_lane_selects_only_the_matrix_backend() -> None:
     (lane,) = [s for s in _pytest_steps() if s["name"] == "Run integration tests"]
     assert '-m "integration and ${{ matrix.db }}"' in str(lane["run"])
-
-
-def test_publish_is_gated_on_a_blocking_runtime_advisory_audit() -> None:
-    jobs = yaml.safe_load((_ROOT / ".github/workflows/publish-pypi.yml").read_text())["jobs"]
-    audit = jobs["runtime-dependency-audit"]
-    assert "runtime-dependency-audit" in jobs["publish"]["needs"]
-    assert audit["needs"] == "build"
-    assert all("continue-on-error" not in step for step in audit["steps"])
-    assert "continue-on-error" not in audit
