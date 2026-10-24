@@ -1,9 +1,9 @@
 """The Bandit guard must fail instead of passing vacuously, proven with real Bandit.
 
 Bandit exits 0 for an empty directory, a missing path, a file it cannot parse and a scope narrowed
-by a ``.bandit`` file, so these cases build a scratch tree, run Bandit with the flags of
-``make security`` and hand its JSON report to the guard. ``tests/test_make_security.py`` runs the
-real recipe around it.
+by a ``.bandit`` file, and it suppresses a finding for a nosec comment that names no test it knows,
+so these cases build a scratch tree, run Bandit with the flags of ``make security`` and hand its
+JSON report to the guard. ``tests/test_make_security.py`` runs the real recipe around it.
 """
 
 from __future__ import annotations
@@ -23,6 +23,34 @@ _SUPPRESSED = (
     "import subprocess  # nosec B404 # test fixture\n"
     "subprocess.call('echo', shell=True)  # nosec B602 B607 # test fixture\n"
 )
+_NOSEC_WITH_IDS = (
+    "import subprocess  # noqa: S404  # nosec: B404 # test fixture\n"
+    "subprocess.call('echo', shell=True)  # nosec:B602 B607 # test fixture\n"
+)
+_NO_ID = "names no Bandit test ID"
+_VENV_GLOB = "*/.venv/*"
+
+
+def _calls_with(comment: str) -> str:
+    """Two lines Bandit reports, each carrying ``comment``."""
+    return f"import subprocess  {comment}\nsubprocess.call('echo', shell=True)  {comment}\n"
+
+
+def _scan(tmp_path: Path, files: dict[str, str] | None, *flags: str) -> tuple[str, list[str]]:
+    """Run Bandit like `make security` on a scratch scope (``None``: a path that does not exist).
+
+    Returns the JSON report and the scope, as the guard takes them.
+    """
+    scope = tmp_path / "scope"
+    for name, text in (files or {}).items():
+        (scope / name).parent.mkdir(parents=True, exist_ok=True)
+        (scope / name).write_text(text, encoding="utf-8")
+    if files is not None:
+        scope.mkdir(exist_ok=True)
+    report = tmp_path / "bandit.json"
+    bandit = [sys.executable, "-m", "bandit", "-q", "-f", "json", "-o", str(report), *flags]
+    subprocess.run([*bandit, "-r", str(scope)], check=False, capture_output=True)
+    return str(report), [str(scope)]
 
 
 @pytest.mark.parametrize(
@@ -53,18 +81,11 @@ def test_bandit_gate_fails_unless_everything_was_analysed(
     exit_code: int,
     message: str,
 ) -> None:
-    # Given a scope (``None``: a path that does not exist) scanned like `make security` does
-    scope = tmp_path / "scope"
-    if files is not None:
-        scope.mkdir()
-        for name, text in files.items():
-            (scope / name).write_text(text, encoding="utf-8")
-    report = tmp_path / "bandit.json"
-    bandit = [sys.executable, "-m", "bandit", "-q", "-f", "json", "-o", str(report)]
-    subprocess.run([*bandit, "-r", str(scope)], check=False, capture_output=True)
+    # Given a scope scanned like `make security` does
+    report, scopes = _scan(tmp_path, files)
 
     # When the guard reads Bandit's report
-    result = check_bandit_report.main(str(report), [str(scope)])
+    result = check_bandit_report.main(report, scopes)
 
     # Then it passes only a complete, finding-free scan, and names why it failed otherwise
     captured = capsys.readouterr()
@@ -72,7 +93,41 @@ def test_bandit_gate_fails_unless_everything_was_analysed(
     assert message in captured.out + captured.err
 
 
-_VENV_GLOB = "*/.venv/*"
+@pytest.mark.parametrize(
+    ("files", "exit_code", "message"),
+    [
+        pytest.param({"ok.py": _NOSEC_WITH_IDS}, 0, "no findings", id="ids-in-colon-form"),
+        pytest.param({"ok.py": 'x = "# nosec"\n'}, 0, "no findings", id="text-in-a-string"),
+        pytest.param({"bad.py": _calls_with("# nosec")}, 1, _NO_ID, id="bare"),
+        pytest.param({"bad.py": _calls_with("#nosec")}, 1, _NO_ID, id="without-a-space"),
+        pytest.param({"bad.py": _calls_with("# noqa  # nosec")}, 1, _NO_ID, id="second-comment"),
+        pytest.param({"bad.py": _calls_with("# nosec reviewed")}, 1, _NO_ID, id="words-not-ids"),
+        pytest.param({"ok.py": "x = 1  # nosec\n"}, 1, _NO_ID, id="on-a-clean-line"),
+        pytest.param(
+            {"bad.py": _calls_with("# nosec B999 # reason")},
+            1,
+            "suppressed a finding",
+            id="unknown-test-id-bandit-treats-as-blanket",
+        ),
+    ],
+)
+def test_guard_rejects_a_nosec_comment_that_names_no_bandit_test(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    files: dict[str, str],
+    exit_code: int,
+    message: str,
+) -> None:
+    # Given a scan in which Bandit itself exits 0 for every failing case here
+    report, scopes = _scan(tmp_path, files)
+
+    # When the guard reads Bandit's report
+    result = check_bandit_report.main(report, scopes)
+
+    # Then only a comment that names a test Bandit knows passes; text in a string is no comment
+    captured = capsys.readouterr()
+    assert result == exit_code
+    assert message in captured.out + captured.err
 
 
 @pytest.mark.parametrize(
@@ -91,23 +146,14 @@ def test_guard_expects_every_file_except_those_bandit_was_told_to_skip(
     exit_code: int,
     message: str,
 ) -> None:
-    # Given a scope whose .venv holds a vendored file with a finding, and Bandit told to skip it
-    # (or not)
-    scope = tmp_path / "scope"
-    (scope / ".venv").mkdir(parents=True)
-    (scope / "ok.py").write_text(_OK, encoding="utf-8")
-    (scope / ".venv" / "vendored.py").write_text(_SHELL_TRUE, encoding="utf-8")
-    report = tmp_path / "bandit.json"
-    bandit = [sys.executable, "-m", "bandit", "-q", "-f", "json", "-o", str(report)]
-    skip = ["-x", _VENV_GLOB] if bandit_skips else []
-    subprocess.run([*bandit, *skip, "-r", str(scope)], check=False, capture_output=True)
+    # Given a .venv holding a vendored file with a finding, and Bandit told to skip it (or not)
+    files = {"ok.py": _OK, ".venv/vendored.py": _SHELL_TRUE}
+    report, scopes = _scan(tmp_path, files, *(["-x", _VENV_GLOB] if bandit_skips else []))
 
     # When the guard reads the report, expecting the same files or not
-    excludes = (_VENV_GLOB,) if guard_skips else ()
-    result = check_bandit_report.main(str(report), [str(scope)], excludes)
+    result = check_bandit_report.main(report, scopes, (_VENV_GLOB,) if guard_skips else ())
 
-    # Then the skipped directory is not expected, a file Bandit did scan still counts, and a
-    # finding Bandit reported is never hidden by the exclusion
+    # Then the skipped directory is not expected, and a finding Bandit did report is never hidden
     captured = capsys.readouterr()
     assert result == exit_code
     assert message in captured.out + captured.err
