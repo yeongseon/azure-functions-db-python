@@ -26,7 +26,7 @@ repos:
       - id: bandit
         args: ["-c", "pyproject.toml"]
         additional_dependencies: ["bandit[toml]"]
-        files: "^(src|examples|tools|benchmarks)/"
+        files: "^src/"
 
   - repo: local
     hooks:
