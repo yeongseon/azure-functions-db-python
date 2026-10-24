@@ -71,7 +71,7 @@ from azure_functions_db import DbBindings, DbOut, EngineProvider
 SQL_COPT_SS_ACCESS_TOKEN = 1256
 
 # Token audience for Azure SQL Database / SQL Server.
-_TOKEN_SCOPE = "https://database.windows.net/.default"
+_TOKEN_SCOPE = "https://database.windows.net/.default"  # nosec B105 # public audience, not a secret
 
 # One credential for the whole worker; it caches and refreshes tokens itself.
 _credential = DefaultAzureCredential(
