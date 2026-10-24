@@ -47,7 +47,7 @@ def fetch_deployed_version(base_url: str, *, timeout: float = 30.0) -> str | Non
     """
     url = f"{base_url.rstrip('/')}/api/version"
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310  # nosec B310 # https URL of the e2e app
             if response.status != 200:  # noqa: PLR2004
                 return None
             payload = json.loads(response.read())
