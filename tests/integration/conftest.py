@@ -9,7 +9,11 @@ Each database backend is gated by an env var containing a SQLAlchemy URL:
 * ``TEST_MYSQL_URL``    – e.g. ``mysql+pymysql://root:root@localhost:3306/testdb``
 * ``TEST_MSSQL_URL``    – e.g. ``mssql+pyodbc://sa:Password1!@localhost:1433/testdb?driver=...``
 
-If the env var is not set the corresponding tests are skipped automatically.
+If the env var is not set the corresponding tests are skipped automatically,
+which is convenient for local runs. A CI lane that claims to verify a backend
+must set ``INTEGRATION_FAIL_ON_SKIP=1`` so any skip or xfail makes the pytest run fail.
+A test marked with a backend also fails if that backend's URL names a different
+SQLAlchemy dialect.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 
 # ---------------------------------------------------------------------------
 # Dialect capability model
@@ -73,6 +78,63 @@ def _get_db_url(db: str) -> str | None:
         # SQLite always available — default to in-memory
         return os.environ.get(_ENV_VARS["sqlite"], "sqlite:///:memory:")
     return os.environ.get(_ENV_VARS[db])
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed guards
+# ---------------------------------------------------------------------------
+
+_BACKEND_DIALECTS: dict[str, str] = {
+    "sqlite": "sqlite",
+    "postgres": "postgresql",
+    "mysql": "mysql",
+    "mssql": "mssql",
+}
+
+_skipped: list[str] = []
+
+
+@pytest.fixture(autouse=True)
+def _backend_url_matches_marker(request: pytest.FixtureRequest) -> None:
+    """Fail if a backend-marked test would run against another dialect."""
+    for backend, dialect in _BACKEND_DIALECTS.items():
+        if request.node.get_closest_marker(backend) is None:
+            continue
+        url = os.environ.get(_ENV_VARS[backend])
+        if not url:
+            continue
+        # Never echo the URL or the parser error: both may contain credentials.
+        # Fail outside the except block so the parser error is not chained in.
+        actual: str | None
+        try:
+            actual = make_url(url).get_backend_name()
+        except Exception:  # noqa: BLE001
+            actual = None
+        if actual is None:
+            pytest.fail(f"{_ENV_VARS[backend]} is not a valid SQLAlchemy URL", pytrace=False)
+        if actual != dialect:
+            pytest.fail(f"{_ENV_VARS[backend]} does not use the {dialect!r} dialect", pytrace=False)
+
+
+def _record_skip(report: Any) -> None:
+    # An expected failure (xfail) is reported as skipped and never proves the
+    # test body passed, so a required lane treats it like any other skip.
+    if report.skipped:
+        _skipped.append(report.nodeid)
+
+
+def pytest_collectreport(report: pytest.CollectReport) -> None:
+    _record_skip(report)
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    _record_skip(report)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    if os.environ.get("INTEGRATION_FAIL_ON_SKIP") == "1" and _skipped and exitstatus == 0:
+        print(f"\nINTEGRATION_FAIL_ON_SKIP=1: {len(_skipped)} skipped or xfailed; failing the run")
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 # ---------------------------------------------------------------------------

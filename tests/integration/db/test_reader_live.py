@@ -8,6 +8,7 @@ import pytest
 from azure_functions_db.binding.reader import DbReader
 
 _DB_KEYS = ("sqlite", "postgres", "mysql", "mssql")
+_DB_PARAMS = [pytest.param(key, marks=getattr(pytest.mark, key), id=key) for key in _DB_KEYS]
 _URL_ENV = {
     "postgres": "TEST_POSTGRES_URL",
     "mysql": "TEST_MYSQL_URL",
@@ -28,7 +29,7 @@ def db_url(db_key: str, tmp_path: Path) -> str:
     return url
 
 
-@pytest.mark.parametrize("db_key", _DB_KEYS)
+@pytest.mark.parametrize("db_key", _DB_PARAMS)
 class TestDbReaderLive:
     @pytest.mark.integration
     def test_get_single_pk(self, users_table: tuple[object, str], db_url: str) -> None:

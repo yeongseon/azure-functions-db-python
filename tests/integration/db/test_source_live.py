@@ -12,6 +12,7 @@ from azure_functions_db.core.types import SourceDescriptor
 from azure_functions_db.trigger.errors import SourceConfigurationError
 
 _DB_KEYS = ("sqlite", "postgres", "mysql", "mssql")
+_DB_PARAMS = [pytest.param(key, marks=getattr(pytest.mark, key), id=key) for key in _DB_KEYS]
 _URL_ENV = {
     "postgres": "TEST_POSTGRES_URL",
     "mysql": "TEST_MYSQL_URL",
@@ -32,7 +33,7 @@ def db_url(db_key: str, tmp_path: Path) -> str:
     return url
 
 
-@pytest.mark.parametrize("db_key", _DB_KEYS)
+@pytest.mark.parametrize("db_key", _DB_PARAMS)
 class TestSqlAlchemySourceLive:
     @pytest.mark.integration
     def test_datetime_cursor_round_trip(self, db_url: str, db_key: str) -> None:
