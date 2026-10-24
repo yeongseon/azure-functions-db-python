@@ -101,12 +101,6 @@ def test_make_security_holds_every_scanned_directory_to_every_bandit_test(
     ("files", "scope", "message"),
     [
         pytest.param({"examples/bad.py": "def (:\n"}, None, "syntax error", id="unparsable-file"),
-        pytest.param(
-            {"tools/gone.py": _OK, "tools/.bandit": "[bandit]\nexclude = gone.py\n"},
-            None,
-            "not scanned",
-            id="narrowed-scope",
-        ),
         pytest.param({}, "empty-dir", "no code was analysed", id="empty-scope"),
         pytest.param({}, "no-such-dir", "No such file or directory", id="missing-scope"),
     ],
@@ -124,6 +118,51 @@ def test_make_security_fails_when_bandit_exits_zero_but_the_scan_is_incomplete(
     # Then the guard fails the target and says why
     assert result.returncode != 0
     assert message in result.stderr
+
+
+@needs_make
+def test_make_security_fails_when_something_narrows_what_bandit_scans(tmp_path: Path) -> None:
+    # Given a Bandit that exits 0 but leaves a clean file out of its report: here the shim adds a
+    # `-x` the recipe does not know about, standing in for any narrowing the recipe misses
+    _scratch_layout(tmp_path, {"tools/gone.py": _OK})
+    narrow = 'case "$*" in *"-m bandit"*) set -- "$@" -x tools/gone.py;; esac\n'
+
+    # When the real recipe runs
+    result = _make_security(tmp_path, hatch_prelude=narrow)
+
+    # Then the guard notices the file Bandit never saw and fails the target
+    assert result.returncode != 0
+    assert "not scanned: tools/gone.py" in result.stderr
+
+
+@needs_make
+@pytest.mark.parametrize(
+    ("directory", "bandit"),
+    [
+        pytest.param("tools", "[bandit]\nskips = B404,B603\n", id="skips-in-tools"),
+        pytest.param("examples", "[bandit]\nskips = B404,B603\n", id="skips-in-examples"),
+        pytest.param("benchmarks", "[bandit]\nskips = B404,B603\n", id="skips-in-benchmarks"),
+        pytest.param("src", "[bandit]\nskips = B404,B603\n", id="skips-in-src"),
+        pytest.param("tools", "[bandit]\ntests = B101\n", id="test-selection"),
+        pytest.param("tools", "[bandit]\nconfigfile = hide.yaml\n", id="skips-in-a-config-file"),
+        pytest.param("tools", "[bandit]\nexclude = new_code.py\n", id="excluded-file"),
+    ],
+)
+def test_make_security_ignores_a_bandit_file_in_a_scanned_directory(
+    tmp_path: Path, directory: str, bandit: str
+) -> None:
+    # Given an unreviewed call and, beside it, a .bandit file that would hide it from Bandit
+    files = {f"{directory}/new_code.py": _NEW_CALL, f"{directory}/.bandit": bandit}
+    _scratch_layout(tmp_path, {**files, "hide.yaml": "skips: [B404, B603]\n"})
+
+    # When the real recipe runs
+    result = _make_security(tmp_path)
+
+    # Then Bandit never reads the file: the call is still reported by every test that covers it
+    reported = set(re.findall(r"^bandit: (\S+?):\d+ (B\d+) ", result.stderr, re.MULTILINE))
+    assert result.returncode != 0, result.stderr
+    assert {(f"{directory}/new_code.py", "B404"), (f"{directory}/new_code.py", "B603")} <= reported
+    assert "Found project level .bandit file" not in result.stderr
 
 
 @needs_make
@@ -156,24 +195,27 @@ def test_make_security_keeps_the_bandit_progress_bar_out_of_the_log(tmp_path: Pa
 
 
 @needs_make
-@pytest.mark.parametrize("crash", ["never-starts", "refuses-to-run"])
+@pytest.mark.parametrize(
+    "bandit_fails",
+    [
+        pytest.param('case "$*" in *"-m bandit"*) exit 1;; esac\n', id="never-starts"),
+        # Bandit opens its -o file before it can refuse to run: a refusal (exit 2) leaves it empty
+        pytest.param(
+            'case "$*" in *"-m bandit"*) : > test-results/bandit.json; exit 2;; esac\n',
+            id="refuses-to-run",
+        ),
+    ],
+)
 def test_make_security_never_passes_on_a_report_left_by_an_earlier_run(
-    tmp_path: Path, crash: str
+    tmp_path: Path, bandit_fails: str
 ) -> None:
     # Given a clean scan that left its report behind
     _scratch_layout(tmp_path)
     assert _make_security(tmp_path).returncode == 0
     assert (tmp_path / "test-results" / "bandit.json").is_file()
 
-    # When Bandit then fails: it never starts, or it refuses to run because two .bandit files
-    # are in scope (it exits 2 and leaves an empty report)
-    prelude = ""
-    if crash == "never-starts":
-        prelude = 'case "$*" in *"-m bandit"*) exit 1;; esac\n'
-    else:
-        (tmp_path / "examples" / ".bandit").write_text("[bandit]\n", encoding="utf-8")
-        (tmp_path / "tools" / ".bandit").write_text("[bandit]\n", encoding="utf-8")
-    result = _make_security(tmp_path, hatch_prelude=prelude)
+    # When Bandit then fails
+    result = _make_security(tmp_path, hatch_prelude=bandit_fails)
 
     # Then the target fails and the stale clean report is not read as this scan's result
     assert result.returncode != 0

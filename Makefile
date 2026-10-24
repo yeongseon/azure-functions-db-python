@@ -65,16 +65,20 @@ lint: ensure-hatch
 # Bandit exits 0 for an empty, missing or unparsable scope, so tools/check_bandit_report.py also
 # reads its JSON report; the report is deleted first so a stale one can never pass.
 # -q: Bandit 1.9.4 prints a progress bar to stdout above 50 files.
+# --ini: unless it is given one, Bandit reads any .bandit file in the scope (skips, tests,
+# exclude, baseline, configfile) and would let a file in a diff hide findings; an explicit ini
+# with no options makes it read none.
 # Every Bandit test runs on every file: there is no skip list for any directory. Suppress a
 # reviewed finding on its own line, `# nosec Bxxx # <reason>`, never here.
 BANDIT_REPORT := test-results/bandit.json
+BANDIT_INI := test-results/bandit.ini
 BANDIT_SCOPE := src examples tools benchmarks
-BANDIT := $(HATCH) run python -m bandit -q -f json
+BANDIT := $(HATCH) run python -m bandit -q -f json --ini $(BANDIT_INI)
 BANDIT_CHECK := $(HATCH) run python tools/check_bandit_report.py
 
 .PHONY: security
 security: ensure-hatch
-	@rm -f $(BANDIT_REPORT) && mkdir -p $(dir $(BANDIT_REPORT))
+	@rm -f $(BANDIT_REPORT) && mkdir -p $(dir $(BANDIT_REPORT)) && printf '[bandit]\n' > $(BANDIT_INI)
 	@status=0; \
 	$(BANDIT) -o $(BANDIT_REPORT) -r $(BANDIT_SCOPE) || status=1; \
 	$(BANDIT_CHECK) $(BANDIT_REPORT) $(BANDIT_SCOPE) || status=1; \
