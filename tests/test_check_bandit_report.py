@@ -72,6 +72,47 @@ def test_bandit_gate_fails_unless_everything_was_analysed(
     assert message in captured.out + captured.err
 
 
+_VENV_GLOB = "*/.venv/*"
+
+
+@pytest.mark.parametrize(
+    ("bandit_skips", "guard_skips", "exit_code", "message"),
+    [
+        pytest.param(True, True, 0, "no findings", id="both-skip-the-directory"),
+        pytest.param(True, False, 1, "not scanned", id="guard-expects-a-file-bandit-skipped"),
+        pytest.param(False, True, 1, "B602", id="a-finding-in-a-scanned-file-still-fails"),
+    ],
+)
+def test_guard_expects_every_file_except_those_bandit_was_told_to_skip(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    bandit_skips: bool,
+    guard_skips: bool,
+    exit_code: int,
+    message: str,
+) -> None:
+    # Given a scope whose .venv holds a vendored file with a finding, and Bandit told to skip it
+    # (or not)
+    scope = tmp_path / "scope"
+    (scope / ".venv").mkdir(parents=True)
+    (scope / "ok.py").write_text(_OK, encoding="utf-8")
+    (scope / ".venv" / "vendored.py").write_text(_SHELL_TRUE, encoding="utf-8")
+    report = tmp_path / "bandit.json"
+    bandit = [sys.executable, "-m", "bandit", "-q", "-f", "json", "-o", str(report)]
+    skip = ["-x", _VENV_GLOB] if bandit_skips else []
+    subprocess.run([*bandit, *skip, "-r", str(scope)], check=False, capture_output=True)
+
+    # When the guard reads the report, expecting the same files or not
+    excludes = (_VENV_GLOB,) if guard_skips else ()
+    result = check_bandit_report.main(str(report), [str(scope)], excludes)
+
+    # Then the skipped directory is not expected, a file Bandit did scan still counts, and a
+    # finding Bandit reported is never hidden by the exclusion
+    captured = capsys.readouterr()
+    assert result == exit_code
+    assert message in captured.out + captured.err
+
+
 @pytest.mark.parametrize(
     "report",
     [
