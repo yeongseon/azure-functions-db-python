@@ -129,6 +129,8 @@ def test_seeded_credentials_cover_all_encodings_and_carriers() -> None:
             f"<![CDATA[password={secret}]]>",
             f"DRIVER={{ODBC Driver 18 for SQL Server}};UID=sa;PWD={secret};SERVER=host",
             f"User ID=sa;Password={secret}",
+            f"Server=host;Password={{first;{secret}}};Database=db",
+            f"Server=host;PWD={{first}}}};{secret}}};Database=db",
         ]
         value = carriers[index % len(carriers)]
         transforms: list[Callable[[str], str]] = [

@@ -49,7 +49,11 @@ class Summary:
 
 
 _REDACTED = "[REDACTED]"
-_QUOTED = r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'"
+_QUOTED = (
+    r"(?i:\[REDACTED\]|\[MASKED\]|<redacted>|\*{3,}|x{5,})"
+    r"|\{(?:[^}\r\n\"']|}})*+(?:}|(?=[\r\n\"']|$))"
+    r"|\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'"
+)
 _AUTHORIZATION = re.compile(
     r"(?im)(?P<key>(?:proxy-)?authorization[\"']?\s*[:=]\s*)(?P<value>" + _QUOTED + r"|[^\r\n\"<]+)"
 )
@@ -63,12 +67,12 @@ _SECRET_FIELD = re.compile(
 _ODBC_PASSWORD = re.compile(
     r"(?i)(?<![\w-])(?P<key>pwd[\"']?\s*[:=]\s*)(?P<value>"
     + _QUOTED
-    + r"|\{(?:[^}]|}}){1,4096}\}|(?![/\\]|[A-Za-z]:[\\/]|\d{1,7}%?(?:[\s;&\]\)]|$))"
+    + r"|(?![/\\]|[A-Za-z]:[\\/]|\d{1,7}%?(?:[\s;&\]\)]|$))"
     r"[^\s;&<>\"',\]\)]{1,4096})"
 )
 _ODBC_CONTEXT = re.compile(
     r"(?i)(?:driver|server|database|uid|user(?: id)?)=[^\r\n]{0,4096}?;"
-    r"(?:[^;\r\n]{0,256};){0,12}pwd=(?P<value>" + _QUOTED + r"|\{[^}]{1,4096}\}|[^;\s\"']{1,4096})"
+    r"(?:[^;\r\n]{0,256};){0,12}pwd=(?P<value>" + _QUOTED + r"|[^;\s\"']{1,4096})"
 )
 _QUERY_CODE = re.compile(r"(?i)(?P<key>[?&]code=)(?P<value>" + _QUOTED + r"|[^\s;&<>\"'\]\)]+)")
 _SIGNATURE = re.compile(

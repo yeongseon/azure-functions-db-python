@@ -32,10 +32,20 @@ class ReportText(HTMLParser):
 
 
 def static_report(text: str, sanitize: Callable[[str], str]) -> str:
+    prefix = (
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Redacted report</title>'
+        "</head><body><pre>"
+    )
+    suffix = "</pre></body></html>"
+    if text.startswith(prefix) and text.endswith(suffix):
+        return prefix + escape(sanitize(unescape(text[len(prefix) : -len(suffix)]))) + suffix
     parser = ReportText(sanitize)
     parser.feed(text)
     parser.close()
-    return (
-        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Redacted report</title>'
-        "</head><body><pre>" + escape("\n".join(parser.parts)) + "</pre></body></html>"
-    )
+    content = "\n".join(parser.parts)
+    for _ in range(4):
+        sanitized = sanitize(content)
+        if sanitized == content:
+            break
+        content = sanitized
+    return prefix + escape(content) + suffix

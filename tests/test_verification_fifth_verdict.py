@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from tools.verification_evidence import redact
+from tools.verification_evidence import Summary, redact, report, save
 
 ROOT = Path(__file__).resolve().parents[1]
 DSN = (
@@ -20,6 +20,11 @@ DSN = (
     "PWD=CANARYODBC471;TrustServerCertificate=yes"
 )
 CASES = (
+    "Server=host;User ID=sa;Password={first;ORACLEADO471};Database=db",
+    "Server=host;Passwd={first}};ORACLEBRACE471};Database=db",
+    'Password="first;ORACLEDOUBLE471"',
+    "Password='first;ORACLESINGLE471'",
+    "Password={first;ORACLEUNTERMINATED471",
     DSN,
     quote_plus(DSN),
     json.dumps({"PWD": "CANARYJSONPWD471"}),
@@ -31,7 +36,9 @@ CASES = (
 )
 
 
-def test_real_lane_odbc_ado_and_existing_masks(tmp_path: Path) -> None:
+def test_real_lane_odbc_ado_and_existing_masks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tests = tmp_path / "tests/integration/db"
     tests.mkdir(parents=True)
     masks = tuple(
@@ -73,11 +80,22 @@ def test_real_lane_odbc_ado_and_existing_masks(tmp_path: Path) -> None:
         if path.is_file() and b"CANARY" in path.read_bytes()
     ]
     assert leaks == []
+    assert all(
+        b"ORACLE" not in path.read_bytes() for path in directory.rglob("*") if path.is_file()
+    )
     assert "CANARY" not in result.stdout + result.stderr + job.read_text()
     for path in directory.rglob("*.json"):
         json.loads(path.read_text())
     parser = HTMLParser()
     parser.feed((directory / "report.html").read_text())
+    before = {path: path.read_bytes() for path in directory.rglob("*") if path.is_file()}
+    saved = Summary(**summary)
+    monkeypatch.chdir(tmp_path)
+    relative = Path("test-results/integration/sqlite")
+    save(relative, saved)
+    save(relative, saved)
+    report(relative)
+    assert {path: path.read_bytes() for path in directory.rglob("*") if path.is_file()} == before
 
 
 @pytest.mark.parametrize("mask", ["***", "****", "<redacted>", "[REDACTED]", "xxxxx"])
