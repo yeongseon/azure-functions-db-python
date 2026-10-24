@@ -18,7 +18,8 @@ def _gate() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def _pyproject() -> dict[str, Any]:
-    return tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    project: dict[str, Any] = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    return project
 
 
 def test_publish_needs_the_audit_and_no_step_can_swallow_its_failure() -> None:
