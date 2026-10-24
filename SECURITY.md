@@ -34,10 +34,14 @@ If you prefer email, contact: yeongseon.choe@gmail.com
 | Latest release | :white_check_mark: |
 | Older releases | :x: |
 
-## Dependency Advisories
+## Release gate: known advisories in the runtime dependencies
 
-Publishing is blocked if `make audit-wheel` finds a known advisory in the third-party runtime
-dependencies of the candidate wheel (Python 3.11-3.14, `all` extra). The candidate itself is
-excluded. To excuse an advisory, add `<ID> <owner> <YYYY-MM-DD expiry> <reason>` to
-`security/pip-audit-ignore.txt`; a malformed or expired entry fails the audit. The weekly
-`dependency-audit.yml` runs the same target as non-blocking reporting.
+The `runtime-dependency-audit` job in `publish-pypi.yml` blocks `publish` on `v*` tags (and on a manual dispatch against a tag); pull requests do not run it. On each of Python 3.11-3.14 it installs the downloaded candidate wheel (the exact artifact `publish` uploads) with the `all` extra, the union of the `postgres`, `mysql` and `mssql` extras, into a clean virtual environment, runs `pip freeze --exclude azure-functions-db`, and audits that list with `pip-audit==2.10.1 --no-deps --disable-pip --strict`. A known advisory, an empty list or a package `pip-audit` cannot audit fails the job. `pip-audit` reports no severity, so every advisory blocks. The audit queries PyPI: if it is unreachable the release stays blocked until a retry passes (`gh workflow run publish-pypi.yml --ref vX.Y.Z`). Each cell uploads its JSON report (`runtime-audit-*`, 30 days). The weekly `dependency-audit.yml` stays reporting-only.
+
+An advisory that cannot be fixed yet may be waived for at most 90 days in `security/runtime-advisory-exceptions.txt`, one line each:
+
+```text
+ADVISORY-ID owner added expires reason...
+```
+
+`added` and `expires` are ISO dates; `expires` is the last day the waiver applies. A waiver that is expired, not yet added, malformed or longer than 90 days fails the gate (`tools/runtime_audit_args.py`). The gate reads the file from the tagged commit, so a waiver must be on `main` before the Release PR is merged. Pull-request CI does not run the gate, so check an edit with `python tools/runtime_audit_args.py security/runtime-advisory-exceptions.txt`.
