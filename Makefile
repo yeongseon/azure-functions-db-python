@@ -66,6 +66,28 @@ lint: ensure-hatch
 security: ensure-hatch
 	@$(HATCH) run security
 
+# Release gate: audit the third-party runtime closure of the exact candidate wheel.
+# Independent of Hatch on purpose: each CI matrix cell audits with its own interpreter.
+# Usage: make audit-wheel WHEEL=dist/<wheel>.whl [EXTRA=all] [REPORT=report.json]
+AUDIT_VENV ?= .audit-venv
+EXTRA ?= all
+PIP_AUDIT_SPEC ?= pip-audit==2.10.1
+IGNORE_FILE ?= security/pip-audit-ignore.txt
+.PHONY: audit-wheel
+audit-wheel:
+	@test -f "$(WHEEL)" || { echo "WHEEL=<path to candidate wheel> is required" >&2; exit 2; }
+	@rm -rf $(AUDIT_VENV) && mkdir -p $(AUDIT_VENV) && python -m venv --without-pip $(AUDIT_VENV)/target && python -m venv $(AUDIT_VENV)/tool
+	@python -m pip --python $(AUDIT_VENV)/target/bin/python install -q "$(WHEEL)[$(EXTRA)]"
+	@python -m pip --python $(AUDIT_VENV)/target/bin/python freeze --exclude azure-functions-db > $(AUDIT_VENV)/frozen.txt
+	@test -s $(AUDIT_VENV)/frozen.txt || { echo "empty closure: nothing was audited" >&2; exit 3; }
+	@$(AUDIT_VENV)/tool/bin/python -m pip install -q "$(PIP_AUDIT_SPEC)"
+	@awk -v today="$$(date +%F)" '/^[[:space:]]*(#|$$)/ {next} \
+		NF < 4 || $$3 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$$/ || $$3 <= today { print "invalid or expired exception: " $$0 > "/dev/stderr"; bad=1; next } \
+		{ print "--ignore-vuln " $$1 } END { exit bad }' $(IGNORE_FILE) > $(AUDIT_VENV)/ignores.txt
+	@$(AUDIT_VENV)/tool/bin/pip-audit -r $(AUDIT_VENV)/frozen.txt --no-deps --disable-pip --strict --progress-spinner off \
+		$$(cat $(AUDIT_VENV)/ignores.txt) $(if $(REPORT),-f json -o $(REPORT)) \
+		|| { rc=$$?; test -z "$(REPORT)" || cat "$(REPORT)"; exit $$rc; }
+
 .PHONY: check
 check: ensure-hatch
 	@$(MAKE) lint

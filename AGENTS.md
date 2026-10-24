@@ -166,7 +166,7 @@ feat:/fix: PR merged into main
         |
   publish-pypi.yml  (started by the tag)
         build -> lib-tests -> db-runtime-gate
-              -> azure-e2e -> PyPI
+              -> azure-e2e -> runtime-dependency-audit -> PyPI
 ```
 
 1. Merge Conventional-Commit PRs into `main`. Release Please keeps an open **Release PR** showing exactly what the next release would be.
@@ -189,6 +189,7 @@ Every tier runs inside `publish-pypi.yml` on the tag, and **all of them gate the
 | `lib-tests` | library unit regressions (external-service tests excluded) |
 | `db-runtime-gate` | installs the candidate wheel over source, asserts the installed version matches the release, then runs the package's own live checkpoint-store suite (`tests/integration/test_checkpoint_store_live.py`) — the blob-backed `BlobCheckpointStore` — against a real Azurite blob endpoint. A fail-closed junit guard treats zero-collected/all-skipped as failure, so this proves this package's primary runtime surface actually executes, not just that a host boots. |
 | `azure-e2e` | cloud-only drift — deploys to real Azure, runs the live e2e suite, uploads an `azure-cert` record |
+| `runtime-dependency-audit` | known runtime advisories: `make audit-wheel` audits the third-party closure (`all` extra, Python 3.11-3.14) of the exact candidate wheel with `pip-audit --strict`; skipped, empty or unauditable fails. Excepted advisories need an owner, reason and future expiry in `security/pip-audit-ignore.txt` (ships empty) |
 | `publish` | uploads the exact artifact `build` produced; it never rebuilds |
 
 ### Recovery

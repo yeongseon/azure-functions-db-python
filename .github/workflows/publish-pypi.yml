@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 # Verify-before-publish gate (see AGENTS.md):
-#   build -> lib-tests -> db-runtime-gate -> azure-e2e -> publish
+#   build -> lib-tests -> db-runtime-gate -> azure-e2e -> runtime-dependency-audit -> publish
 # Tiered runtime verification before any PyPI upload:
 #   * lib-tests             : the library's own unit suite (no external services).
 #   * db-runtime-gate       : install the candidate wheel, assert the installed version
@@ -27,6 +27,8 @@ permissions:
 #                            against the tag being published. Because it runs inside this chain at
 #                            the same ref, certification covers the exact published commit by
 #                            construction -- no cross-run SHA/freshness matching is required.
+#   * runtime-dependency-audit : `make audit-wheel` on the exact candidate wheel (3.11-3.14, `all` extra);
+#                            any known runtime advisory blocks unless excepted in security/pip-audit-ignore.txt.
 # The publish job uploads the EXACT artifact that was tested; it never rebuilds.
 # A tag whose gate fails is a failed release candidate: the version stays
 # unpublished. Recover by fixing forward and cutting the next patch tag
@@ -214,9 +216,48 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+  runtime-dependency-audit:
+    name: Runtime dependency audit (candidate wheel, Python ${{ matrix.python-version }})
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download candidate wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: candidate-dist
+
+      - name: Audit the candidate's runtime closure (blocks on any known advisory)
+        run: make audit-wheel WHEEL="$(ls candidate-dist/*.whl)" REPORT=audit-report.json
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runtime-audit-${{ matrix.python-version }}
+          path: audit-report.json
+          if-no-files-found: ignore
+          retention-days: 5
+
   publish:
     name: Publish to PyPI
-    needs: [build, lib-tests, db-runtime-gate, azure-e2e]
+    needs: [build, lib-tests, db-runtime-gate, azure-e2e, runtime-dependency-audit]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

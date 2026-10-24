@@ -33,3 +33,11 @@ If you prefer email, contact: yeongseon.choe@gmail.com
 | ------- | --------- |
 | Latest release | :white_check_mark: |
 | Older releases | :x: |
+
+## Dependency Advisories
+
+Publishing is blocked if `make audit-wheel` finds a known advisory in the third-party runtime
+dependencies of the candidate wheel (Python 3.11-3.14, `all` extra). The candidate itself is
+excluded. To excuse an advisory, add `<ID> <owner> <YYYY-MM-DD expiry> <reason>` to
+`security/pip-audit-ignore.txt`; a malformed or expired entry fails the audit. The weekly
+`dependency-audit.yml` runs the same target as non-blocking reporting.
