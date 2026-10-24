@@ -63,22 +63,24 @@ lint: ensure-hatch
 	@$(HATCH) run lint
 
 # Bandit exits 0 for an empty, missing or unparsable scope, so tools/check_bandit_report.py also
-# checks its JSON report. Bandit's -x and the guard get the same BANDIT_EXCLUDE: only the .venv
-# the example READMEs create. There is no skip list: suppress a reviewed finding inline, as
-# `# nosec Bxxx # <reason>`. Why each flag: SECURITY.md, "Static analysis gate".
+# checks its JSON report. The guard computes once what is not scanned (virtualenvs, node_modules,
+# site-packages) and Bandit's -x and the guard get that same list. There is no skip list: suppress
+# a reviewed finding inline, as `# nosec Bxxx # <reason>`. Why each flag: SECURITY.md, "Static
+# analysis gate".
 BANDIT_REPORT := test-results/bandit.json
 BANDIT_INI := test-results/bandit.ini
 BANDIT_SCOPE := src examples tools benchmarks
-BANDIT_EXCLUDE := examples/*/.venv/*
-BANDIT := $(HATCH) run python -m bandit -q -f json --ini $(BANDIT_INI) -x '$(BANDIT_EXCLUDE)'
-BANDIT_CHECK := $(HATCH) run python tools/check_bandit_report.py -x '$(BANDIT_EXCLUDE)'
+BANDIT := $(HATCH) run python -m bandit -q -f json --ini $(BANDIT_INI)
+BANDIT_CHECK := $(HATCH) run python tools/check_bandit_report.py
 
 .PHONY: security
 security: ensure-hatch
 	@rm -f $(BANDIT_REPORT) && mkdir -p $(dir $(BANDIT_REPORT)) && printf '[bandit]\n' > $(BANDIT_INI)
-	@status=0; \
-	$(BANDIT) -o $(BANDIT_REPORT) -r $(BANDIT_SCOPE) || status=1; \
-	$(BANDIT_CHECK) $(BANDIT_REPORT) $(BANDIT_SCOPE) || status=1; \
+	@excludes=$$($(BANDIT_CHECK) --print-excludes $(BANDIT_SCOPE)) || exit 1; \
+	[ -z "$$excludes" ] || echo "bandit: excluding $$excludes"; \
+	status=0; \
+	$(BANDIT) -x "$$excludes" -o $(BANDIT_REPORT) -r $(BANDIT_SCOPE) || status=1; \
+	$(BANDIT_CHECK) -x "$$excludes" $(BANDIT_REPORT) $(BANDIT_SCOPE) || status=1; \
 	exit $$status
 
 .PHONY: check
