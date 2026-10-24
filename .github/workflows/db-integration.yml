@@ -81,10 +81,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Start Azurite with skipApiVersionCheck
+        if: matrix.db == 'sqlite'
         run: |
           npm install -g azurite
           azurite --skipApiVersionCheck --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 &
-          sleep 3
+          for _ in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/10000) 2>/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::Azurite did not accept connections on port 10000"
+          exit 1
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -127,25 +133,32 @@ jobs:
           esac
 
       - name: Set Azurite connection string
+        if: matrix.db == 'sqlite'
         run: |
           echo "TEST_AZURITE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;" >> "$GITHUB_ENV"
 
+      # A required lane fails on test failures, collection errors, zero selected
+      # tests (pytest exit 5), any skip (INTEGRATION_FAIL_ON_SKIP) and a URL whose
+      # dialect differs from the matrix backend. There is no fallback selector.
       - name: Run integration tests
+        env:
+          INTEGRATION_FAIL_ON_SKIP: "1"
         run: |
           pytest tests/integration -m "integration and ${{ matrix.db }}" \
             -v --no-cov --tb=short \
-            --html=integration-report/report.html --self-contained-html \
-            || pytest tests/integration -m "integration" \
-            -v --no-cov --tb=short \
+            --junitxml=integration-report/junit.xml \
             --html=integration-report/report.html --self-contained-html
 
+      # Azurite does not depend on the database backend, so it runs once.
       - name: Run Azurite tests
-        if: always()
+        if: ${{ always() && matrix.db == 'sqlite' }}
+        env:
+          INTEGRATION_FAIL_ON_SKIP: "1"
         run: |
           pytest tests/integration -m "azurite" \
             -v --no-cov --tb=short \
-            --html=azurite-report/report.html --self-contained-html \
-            || true
+            --junitxml=azurite-report/junit.xml \
+            --html=azurite-report/report.html --self-contained-html
 
       - name: Upload integration test report
         if: always()
