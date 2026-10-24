@@ -49,6 +49,59 @@ Apply the principle of least privilege for each use case:
 - Read and write access on the checkpoint blob container.
 - Quarantine container write access (if configured).
 
+## Raw SQL
+
+`DbReader.query()` and `scalar()` run the SQL string you give them. The library does not parse,
+restrict or rewrite it (`one()` and `one_or_none()` pass their SQL through the same way), so a
+statement that writes is sent to the database like any other: `DbReader` is **not** an
+authorization boundary. It never commits (each call ends with a rollback), but do not rely on that
+either: an engine configured with `isolation_level="AUTOCOMMIT"` commits every statement. Use
+`DbWriter` to write, and a read-only database role to guarantee reads only.
+
+### Bind values
+
+Pass untrusted *values* as `:name` placeholders with `params`; never format them into the SQL.
+Bound values reach the driver separately from the SQL text, so it treats them as data whatever
+they contain:
+
+```python
+rows = reader.query("SELECT id FROM users WHERE name = :name", params={"name": name})
+```
+
+`query()` and `scalar()` emit a `UserWarning` when `params` is omitted. `params={}` is the
+explicit form for trusted constant SQL and does not warn.
+
+### Allow-list identifiers
+
+Placeholders stand for values only, never for table or column names or SQL keywords:
+`SELECT :col FROM users` returns the string you bound, not that column. If a name must vary, map
+the untrusted input to an application-owned constant and reject anything unknown:
+
+```python
+ORDER_BY = {"name": "name", "newest": "created_at DESC"}
+order_by = ORDER_BY[sort]  # KeyError for anything not listed: reject the request
+rows = reader.query(f"SELECT id FROM users ORDER BY {order_by}", params={})
+```
+
+### Use a read-only role
+
+Connect readers with a role that can only `SELECT` the tables they query (see
+[Database Permissions](#database-permissions)). For example, on PostgreSQL:
+
+```sql
+CREATE ROLE reports_reader LOGIN PASSWORD '<from your secret store>';
+GRANT SELECT ON users, orders TO reports_reader;
+```
+
+### Diagnostics
+
+When a connection, engine creation or SQL execution fails, `query()` and `scalar()` raise
+`QueryError` (`DbConnectionError` if the engine cannot be created) with a fixed message that
+contains no connection URL, SQL, parameter values or driver message. The original exception is
+chained as `__cause__`, and SQLAlchemy's message includes the SQL and the bound parameter values:
+do not return tracebacks to callers or write `__cause__` to logs they can read. Leave `echo` off
+(`DbConfig.echo` defaults to `False`); SQLAlchemy's echo output includes SQL and parameter values.
+
 ## Data Minimization
 
 - Use the `query` parameter to project only the columns you need.
