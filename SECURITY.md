@@ -45,3 +45,9 @@ ADVISORY-ID owner added expires reason...
 ```
 
 `added` and `expires` are ISO dates; `expires` is the last day the waiver applies. A waiver that is expired, not yet added, malformed or longer than 90 days fails the gate (`tools/runtime_audit_args.py`). The gate reads the file from the tagged commit, so a waiver must be on `main` before the Release PR is merged. Pull-request CI does not run the gate, so check an edit with `python tools/runtime_audit_args.py security/runtime-advisory-exceptions.txt`.
+
+## Static analysis gate: Bandit
+
+`make security` runs Bandit once over `src`, `examples`, `tools` and `benchmarks` with every Bandit test enabled and no skip list; `tests/` is not scanned. The required `bandit` check (`security.yml`), the `quality` job of `ci-test.yml` and the weekly `maintenance.yml` run it. Bandit exits 0 for an empty directory, a missing path and a file it cannot parse, so the recipe writes Bandit's JSON report to `test-results/bandit.json` (deleted first, so a report left by an earlier run never counts) and `tools/check_bandit_report.py` fails the target when no code was analysed, a file was skipped, a Python file in scope was left unscanned or any finding remains. `security.yml` uploads the report as `bandit-report-<run attempt>`, also when the check fails.
+
+Suppress a reviewed finding only inline, on the line Bandit reports, as `# nosec Bxxx # <reason>`. Separate several test IDs with spaces, not commas (Bandit 1.9.4 honours only the last ID of a comma list), and put the reason behind the second `#` (Bandit warns about every other word after the IDs). There is no skip list, allow-list or baseline file. The pre-commit hook covers the same four directories, on the changed files only and without the completeness guard.
