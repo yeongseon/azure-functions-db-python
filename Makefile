@@ -68,13 +68,19 @@ lint: ensure-hatch
 # --ini: unless it is given one, Bandit reads any .bandit file in the scope (skips, tests,
 # exclude, baseline, configfile) and would let a file in a diff hide findings; an explicit ini
 # with no options makes it read none.
+# -x: generated virtualenvs and vendored packages are not repository code (the example READMEs
+# create .venv inside examples/<name>/). Directories named .venv, venv, env, node_modules or
+# site-packages are skipped, matched as whole path segments: a bare `-x env` is a substring match
+# and would hide src/envelope.py. The guard gets the same globs, so it does not expect those
+# files either; every other file in any scanned directory is still scanned and expected.
 # Every Bandit test runs on every file: there is no skip list for any directory. Suppress a
 # reviewed finding on its own line, `# nosec Bxxx # <reason>`, never here.
 BANDIT_REPORT := test-results/bandit.json
 BANDIT_INI := test-results/bandit.ini
 BANDIT_SCOPE := src examples tools benchmarks
-BANDIT := $(HATCH) run python -m bandit -q -f json --ini $(BANDIT_INI)
-BANDIT_CHECK := $(HATCH) run python tools/check_bandit_report.py
+BANDIT_EXCLUDE := */.venv/*,*/venv/*,*/env/*,*/node_modules/*,*/site-packages/*
+BANDIT := $(HATCH) run python -m bandit -q -f json --ini $(BANDIT_INI) -x '$(BANDIT_EXCLUDE)'
+BANDIT_CHECK := $(HATCH) run python tools/check_bandit_report.py -x '$(BANDIT_EXCLUDE)'
 
 .PHONY: security
 security: ensure-hatch

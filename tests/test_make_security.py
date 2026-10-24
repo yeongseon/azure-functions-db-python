@@ -40,6 +40,7 @@ def _scratch_layout(root: Path, files: dict[str, str] | None = None) -> None:
         (root / name).mkdir(exist_ok=True)
         (root / name / "ok.py").write_text(_OK, encoding="utf-8")
     for name, text in (files or {}).items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(text, encoding="utf-8")
 
 
@@ -163,6 +164,62 @@ def test_make_security_ignores_a_bandit_file_in_a_scanned_directory(
     assert result.returncode != 0, result.stderr
     assert {(f"{directory}/new_code.py", "B404"), (f"{directory}/new_code.py", "B603")} <= reported
     assert "Found project level .bandit file" not in result.stderr
+
+
+_VENDORED_DIRECTORIES = [".venv", "venv", "env", "node_modules", "site-packages"]
+
+
+@needs_make
+@pytest.mark.parametrize("directory", _VENDORED_DIRECTORIES)
+def test_make_security_skips_generated_virtualenvs_and_vendored_packages(
+    tmp_path: Path, directory: str
+) -> None:
+    # Given the documented example setup, `python -m venv .venv` inside an example, whose vendored
+    # files have findings and a syntax error
+    example = "examples/postgresql-poll-trigger"
+    _scratch_layout(
+        tmp_path,
+        {
+            f"{example}/function_app.py": _OK,
+            f"{example}/{directory}/lib/pkg/vendored.py": _SHELL_TRUE,
+            f"{example}/{directory}/lib/pkg/python2.py": "print 'x'\n",
+        },
+    )
+
+    # When the real recipe runs
+    result = _make_security(tmp_path)
+
+    # Then the gate passes and counts the repository's own files, none of the vendored ones
+    parts = [path.relative_to(tmp_path).parts for path in tmp_path.rglob("*.py")]
+    own_files = [names for names in parts if directory not in names]
+    assert result.returncode == 0, result.stderr
+    assert f"in {len(own_files)} files, no findings" in result.stdout
+
+
+@needs_make
+def test_make_security_still_scans_repository_code_beside_and_named_like_a_virtualenv(
+    tmp_path: Path,
+) -> None:
+    # Given repository files with a finding: one beside a .venv, the others in paths that only
+    # contain an excluded name, and vendored files with the same finding in every excluded name
+    repository = [
+        "examples/postgresql-poll-trigger/function_app.py",
+        "examples/environment/app.py",
+        "examples/venv_demo/app.py",
+        "src/envelope.py",
+        "benchmarks/node_modules_notes/bench.py",
+        "tools/site_packages_check.py",
+    ]
+    vendored = [f"examples/postgresql-poll-trigger/{n}/lib/x.py" for n in _VENDORED_DIRECTORIES]
+    _scratch_layout(tmp_path, dict.fromkeys([*repository, *vendored], _SHELL_TRUE))
+
+    # When the real recipe runs
+    result = _make_security(tmp_path)
+
+    # Then the gate fails on exactly the repository files: nothing of theirs is hidden
+    reported = set(re.findall(r"^bandit: (\S+?):\d+ B602 ", result.stderr, re.MULTILINE))
+    assert result.returncode != 0
+    assert reported == set(repository), result.stderr
 
 
 @needs_make
