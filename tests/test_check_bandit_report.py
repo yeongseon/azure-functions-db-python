@@ -28,7 +28,6 @@ _NOSEC_WITH_IDS = (
     "subprocess.call('echo', shell=True)  # nosec:B602 B607 # test fixture\n"
 )
 _NO_ID = "names no Bandit test ID"
-_VENV_GLOB = "*/.venv/*"
 
 
 def _calls_with(comment: str) -> str:
@@ -36,10 +35,13 @@ def _calls_with(comment: str) -> str:
     return f"import subprocess  {comment}\nsubprocess.call('echo', shell=True)  {comment}\n"
 
 
-def _scan(tmp_path: Path, files: dict[str, str] | None, *flags: str) -> tuple[str, list[str]]:
+def _scan(
+    tmp_path: Path, files: dict[str, str] | None, *flags: str, skip_computed: bool = False
+) -> tuple[str, list[str]]:
     """Run Bandit like `make security` on a scratch scope (``None``: a path that does not exist).
 
-    Returns the JSON report and the scope, as the guard takes them.
+    Returns the JSON report and the scope, as the guard takes them. ``skip_computed`` passes
+    Bandit the `-x` list the guard computes for the scope, as the recipe does.
     """
     scope = tmp_path / "scope"
     for name, text in (files or {}).items():
@@ -47,6 +49,8 @@ def _scan(tmp_path: Path, files: dict[str, str] | None, *flags: str) -> tuple[st
         (scope / name).write_text(text, encoding="utf-8")
     if files is not None:
         scope.mkdir(exist_ok=True)
+    if skip_computed:
+        flags = (*flags, "-x", ",".join(check_bandit_report.excluded_globs([str(scope)])))
     report = tmp_path / "bandit.json"
     bandit = [sys.executable, "-m", "bandit", "-q", "-f", "json", "-o", str(report), *flags]
     subprocess.run([*bandit, "-r", str(scope)], check=False, capture_output=True)
@@ -145,10 +149,11 @@ def test_guard_expects_every_file_except_those_bandit_was_told_to_skip(
     exit_code: int,
     message: str,
 ) -> None:
-    # a .venv holding a vendored file with a finding; Bandit is told to skip it, or not
-    files = {"ok.py": _OK, ".venv/vendored.py": _SHELL_TRUE}
-    report, scopes = _scan(tmp_path, files, *(["-x", _VENV_GLOB] if bandit_skips else []))
-    result = check_bandit_report.main(report, scopes, (_VENV_GLOB,) if guard_skips else ())
+    # a virtualenv holding a vendored file with a finding; Bandit is told to skip it, or not
+    files = {"ok.py": _OK, ".venv/pyvenv.cfg": "home = /usr\n", ".venv/vendored.py": _SHELL_TRUE}
+    report, scopes = _scan(tmp_path, files, skip_computed=bandit_skips)
+    excluded = tuple(check_bandit_report.excluded_globs(scopes))
+    result = check_bandit_report.main(report, scopes, excluded if guard_skips else ())
     captured = capsys.readouterr()
     assert result == exit_code
     assert message in captured.out + captured.err
