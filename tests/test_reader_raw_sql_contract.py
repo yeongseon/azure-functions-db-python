@@ -2,8 +2,9 @@
 
 ``query()`` and ``scalar()`` hand the SQL to the database as written: no SELECT-only rule and no
 parsing. Safety rests on bound parameters and read-only database roles. These tests pin that
-choice, that bound values stay data, and that the library's own errors and logs never echo
-credentials (fake canaries stand in for the password, URL, SQL, parameters and driver text).
+choice, that bound values stay data, and that the library's own errors, repr and DEBUG logs (of
+failed and of successful calls) never echo credentials (fake canaries stand in for the password,
+URL, SQL, bound parameters and driver text).
 """
 
 from __future__ import annotations
@@ -18,13 +19,22 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
-from azure_functions_db import DbConnectionError, DbReader, EngineProvider, QueryError
+from azure_functions_db import (
+    ConfigurationError,
+    DbConnectionError,
+    DbReader,
+    EngineProvider,
+    QueryError,
+)
 from azure_functions_db.core.config import DbConfig
 
 CANARY_PASSWORD = "CANARY_SECRET_pw"
 CANARY_URL = f"postgresql+psycopg://user:{CANARY_PASSWORD}@host/db"
 CANARY_SQL = "CANARY_SQL_TEXT"
 CANARY_PARAM = "CANARY_PARAM_VALUE"
+CANARY_DRIVER = "CANARY_DRIVER_TEXT"  # driver wording of its own: independent of the URL
+
+IN_MEMORY = DbConfig(connection_url="sqlite://")
 
 both_methods = pytest.mark.parametrize("method", ["query", "scalar"])
 
@@ -38,18 +48,31 @@ def provider() -> Iterator[EngineProvider]:
 
 @pytest.fixture
 def library_logs(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
+    """DEBUG capture for root and for the package logger, whatever else configured either."""
+    caplog.set_level(logging.DEBUG)
     caplog.set_level(logging.DEBUG, logger="azure_functions_db")
     return caplog
 
 
-def reader_over(provider: EngineProvider, *values: str) -> DbReader:
-    """A reader over a fresh in-memory SQLite table ``t(value)`` holding *values*."""
-    config = DbConfig(connection_url="sqlite://")
-    with provider.get_engine(config).begin() as conn:
+def logged_text(logs: pytest.LogCaptureFixture) -> str:
+    """Everything captured: formatted text with tracebacks, plus each record's args and extras."""
+    return " ".join([logs.text, *(repr(vars(record)) for record in logs.records)])
+
+
+def seeded_engine(provider: EngineProvider, *values: str) -> Engine:
+    """The in-memory SQLite engine, holding a fresh table ``t(value)`` with *values*."""
+    engine = provider.get_engine(IN_MEMORY)
+    with engine.begin() as conn:
         conn.exec_driver_sql("CREATE TABLE t (value TEXT)")
         for value in values:
             conn.exec_driver_sql("INSERT INTO t VALUES (?)", (value,))
-    return DbReader(db_config=config, engine_provider=provider)
+    return engine
+
+
+def reader_over(provider: EngineProvider, *values: str) -> DbReader:
+    """A reader over a fresh in-memory SQLite table ``t(value)`` holding *values*."""
+    seeded_engine(provider, *values)
+    return DbReader(db_config=IN_MEMORY, engine_provider=provider)
 
 
 def one_row(method: str, column: str, value: str) -> object:
@@ -58,26 +81,39 @@ def one_row(method: str, column: str, value: str) -> object:
 
 
 class FailingProvider(EngineProvider):
-    """Engine creation fails and the driver's message echoes the connection URL."""
+    """Engine creation fails; the driver's text (a canary of its own) also echoes the URL."""
 
     def get_engine(self, config: DbConfig) -> Engine:
-        raise sqlite3.OperationalError(f"driver error: {config.connection_url}")
+        raise sqlite3.OperationalError(f"driver error {CANARY_DRIVER}: {config.connection_url}")
 
 
 class RejectingProvider(EngineProvider):
-    """The engine builds but every connection attempt fails, echoing the URL as some drivers do."""
+    """The engine builds; each connection attempt fails with driver text of its own and the URL."""
 
     def get_engine(self, config: DbConfig) -> Engine:
         def creator() -> NoReturn:
-            raise sqlite3.OperationalError(f"authentication failed: {config.connection_url}")
+            raise sqlite3.OperationalError(
+                f"authentication failed {CANARY_DRIVER}: {config.connection_url}"
+            )
 
         return create_engine("sqlite://", creator=creator)
+
+
+class RedirectingProvider(EngineProvider):
+    """Serves one fixed engine whatever URL the config carries, so a canary URL can connect."""
+
+    def __init__(self, engine: Engine) -> None:
+        super().__init__()
+        self._engine = engine
+
+    def get_engine(self, config: DbConfig) -> Engine:
+        return self._engine
 
 
 def assert_not_exposed(error: Exception, logs: pytest.LogCaptureFixture, *canaries: str) -> None:
     """Each canary reached the chained driver error but not the library's own text or logs."""
     driver_text = str(error.__cause__)
-    exposed = f"{error} {error!r} {error.args} {logs.text}"
+    exposed = f"{error} {error!r} {error.args} {logged_text(logs)}"
     for canary in canaries:
         assert canary in driver_text, "precondition: the chained driver error carries the canary"
         assert canary not in exposed
@@ -158,22 +194,76 @@ def test_sql_failure_error_omits_sql_parameters_and_driver_text(
 def test_connection_failure_error_omits_url_and_driver_text(
     library_logs: pytest.LogCaptureFixture, method: str
 ) -> None:
-    # Given a URL carrying a password and a driver that echoes it when the connection fails
+    # Given a URL carrying a password and a driver that adds text of its own and echoes the URL
     with DbReader(url=CANARY_URL, engine_provider=RejectingProvider()) as reader:
         # When the connection fails during execution
         with pytest.raises(QueryError) as caught:
             getattr(reader, method)("SELECT 1", params={})
-    # Then neither the password nor the URL appears in the library's error or logs
-    assert_not_exposed(caught.value, library_logs, CANARY_PASSWORD, CANARY_URL)
+    # Then the library's error and logs carry neither the credentials nor the driver's text
+    assert_not_exposed(caught.value, library_logs, CANARY_PASSWORD, CANARY_URL, CANARY_DRIVER)
 
 
 def test_engine_creation_failure_error_omits_url_and_driver_text(
     library_logs: pytest.LogCaptureFixture,
 ) -> None:
-    # Given a URL carrying a password and a driver that echoes it when the engine fails
+    # Given a URL carrying a password and a driver that adds text of its own and echoes the URL
     with DbReader(url=CANARY_URL, engine_provider=FailingProvider()) as reader:
         # When the first query needs the engine
         with pytest.raises(DbConnectionError) as caught:
             reader.query("SELECT 1", params={})
-    # Then neither the password nor the URL appears in the library's error or logs
-    assert_not_exposed(caught.value, library_logs, CANARY_PASSWORD, CANARY_URL)
+    # Then the library's error and logs carry neither the credentials nor the driver's text
+    assert_not_exposed(caught.value, library_logs, CANARY_PASSWORD, CANARY_URL, CANARY_DRIVER)
+
+
+@both_methods
+def test_reflection_failure_error_omits_url_and_driver_text(
+    library_logs: pytest.LogCaptureFixture, method: str
+) -> None:
+    # Given a table-bound reader (the first call reflects the table) whose connections fail
+    with DbReader(url=CANARY_URL, table="users", engine_provider=RejectingProvider()) as reader:
+        # When the first call needs the table
+        with pytest.raises(ConfigurationError) as caught:
+            getattr(reader, method)("SELECT 1", params={})
+    # Then it is a ConfigurationError (not a QueryError) with neither credentials nor driver text
+    assert_not_exposed(caught.value, library_logs, CANARY_PASSWORD, CANARY_URL, CANARY_DRIVER)
+
+
+def test_log_capture_sees_debug_records_from_the_package_and_from_root(
+    library_logs: pytest.LogCaptureFixture,
+) -> None:
+    # Given the capture the log assertions rely on; When DEBUG records are emitted
+    logging.getLogger("azure_functions_db.binding.reader").debug("probe-package")
+    logging.getLogger("unrelated.module").debug("probe-root")
+    # Then both are captured, so a canary missing from the logs elsewhere means nothing was logged
+    logged = logged_text(library_logs)
+    assert "probe-package" in logged
+    assert "probe-root" in logged
+
+
+@both_methods
+def test_successful_call_logs_omit_credentials_sql_and_bound_values(
+    provider: EngineProvider, library_logs: pytest.LogCaptureFixture, method: str
+) -> None:
+    # Given a reader whose own config carries the credential canaries, over a canary-valued row
+    engine = seeded_engine(provider, CANARY_PARAM)
+    with DbReader(url=CANARY_URL, engine_provider=RedirectingProvider(engine)) as reader:
+        # When a call carrying the SQL and bound-value canaries succeeds
+        result = getattr(reader, method)(
+            f"SELECT value FROM t WHERE value = :value /* {CANARY_SQL} */",
+            params={"value": CANARY_PARAM},
+        )
+    # Then it really ran, and no canary reached any DEBUG-or-higher log record
+    assert result == one_row(method, "value", CANARY_PARAM)
+    logged = logged_text(library_logs)
+    for canary in (CANARY_PASSWORD, CANARY_URL, CANARY_SQL, CANARY_PARAM):
+        assert canary not in logged
+
+
+def test_reader_repr_omits_url_and_password() -> None:
+    # Given a reader whose config carries a password
+    with DbReader(url=CANARY_URL, table="users") as reader:
+        # When it is rendered, as a log line or a traceback would
+        rendered = f"{reader!r} {reader}"
+    # Then neither the URL nor the password is in it
+    assert CANARY_PASSWORD not in rendered
+    assert CANARY_URL not in rendered
