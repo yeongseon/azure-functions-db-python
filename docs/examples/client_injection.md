@@ -45,6 +45,11 @@ def complex_read(reader: DbReader) -> None:
 | `get(pk={...})` | Fetch a single row by primary key. Returns `dict \| None`. |
 | `query(sql, params={...})` | Execute a SQL query. Returns `list[dict]`. |
 
+!!! warning "Raw SQL is not restricted"
+    `query()` runs any SQL the connection is allowed to execute, including writes. Bind
+    untrusted values with `:name` placeholders and `params`, choose identifiers from an
+    allow-list, and connect with a read-only role. See [Raw SQL](../security.md#raw-sql).
+
 ## inject_writer
 
 Inject a `DbWriter` instance for write operations:
