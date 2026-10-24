@@ -272,16 +272,19 @@ def test_make_security_keeps_bandits_own_exit_status(tmp_path: Path) -> None:
 
 
 @needs_make
-def test_make_security_keeps_the_bandit_progress_bar_out_of_the_log(tmp_path: Path) -> None:
+def test_make_security_keeps_the_log_free_of_the_progress_bar_and_config_warnings(
+    tmp_path: Path,
+) -> None:
     # Given more than 50 files in scope, where Bandit 1.9.4 draws a progress bar on stdout
     _scratch_layout(tmp_path, {f"src/m{number}.py": _OK for number in range(60)})
 
     # When the real recipe runs
     result = _make_security(tmp_path)
 
-    # Then it passes and the bar is not in the log
+    # Then it passes; the bar is not in the log, nor is Bandit's warning about an unreadable ini
     assert result.returncode == 0, result.stderr
     assert "Working" not in result.stdout + result.stderr
+    assert "Unable to parse config file" not in result.stderr
 
 
 @needs_make
