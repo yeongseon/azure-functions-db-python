@@ -45,6 +45,38 @@ def complex_read(reader: DbReader) -> None:
 | `get(pk={...})` | Fetch a single row by primary key. Returns `dict \| None`. |
 | `query(sql, params={...})` | Execute a SQL query. Returns `list[dict]`. |
 
+### Raw SQL trust boundary
+
+`query()` and `scalar()` accept arbitrary SQL. The library does **not** validate
+SQL as read-only: even a write statement can execute through `query()`. The
+reader name is not an authorization boundary. Use a dedicated least-privilege,
+read-only database user for readers (grant SELECT only on the required tables;
+do not use a database owner/admin account). Use a separate narrowly scoped writer
+identity when writes are needed.
+
+Bind every untrusted **value**, never interpolate it into SQL:
+
+```python
+rows = reader.query(
+    "SELECT id FROM users WHERE name = :name", params={"name": untrusted_name}
+)
+count = reader.scalar(
+    "SELECT COUNT(*) FROM users WHERE name = :name", params={"name": untrusted_name}
+)
+```
+
+Calling either method without `params` emits a safety warning. Passing `params={}`
+is appropriate for trusted constant SQL, not a substitute for binding input.
+Parameters cannot bind SQL identifiers (table/column names) or SQL syntax. Select
+identifiers from an application-owned allow-list, reject other inputs, and use
+SQLAlchemy schema/expression objects for quoting; never interpolate an unchecked
+request field as an identifier.
+
+Library wrapper messages omit driver details, but chained driver exceptions and
+SQLAlchemy debug/echo output may contain SQL, parameters or credentials. Do not
+return tracebacks to clients or upload raw diagnostics; keep `echo=False` and
+redact diagnostic exports at the application boundary.
+
 ## inject_writer
 
 Inject a `DbWriter` instance for write operations:

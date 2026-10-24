@@ -63,8 +63,25 @@ lint: ensure-hatch
 	@$(HATCH) run lint
 
 .PHONY: security
-security: ensure-hatch
+security: ensure-hatch security-inventory
 	@$(HATCH) run security
+
+# Shared security entry points; keep reporting separate from release enforcement.
+SECURITY_PYTHON ?= $(shell $(HATCH) env find 2>/dev/null)/bin/python
+SECURITY_ARGS ?=
+.PHONY: security-inventory security-bandit security-semgrep security-typecheck security-audit security-audit-report security-host
+security-inventory: security-bandit security-typecheck
+security-bandit:
+	@$(SECURITY_PYTHON) -m tools.security_evidence bandit $(SECURITY_ARGS)
+security-semgrep:
+	@$(SECURITY_PYTHON) -m tools.security_evidence semgrep --outcome "$(SCAN_OUTCOME)"; code=$$?; if [ $$code -eq 3 ]; then exit 0; else exit $$code; fi
+security-typecheck:
+	@$(SECURITY_PYTHON) -m mypy --strict tools/security_report.py tools/security_exceptions.py tools/security_evidence.py tools/dependency_audit_policy.py tools/dependency_inventory.py
+security-audit:
+	@$(SECURITY_PYTHON) -m tools.dependency_audit_policy $(SECURITY_ARGS)
+security-audit-report: security-audit
+security-host:
+	@$(SECURITY_PYTHON) -m pytest tests/host_smoke -m host_e2e $(SECURITY_ARGS)
 
 .PHONY: check
 check: ensure-hatch
