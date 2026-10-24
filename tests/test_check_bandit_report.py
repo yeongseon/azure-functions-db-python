@@ -89,13 +89,8 @@ def test_bandit_gate_fails_unless_everything_was_analysed(
     exit_code: int,
     message: str,
 ) -> None:
-    # Given a scope scanned like `make security` does
     report, scopes = _scan(tmp_path, files)
-
-    # When the guard reads Bandit's report
     result = check_bandit_report.main(report, scopes)
-
-    # Then it passes only a complete, finding-free scan, and names why it failed otherwise
     captured = capsys.readouterr()
     assert result == exit_code
     assert message in captured.out + captured.err
@@ -126,13 +121,9 @@ def test_guard_rejects_a_nosec_comment_that_names_no_bandit_test(
     exit_code: int,
     message: str,
 ) -> None:
-    # Given a scan in which Bandit itself exits 0 for every failing case here
+    # Bandit itself exits 0 for every failing case here
     report, scopes = _scan(tmp_path, files)
-
-    # When the guard reads Bandit's report
     result = check_bandit_report.main(report, scopes)
-
-    # Then only a comment that names a test Bandit knows passes; text in a string is no comment
     captured = capsys.readouterr()
     assert result == exit_code
     assert message in captured.out + captured.err
@@ -154,14 +145,10 @@ def test_guard_expects_every_file_except_those_bandit_was_told_to_skip(
     exit_code: int,
     message: str,
 ) -> None:
-    # Given a .venv holding a vendored file with a finding, and Bandit told to skip it (or not)
+    # a .venv holding a vendored file with a finding; Bandit is told to skip it, or not
     files = {"ok.py": _OK, ".venv/vendored.py": _SHELL_TRUE}
     report, scopes = _scan(tmp_path, files, *(["-x", _VENV_GLOB] if bandit_skips else []))
-
-    # When the guard reads the report, expecting the same files or not
     result = check_bandit_report.main(report, scopes, (_VENV_GLOB,) if guard_skips else ())
-
-    # Then the skipped directory is not expected, and a finding Bandit did report is never hidden
     captured = capsys.readouterr()
     assert result == exit_code
     assert message in captured.out + captured.err
@@ -180,7 +167,6 @@ def test_guard_expects_every_file_except_those_bandit_was_told_to_skip(
 def test_unusable_report_fails_instead_of_counting_as_clean(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], report: str | None
 ) -> None:
-    # Given a clean scope and a report that is missing, empty or malformed
     scope = tmp_path / "scope"
     scope.mkdir()
     (scope / "ok.py").write_text(_OK, encoding="utf-8")
@@ -188,10 +174,7 @@ def test_unusable_report_fails_instead_of_counting_as_clean(
     if report is not None:
         path.write_text(report, encoding="utf-8")
 
-    # When the guard reads it
     result = check_bandit_report.main(str(path), [str(scope)])
-
-    # Then it fails and says the report is unusable; it never reports a clean scan
     captured = capsys.readouterr()
     assert result == 1
     assert "cannot use" in captured.err
