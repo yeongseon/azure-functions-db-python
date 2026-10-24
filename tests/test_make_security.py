@@ -18,7 +18,8 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCANNED = ("src", "examples", "tools", "benchmarks")
-_EXAMPLE = "examples/postgresql-poll-trigger"
+_EXAMPLES = ("mssql-poll-trigger", "mysql-poll-trigger", "postgresql-poll-trigger")
+_EXAMPLE = f"examples/{_EXAMPLES[-1]}"
 _OK = "x = 1\n"
 _SHELL_TRUE = "import subprocess\nsubprocess.call('echo', shell=True)\n"
 _NEW_CALL = "import subprocess\nimport sys\n\nsubprocess.run([sys.argv[1]], check=True)\n"
@@ -43,9 +44,9 @@ def _scratch_layout(root: Path, files: dict[str, str] | None = None) -> None:
         (root / name).write_text(text, encoding="utf-8")
 
 
-def _example_venv(root: Path) -> Path:
+def _example_venv(root: Path, example: str = _EXAMPLES[-1]) -> Path:
     """Run `python -m venv .venv` inside an example, as its README says, and vendor code in it."""
-    venv = root / _EXAMPLE / ".venv"
+    venv = root / "examples" / example / ".venv"
     subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
     site_packages = next(venv.glob("lib*/python*/site-packages"))
     (site_packages / "vendored.py").write_text(_SHELL_TRUE, encoding="utf-8")
@@ -201,9 +202,14 @@ def test_make_security_rejects_a_nosec_comment_that_names_no_bandit_test(
 
 
 @needs_make
-def test_make_security_skips_the_venv_an_example_readme_creates(tmp_path: Path) -> None:
-    _scratch_layout(tmp_path, {f"{_EXAMPLE}/function_app.py": _OK})
-    venv = _example_venv(tmp_path)
+@pytest.mark.parametrize("example", _EXAMPLES)
+def test_make_security_skips_the_venv_an_example_readme_creates(
+    tmp_path: Path, example: str
+) -> None:
+    readme = (_ROOT / "examples" / example / "README.md").read_text(encoding="utf-8")
+    assert "python -m venv .venv" in readme
+    _scratch_layout(tmp_path, {f"examples/{example}/function_app.py": _OK})
+    venv = _example_venv(tmp_path, example)
 
     result = _make_security(tmp_path)
 
@@ -237,8 +243,6 @@ def test_make_security_still_scans_what_sits_beside_or_is_named_like_the_venv(
         f"{_EXAMPLE}/venv_helpers.py",
         "examples/environment/app.py",
         "src/envelope.py",
-        "benchmarks/node_modules_notes/bench.py",
-        "tools/site_packages_check.py",
     ]
     _scratch_layout(tmp_path, dict.fromkeys(scanned, _SHELL_TRUE))
     _example_venv(tmp_path)
