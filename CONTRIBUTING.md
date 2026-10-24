@@ -175,6 +175,12 @@ Bare textual `pwd` values that are short numbers/percentages or start with a Uni
 or Windows path are preserved as shell/status evidence; structured `PWD` fields
 are always sensitive. Already-masked passwords (`***`, `****`, `<redacted>`,
 `[REDACTED]`, `xxxxx`) are left byte-identical, including SQLAlchemy URL userinfo.
+All credential-key families consume complete braced ODBC/ADO values, treating `}}`
+as an escaped closing brace; semicolons, equals signs and spaces inside braces or
+quotes remain part of the secret. An unterminated brace is masked conservatively
+through the line/representation boundary. Complete `[MASKED]`/`[REDACTED]` tokens
+are recognised before generic matching; repeated redaction and re-saving sanitized
+XML/log/static-HTML evidence are stable rather than accumulating mask fragments.
 CI uploads available `test-results/**` with `if: always()` even on failure.
 
 - **PASS**: successful executed checks; only `verify` carries FULL_LOCAL scope.
