@@ -62,9 +62,23 @@ typecheck: ensure-hatch
 lint: ensure-hatch
 	@$(HATCH) run lint
 
+# Bandit exits 0 for an empty, missing or unparsable scope, so tools/check_bandit_report.py also
+# reads its JSON report; the report is deleted first so a stale one can never pass.
+# -q: Bandit 1.9.4 prints a progress bar to stdout above 50 files.
+# Every Bandit test runs on every file: there is no skip list for any directory. Suppress a
+# reviewed finding on its own line, `# nosec Bxxx # <reason>`, never here.
+BANDIT_REPORT := test-results/bandit.json
+BANDIT_SCOPE := src examples tools benchmarks
+BANDIT := $(HATCH) run python -m bandit -q -f json
+BANDIT_CHECK := $(HATCH) run python tools/check_bandit_report.py
+
 .PHONY: security
 security: ensure-hatch
-	@$(HATCH) run security
+	@rm -f $(BANDIT_REPORT) && mkdir -p $(dir $(BANDIT_REPORT))
+	@status=0; \
+	$(BANDIT) -o $(BANDIT_REPORT) -r $(BANDIT_SCOPE) || status=1; \
+	$(BANDIT_CHECK) $(BANDIT_REPORT) $(BANDIT_SCOPE) || status=1; \
+	exit $$status
 
 .PHONY: check
 check: ensure-hatch
