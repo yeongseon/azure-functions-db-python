@@ -9,7 +9,11 @@ Each database backend is gated by an env var containing a SQLAlchemy URL:
 * ``TEST_MYSQL_URL``    – e.g. ``mysql+pymysql://root:root@localhost:3306/testdb``
 * ``TEST_MSSQL_URL``    – e.g. ``mssql+pyodbc://sa:Password1!@localhost:1433/testdb?driver=...``
 
-If the env var is not set the corresponding tests are skipped automatically.
+If the env var is not set the corresponding tests are skipped automatically,
+which is convenient for local runs. A CI lane that claims to verify a backend
+must set ``INTEGRATION_FAIL_ON_SKIP=1`` so any skip makes the pytest run fail.
+A test marked with a backend also fails if that backend's URL names a different
+SQLAlchemy dialect.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 
 # ---------------------------------------------------------------------------
 # Dialect capability model
@@ -73,6 +78,52 @@ def _get_db_url(db: str) -> str | None:
         # SQLite always available — default to in-memory
         return os.environ.get(_ENV_VARS["sqlite"], "sqlite:///:memory:")
     return os.environ.get(_ENV_VARS[db])
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed guards
+# ---------------------------------------------------------------------------
+
+_BACKEND_DIALECTS: dict[str, str] = {
+    "sqlite": "sqlite",
+    "postgres": "postgresql",
+    "mysql": "mysql",
+    "mssql": "mssql",
+}
+
+_skipped: list[str] = []
+
+
+@pytest.fixture(autouse=True)
+def _backend_url_matches_marker(request: pytest.FixtureRequest) -> None:
+    """Fail if a backend-marked test would run against another dialect."""
+    for backend, dialect in _BACKEND_DIALECTS.items():
+        if request.node.get_closest_marker(backend) is None:
+            continue
+        url = os.environ.get(_ENV_VARS[backend])
+        # Never echo the URL: it may contain credentials.
+        if url and make_url(url).get_backend_name() != dialect:
+            pytest.fail(f"{_ENV_VARS[backend]} does not use the {dialect!r} dialect")
+
+
+def _record_skip(report: Any) -> None:
+    if report.skipped and not hasattr(report, "wasxfail"):
+        _skipped.append(report.nodeid)
+
+
+def pytest_collectreport(report: pytest.CollectReport) -> None:
+    _record_skip(report)
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    if report.when in ("setup", "call"):
+        _record_skip(report)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    if os.environ.get("INTEGRATION_FAIL_ON_SKIP") == "1" and _skipped and exitstatus == 0:
+        print(f"\nINTEGRATION_FAIL_ON_SKIP=1: {len(_skipped)} skipped; failing the run")
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 # ---------------------------------------------------------------------------
