@@ -63,17 +63,9 @@ lint: ensure-hatch
 	@$(HATCH) run lint
 
 # Bandit exits 0 for an empty, missing or unparsable scope, so tools/check_bandit_report.py also
-# reads its JSON report; the report is deleted first so a stale one can never pass.
-# -q: Bandit 1.9.4 prints a progress bar to stdout above 50 files.
-# --ini: unless it is given one, Bandit reads any .bandit file in the scope (skips, tests,
-# exclude, baseline, configfile) and would let a file in a diff hide findings; an explicit ini
-# with no options makes it read none.
-# -x: the .venv the example READMEs create inside examples/<name>/ is not repository code, so it is
-# the only path skipped (a bare `-x env` would be a substring match and hide src/envelope.py). The
-# guard gets the same glob, so it does not expect those files either; every other file in any
-# scanned directory, a package named env or venv included, is still scanned and expected.
-# Every Bandit test runs on every file: there is no skip list for any directory. Suppress a
-# reviewed finding on its own line, `# nosec Bxxx # <reason>`, never here.
+# checks its JSON report. Bandit's -x and the guard get the same BANDIT_EXCLUDE: only the .venv
+# the example READMEs create. There is no skip list: suppress a reviewed finding inline, as
+# `# nosec Bxxx # <reason>`. Why each flag: SECURITY.md, "Static analysis gate".
 BANDIT_REPORT := test-results/bandit.json
 BANDIT_INI := test-results/bandit.ini
 BANDIT_SCOPE := src examples tools benchmarks
