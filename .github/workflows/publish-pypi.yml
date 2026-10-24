@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 # Verify-before-publish gate (see AGENTS.md):
-#   build -> lib-tests -> db-runtime-gate -> azure-e2e -> publish
+#   build -> lib-tests -> db-runtime-gate -> azure-e2e -> runtime-dependency-audit -> publish
 # Tiered runtime verification before any PyPI upload:
 #   * lib-tests             : the library's own unit suite (no external services).
 #   * db-runtime-gate       : install the candidate wheel, assert the installed version
@@ -27,6 +27,10 @@ permissions:
 #                            against the tag being published. Because it runs inside this chain at
 #                            the same ref, certification covers the exact published commit by
 #                            construction -- no cross-run SHA/freshness matching is required.
+#   * runtime-dependency-audit : installs the exact candidate wheel (`all` extra) on every supported
+#                            Python and fails on any known advisory in its runtime closure, an empty
+#                            closure or an unauditable package, except dated exceptions in
+#                            security/runtime-advisory-exceptions.txt (see SECURITY.md).
 # The publish job uploads the EXACT artifact that was tested; it never rebuilds.
 # A tag whose gate fails is a failed release candidate: the version stays
 # unpublished. Recover by fixing forward and cutting the next patch tag
@@ -214,9 +218,62 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+  runtime-dependency-audit:
+    name: Runtime dependency audit (Python ${{ matrix.python-version }})
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # azure-functions resolves to a different major on 3.11-3.12 than on 3.13-3.14,
+        # so every supported interpreter is audited (tests/test_runtime_audit_workflow.py).
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download candidate wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: candidate-dist
+
+      - name: Audit the candidate's runtime closure (any known advisory blocks release)
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/candidate"
+          "$RUNNER_TEMP/candidate/bin/pip" install "$(ls candidate-dist/*.whl)[all]"
+          "$RUNNER_TEMP/candidate/bin/pip" freeze --exclude azure-functions-db > req.txt
+          test -s req.txt  # an empty closure must not pass vacuously
+          ignores=$(python tools/runtime_audit_args.py security/runtime-advisory-exceptions.txt)
+          echo "Advisory exceptions in effect: ${ignores:-none}"
+          python -m pip install "pip-audit==2.10.1"
+          # --strict: a package pip-audit cannot audit fails the gate instead of being skipped.
+          # $ignores stays unquoted: one --ignore-vuln=ID word per waiver, ids validated (no globbing).
+          # shellcheck disable=SC2086
+          python -m pip_audit --no-deps --disable-pip --strict --desc off -f json -r req.txt $ignores | tee pip-audit.json
+
+      - name: Upload the audit report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runtime-audit-py${{ matrix.python-version }}-${{ github.run_attempt }}
+          path: pip-audit.json
+          retention-days: 30
+
   publish:
     name: Publish to PyPI
-    needs: [build, lib-tests, db-runtime-gate, azure-e2e]
+    needs: [build, lib-tests, db-runtime-gate, azure-e2e, runtime-dependency-audit]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

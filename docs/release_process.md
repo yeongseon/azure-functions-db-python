@@ -74,7 +74,7 @@ it does, or no Release PR will appear.
 The tag starts `publish-pypi.yml`. Everything else is automatic:
 
 ```
-build -> lib-tests -> db-runtime-gate -> azure-e2e -> publish
+build -> lib-tests -> db-runtime-gate -> azure-e2e -> runtime-dependency-audit -> publish
 ```
 
 | Tier | Catches |
@@ -83,6 +83,7 @@ build -> lib-tests -> db-runtime-gate -> azure-e2e -> publish
 | `lib-tests` | library unit regressions (external-service tests excluded) |
 | `db-runtime-gate` | installs the candidate wheel over source, asserts the installed version matches the release, then runs the package's own live checkpoint-store suite (`tests/integration/test_checkpoint_store_live.py`) — the blob-backed `BlobCheckpointStore` — against a real Azurite blob endpoint. A fail-closed junit guard treats zero-collected/all-skipped as failure, so this proves this package's primary runtime surface actually executes, not just that a host boots. |
 | `azure-e2e` | cloud-only drift — deploys to real Azure, runs the live e2e suite, uploads an `azure-cert` record |
+| `runtime-dependency-audit` | a known advisory in the candidate wheel's runtime dependencies (`all` extra, Python 3.11-3.14), an empty dependency list or an unauditable package; dated waivers live in `security/runtime-advisory-exceptions.txt` (see `SECURITY.md` in the repository root) |
 | `publish` | uploads the exact artifact `build` produced; it never rebuilds |
 
 `azure-e2e` calls `e2e-azure.yml` as a reusable workflow at the same ref being published, so
