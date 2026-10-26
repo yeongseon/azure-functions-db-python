@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from sqlalchemy import Column, DateTime, Integer, MetaData, Table, create_engine
 from azure_functions_db.adapter.sqlalchemy import SqlAlchemySource
 from azure_functions_db.core.types import SourceDescriptor
 from azure_functions_db.trigger.errors import SourceConfigurationError
+from azure_functions_db.trigger.events import RowChange
+from azure_functions_db.trigger.poll import PollTrigger
+from tests.test_poll_trigger import FakeStateStore
 
 _DB_KEYS = ("sqlite", "postgres", "mysql", "mssql")
 _DB_PARAMS = [pytest.param(key, marks=getattr(pytest.mark, key), id=key) for key in _DB_KEYS]
@@ -35,6 +39,82 @@ def db_url(db_key: str, tmp_path: Path) -> str:
 
 @pytest.mark.parametrize("db_key", _DB_PARAMS)
 class TestSqlAlchemySourceLive:
+    @pytest.mark.integration
+    @pytest.mark.parametrize("query_mode", [False, True])
+    def test_persisted_datetime_cursor_resumes_fresh_source(
+        self, db_url: str, db_key: str, tmp_path: Path, query_mode: bool
+    ) -> None:
+        # Given tied typed timestamps and composite primary keys on the selected backend.
+        engine = create_engine(db_url)
+        metadata = MetaData()
+        table = Table(
+            "persisted_cursor_events",
+            metadata,
+            Column("tenant", Integer, primary_key=True),
+            Column("id", Integer, primary_key=True),
+            Column("occurred_at", DateTime, nullable=False),
+        )
+        metadata.create_all(engine)
+        early = datetime(2026, 10, 16, 10)
+        late = datetime(2026, 10, 16, 11)
+        with engine.begin() as connection:
+            connection.execute(
+                insert(table),
+                [
+                    {"tenant": 1, "id": 1, "occurred_at": early},
+                    {"tenant": 1, "id": 2, "occurred_at": early},
+                    {"tenant": 2, "id": 1, "occurred_at": early},
+                    {"tenant": 2, "id": 2, "occurred_at": late},
+                ],
+            )
+        checkpoint_file = tmp_path / "checkpoint.json"
+        delivered: list[RowChange] = []
+        positions: list[list[object]] = []
+        try:
+            # When each one-row batch is persisted as JSON and reloaded into fresh objects.
+            for _ in range(5):
+                store = FakeStateStore()
+                if checkpoint_file.exists():
+                    store.checkpoints["events"] = json.loads(checkpoint_file.read_text())
+                source = SqlAlchemySource(
+                    url=db_url,
+                    table=None if query_mode else table.name,
+                    query=f"SELECT tenant, id, occurred_at FROM {table.name}"
+                    if query_mode
+                    else None,
+                    cursor_column="occurred_at",
+                    pk_columns=["tenant", "id"],
+                    cursor_types=[datetime, int, int] if query_mode else None,
+                )
+                try:
+                    trigger = PollTrigger(
+                        name="events", source=source, checkpoint_store=store, batch_size=1
+                    )
+                    count = trigger.run(timer=None, handler=delivered.extend)
+                    checkpoint_file.write_text(json.dumps(store.checkpoints["events"]))
+                    cursor = json.loads(checkpoint_file.read_text())["cursor"]
+                    positions.append([datetime.fromisoformat(cursor[0]), *cursor[1:]])
+                    assert count == (1 if len(positions) <= 4 else 0)
+                finally:
+                    source.dispose()
+            # Then each exact ID and persisted resume position survives restarts, including the tie.
+            assert [(event.pk["tenant"], event.pk["id"]) for event in delivered] == [
+                (1, 1),
+                (1, 2),
+                (2, 1),
+                (2, 2),
+            ]
+            assert positions == [
+                [early, 1, 1],
+                [early, 1, 2],
+                [early, 2, 1],
+                [late, 2, 2],
+                [late, 2, 2],
+            ]
+        finally:
+            metadata.drop_all(engine)
+            engine.dispose()
+
     @pytest.mark.integration
     def test_datetime_cursor_round_trip(self, db_url: str, db_key: str) -> None:
         engine = create_engine(db_url)
