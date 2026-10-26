@@ -12,6 +12,27 @@ from .config import DbConfig
 from .errors import ConfigurationError
 
 
+def engine_options(config: DbConfig) -> dict[str, object]:
+    """Resolve engine options identically for isolated and provider-owned engines."""
+    if "connect_args" in config.engine_kwargs:
+        msg = (
+            "Do not pass 'connect_args' inside engine_kwargs; "
+            "use DbConfig.connect_args instead. Mixing the two would "
+            "silently let engine_kwargs override DbConfig.connect_args."
+        )
+        raise ConfigurationError(msg)
+    kwargs: dict[str, object] = {
+        "pool_recycle": config.pool_recycle,
+        "echo": config.echo,
+    }
+    if EngineProvider._pool_size_supported(config.engine_kwargs.get("poolclass")):
+        kwargs["pool_size"] = config.pool_size
+    if config.connect_args is not None:
+        kwargs["connect_args"] = dict(config.connect_args)
+    kwargs.update(config.engine_kwargs)
+    return kwargs
+
+
 class EngineProvider:
     def __init__(self) -> None:
         self._lock: threading.Lock = threading.Lock()
@@ -31,30 +52,13 @@ class EngineProvider:
             return engine
 
     def create_isolated_engine(self, config: DbConfig) -> Engine:
-        if "connect_args" in config.engine_kwargs:
-            msg = (
-                "Do not pass 'connect_args' inside engine_kwargs; "
-                "use DbConfig.connect_args instead. Mixing the two would "
-                "silently let engine_kwargs override DbConfig.connect_args."
-            )
-            raise ConfigurationError(msg)
-
-        kwargs: dict[str, object] = {
-            "pool_recycle": config.pool_recycle,
-            "echo": config.echo,
-        }
-        if self._pool_size_supported(config.engine_kwargs.get("poolclass")):
-            kwargs["pool_size"] = config.pool_size
-        if config.connect_args is not None:
-            kwargs["connect_args"] = dict(config.connect_args)
-        kwargs.update(config.engine_kwargs)
         # config.connection_url is already fully resolved -- every DbConfig
         # reaching this provider was constructed through resolve_db_config(),
         # which resolves %VAR% tokens exactly once. Re-resolving here (#438)
         # would reinterpret the ALREADY-EXPANDED connection string (which may
         # itself legitimately contain %-looking substrings, e.g. a
         # percent-encoded password) as if it still needed expansion.
-        return create_engine(config.connection_url, **kwargs)
+        return create_engine(config.connection_url, **engine_options(config))
 
     @staticmethod
     def _pool_size_supported(poolclass: type[Pool] | None) -> bool:

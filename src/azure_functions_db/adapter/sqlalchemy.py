@@ -16,7 +16,7 @@ from sqlalchemy.schema import Table
 from sqlalchemy.sql import and_, literal_column, or_, select, text
 
 from ..core.config import DbConfig, resolve_db_config, resolve_env_vars
-from ..core.engine import EngineProvider
+from ..core.engine import EngineProvider, engine_options
 from ..core.errors import ConfigurationError
 from ..core.metadata import reflect_table
 from ..core.types import CursorValue, RawRecord, SourceDescriptor
@@ -183,7 +183,7 @@ class SqlAlchemySource:
 
         try:
             if self._engine_provider is None:
-                self._engine = create_engine(self._url)
+                self._engine = create_engine(self._url, **engine_options(self._db_config))
                 self._owns_engine = True
             else:
                 self._engine = self._engine_provider.get_engine(self._db_config)
