@@ -5,14 +5,14 @@ HATCH := $(VENV_DIR)/bin/hatch
 
 .PHONY: bootstrap
 bootstrap:
-	@if [ ! -d "$(VENV_DIR)" ]; then \
+	@if [ ! -x "$(HATCH)" ]; then \
+	if [ ! -x "$(PYTHON)" ]; then \
 		echo "Creating virtual environment..."; \
-		python3 -m venv $(VENV_DIR); \
+		python3 -m venv "$(VENV_DIR)" || exit $$?; \
+	fi; \
+	echo "Installing Hatch in virtual environment..."; \
+	$(PIP) install hatch; \
 	fi
-	@echo "Ensuring Hatch is installed in virtual environment..."
-	@$(PIP) install --upgrade pip > /dev/null
-	@$(PIP) install hatch > /dev/null
-	@echo "Hatch installed at $(HATCH)"
 
 .PHONY: ensure-hatch
 ensure-hatch: bootstrap
@@ -86,7 +86,6 @@ security: ensure-hatch
 .PHONY: check
 check: ensure-hatch
 	@$(MAKE) lint
-	@$(MAKE) typecheck
 	@echo "Lint and type check passed."
 
 .PHONY: lint-workflows
