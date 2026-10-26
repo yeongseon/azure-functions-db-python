@@ -387,9 +387,16 @@ before selecting `cursor_column`.
 
 #### Poll-trigger lifecycle
 
+Set `AzureWebJobsStorage` in the process environment before importing these
+examples and provision the `db-state` container. The Azure SDK does not expand
+`%SETTING%` tokens: `os.environ["AzureWebJobsStorage"]` reads the actual value
+and raises `KeyError: 'AzureWebJobsStorage'` immediately if it is missing.
+
 One `PollRunner.tick()` runs per timer fire, using the concrete default components (`BlobCheckpointStore` + `SqlAlchemySource`). The step-by-step sequence diagram — plus the `StateStore` / `SourceAdapter` protocol names — lives in [Architecture — Trigger Flow](docs/02-architecture.md#trigger-flow-poll-based-change-detection).
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
@@ -407,7 +414,7 @@ source = SqlAlchemySource(
 
 checkpoint_store = BlobCheckpointStore(
     container_client=ContainerClient.from_connection_string(
-        conn_str="%AzureWebJobsStorage%",
+        conn_str=os.environ["AzureWebJobsStorage"],
         container_name="db-state",
     ),
     source_fingerprint=source.source_descriptor.fingerprint,
@@ -431,6 +438,8 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
 Process database changes and write results to another table. Uses `EngineProvider` for shared connection pooling.
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 
@@ -458,7 +467,7 @@ source = SqlAlchemySource(
 
 checkpoint_store = BlobCheckpointStore(
     container_client=ContainerClient.from_connection_string(
-        conn_str="%AzureWebJobsStorage%",
+        conn_str=os.environ["AzureWebJobsStorage"],
         container_name="db-state",
     ),
     source_fingerprint=source.source_descriptor.fingerprint,
