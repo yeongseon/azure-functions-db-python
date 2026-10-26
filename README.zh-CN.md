@@ -180,6 +180,8 @@ def complex_write(writer: DbWriter) -> None:
 ### Trigger (change detection)
 
 ```python
+import os
+
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 from azure_functions_db import BlobCheckpointStore, DbBindings, RowChange, SqlAlchemySource
@@ -197,7 +199,7 @@ source = SqlAlchemySource(
 
 checkpoint_store = BlobCheckpointStore(
     container_client=ContainerClient.from_connection_string(
-        conn_str="%AzureWebJobsStorage%",
+        conn_str=os.environ["AzureWebJobsStorage"],
         container_name="db-state",
     ),
     source_fingerprint=source.source_descriptor.fingerprint,
@@ -223,6 +225,8 @@ def orders_poll(timer: func.TimerRequest, events: list[RowChange]) -> None:
 import azure.functions as func
 from azure.storage.blob import ContainerClient
 
+import os
+
 from azure_functions_db import (
     BlobCheckpointStore,
     DbBindings,
@@ -247,7 +251,7 @@ source = SqlAlchemySource(
 
 checkpoint_store = BlobCheckpointStore(
     container_client=ContainerClient.from_connection_string(
-        conn_str="%AzureWebJobsStorage%",
+        conn_str=os.environ["AzureWebJobsStorage"],
         container_name="db-state",
     ),
     source_fingerprint=source.source_descriptor.fingerprint,
