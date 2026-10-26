@@ -20,6 +20,9 @@ Precise definition:
 > This guarantee is only valid when the source preconditions below are satisfied.
 
 ### 1.2 Source Preconditions
+
+See [late commits and safe polling cursors](34-late-commits-and-cursors.md) for
+the reversed-commit simulation, decision rule, and outbox/CDC prerequisites.
 Conditions the source must satisfy for the framework to operate correctly:
 - The cursor column must be **monotonically non-decreasing**
 - Commit visibility must follow cursor order: after checkpoint `(C, PK)` is

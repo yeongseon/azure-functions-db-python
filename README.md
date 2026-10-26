@@ -374,6 +374,12 @@ Notes:
 
 ### Trigger (poll-based pseudo trigger)
 
+**Before configuring polling:** an increasing timestamp/sequence is not enough
+for no-miss delivery. Late commits below a saved cursor can be permanently
+missed. Require documented commit-visibility ordering, or use CDC/a durable
+outbox consumption design. See [late commits and safe cursors](docs/34-late-commits-and-cursors.md)
+before selecting `cursor_column`.
+
 > **This is a pseudo trigger, not a native Azure Functions trigger.**
 > `@db.trigger` does not register a binding with the Functions host. It must be stacked **on top of a real Azure Functions trigger** (typically `@app.schedule` / timer) that fires the polling loop.
 >
