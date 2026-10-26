@@ -28,9 +28,10 @@ Three steps:
 This works for bindings (`input`, `output`, `inject_reader`, `inject_writer`)
 and for `SqlAlchemySource`-based triggers.
 
-If your data source does not have a SQLAlchemy dialect (e.g. MongoDB, Kafka),
-implement the `SourceAdapter` protocol and pass it to `db.trigger(source=...)`.
-See [Adapter SDK](05-adapter-sdk.md) for details.
+Custom polling through `SourceAdapter` is experimental. No MongoDB, Kafka or
+REST adapters are shipped or certified; the source owner must verify ordering,
+normalization and checkpoint semantics. See [Adapter SDK](05-adapter-sdk.md)
+for the actual protocol and a finite in-memory demonstration.
 
 ### Is this an official Microsoft package?
 
