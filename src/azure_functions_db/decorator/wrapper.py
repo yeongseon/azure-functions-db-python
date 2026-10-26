@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 import functools
 import inspect
 from typing import Any
@@ -43,68 +44,45 @@ def _wrap_handler(
     wrapper.  ``acquire`` runs per invocation to obtain the resource,
     ``to_async_arg`` / ``to_sync_arg`` map it to the injected argument, and
     ``release`` (when given) tears it down in a ``finally`` block.  When
-    ``release is None`` the ``try/finally`` is omitted so exception tracebacks
-    stay identical to a plain wrapper.
+    ``release is None`` no resource cleanup is performed. Binding happens before
+    acquisition for unmanaged wrappers and after acquisition for managed ones.
     """
     is_async = inspect.iscoroutinefunction(fn)
     host_sig = _build_host_signature(fn, {arg_name})
 
-    if release is None:
-        if is_async:
-
-            @functools.wraps(fn)
-            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                host_bound = _bind_host_args(host_sig, args, kwargs)
-                call_args, call_kwargs = _finalize_injected_call(
-                    fn, host_bound, arg_name, to_async_arg(acquire())
-                )
-                return await fn(*call_args, **call_kwargs)
-
-            return _finalize_wrapper(
-                async_wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
-            )
-
-        @functools.wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+    @contextmanager
+    def injected_call(
+        args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> Iterator[tuple[tuple[Any, ...], dict[str, Any]]]:
+        convert = to_async_arg if is_async else to_sync_arg
+        if release is None:
             host_bound = _bind_host_args(host_sig, args, kwargs)
-            call_args, call_kwargs = _finalize_injected_call(
-                fn, host_bound, arg_name, to_sync_arg(acquire())
-            )
-            return fn(*call_args, **call_kwargs)
-
-        return _finalize_wrapper(wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata)
+            yield _finalize_injected_call(fn, host_bound, arg_name, convert(acquire()))
+        else:
+            resource = acquire()
+            try:
+                host_bound = _bind_host_args(host_sig, args, kwargs)
+                yield _finalize_injected_call(fn, host_bound, arg_name, convert(resource))
+            finally:
+                release(resource)
 
     if is_async:
 
         @functools.wraps(fn)
-        async def async_wrapper_rel(*args: Any, **kwargs: Any) -> Any:
-            resource = acquire()
-            try:
-                host_bound = _bind_host_args(host_sig, args, kwargs)
-                call_args, call_kwargs = _finalize_injected_call(
-                    fn, host_bound, arg_name, to_async_arg(resource)
-                )
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            with injected_call(args, kwargs) as (call_args, call_kwargs):
                 return await fn(*call_args, **call_kwargs)
-            finally:
-                release(resource)
 
         return _finalize_wrapper(
-            async_wrapper_rel, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
+            async_wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata
         )
 
     @functools.wraps(fn)
-    def wrapper_rel(*args: Any, **kwargs: Any) -> Any:
-        resource = acquire()
-        try:
-            host_bound = _bind_host_args(host_sig, args, kwargs)
-            call_args, call_kwargs = _finalize_injected_call(
-                fn, host_bound, arg_name, to_sync_arg(resource)
-            )
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with injected_call(args, kwargs) as (call_args, call_kwargs):
             return fn(*call_args, **call_kwargs)
-        finally:
-            release(resource)
 
-    return _finalize_wrapper(wrapper_rel, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata)
+    return _finalize_wrapper(wrapper, fn=fn, arg_name=arg_name, kind=kind, metadata=metadata)
 
 
 __all__ = ["_finalize_wrapper", "_wrap_handler"]
