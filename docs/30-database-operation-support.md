@@ -21,7 +21,7 @@ this local environment.
 
 ## Persisted typed cursor evidence
 
-[`test_persisted_datetime_cursor_resumes_fresh_source`](../tests/integration/db/test_source_live.py)
+[`test_persisted_datetime_cursor_resumes_fresh_source`](https://github.com/yeongseon/azure-functions-db-python/blob/main/tests/integration/db/test_source_live.py)
 uses the existing backend fixtures/markers. It executes five ticks over four
 rows, writes each complete checkpoint as JSON to disk, reloads it into a fresh
 store, source and runner, and verifies exact composite primary keys and every
@@ -36,7 +36,7 @@ PostgreSQL, MySQL and SQL Server; see the issue-linked PR's final CI evidence.
 
 This is also the representative **composite cursor** persistence round trip.
 Decimal and UUID have focused codec tests in
-[`test_adapter_sqlalchemy.py`](../tests/test_adapter_sqlalchemy.py); no live
+[`test_adapter_sqlalchemy.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/tests/test_adapter_sqlalchemy.py); no live
 persisted Decimal/UUID cross-backend claim is made. The supported upsert
 dialects remain PostgreSQL, SQLite and MySQL; SQL Server upsert is unsupported.
 
