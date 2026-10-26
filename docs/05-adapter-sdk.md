@@ -1,169 +1,89 @@
 # Adapter SDK
 
-> **Most users don't need this document.** If your database has a SQLAlchemy dialect, just install the driver and use the connection URL — bindings and `SqlAlchemySource` usually do not require a custom adapter. This document is for developers building adapters for databases that cannot be reached through SQLAlchemy.
+Most applications should use `SqlAlchemySource` with a SQLAlchemy connection
+URL. PostgreSQL, MySQL and SQL Server are the bundled driver paths; SQLite is
+also exercised by the integration suite. Other SQLAlchemy dialects are BYOD,
+not certified backends. See [database operation support](30-database-operation-support.md).
 
-This document defines the internal and external extension contract for developers adding DB adapters.
+Custom sources are an **experimental extension point**, not shipped MongoDB,
+Kafka, REST or CDC integrations. This project maintains no such adapters and
+does not certify their ordering or delivery behavior. Readers and writers
+remain SQLAlchemy-based regardless of the trigger source.
 
-## 1. Purpose
+## Supported protocol
 
-When supporting a new database, it should be possible to plug in by adding only an adapter,
-without modifying application-level code or PollRunner.
-
-## 2. Adapter Classification
-
-### 2.1 SQLAlchemyAdapter
-Common RDBMS base adapter.
-- PostgreSQL
-- MySQL/MariaDB
-- SQL Server
-- Oracle
-- SQLite
-
-### 2.2 NativeAdapter
-For databases that are difficult to handle via SQLAlchemy, or databases that provide native change streams.
-- MongoDB
-- Kafka-backed source
-- Custom REST cursor source
-
-## 3. Base Protocol
+The shipped protocol is exported from `azure_functions_db.trigger` (not the
+package root). It has exactly two members:
 
 ```python
+from collections.abc import Sequence
+from typing import Protocol
+
+from azure_functions_db.core.types import CursorValue, RawRecord, SourceDescriptor
+
+
 class SourceAdapter(Protocol):
-    name: str
-
-    def validate(self) -> None: ...
-    def open(self) -> None: ...
-    def close(self) -> None: ...
-    def fetch_changes(self, checkpoint: Checkpoint, limit: int) -> FetchResult: ...
-    def capability(self) -> AdapterCapability: ...
+    @property
     def source_descriptor(self) -> SourceDescriptor: ...
+
+    def fetch(self, cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]: ...
 ```
 
-The adapter returns raw records; core normalizes them into `RowChange`.
-`supports_deletes()` has been consolidated into `capability()`.
+`RawRecord` is `dict[str, object]`, not an envelope with `row` or
+`next_checkpoint` fields. `SourceDescriptor` is an immutable value containing
+`name`, `kind` and `fingerprint`. `CursorValue` contains JSON scalar values or
+a tuple of scalar parts. The runner reloads the checkpoint and passes its
+parsed cursor to `fetch`; the source returns at most `batch_size` raw records
+strictly after that cursor, in deterministic cursor/tiebreaker order.
 
-## 4. FetchResult
+The earlier `validate/open/close/fetch_changes/capability`, `FetchResult` and
+`AdapterCapability` descriptions were design sketches, **not shipped APIs**.
+Do not implement them as a second protocol. No public API is removed here.
+The source owner manages any resources it acquires; the runner does not call
+source lifecycle methods.
 
-```python
-@dataclass
-class RawRecord:
-    """Raw record returned by the adapter before normalization"""
-    row: dict[str, object]        # Raw row read from the DB
-    cursor_value: object           # Cursor column value
-    pk_values: dict[str, object]   # PK dict
+## Executable example
 
-@dataclass
-class FetchResult:
-    records: list[RawRecord]
-    next_checkpoint: Checkpoint | None
-    stats: dict[str, object]
-```
+[`examples/custom_source.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/custom_source.py)
+contains `NumberSource`, a deliberately finite, in-memory source using integer
+cursors. It is a protocol demonstration, not a production ingestion adapter.
+Its `source_descriptor` property and `fetch(cursor, batch_size)` method are
+type-checked by a `SourceAdapter` assignment in
+[`tests/test_custom_source_example.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/tests/test_custom_source_example.py).
+That test runs the actual `PollRunner` over successive batches and resumes
+from a committed checkpoint using a fresh source. It uses the existing
+in-memory state-store fixture, not Azure storage or a new service stack.
 
-Rules:
-- If `records` is empty, `next_checkpoint` is generally also `None`
-- `next_checkpoint` must point to the last record
-- The source adapter must maintain stable ordering
-- Adapters do not create `RowChange` — that is handled by core's `EventNormalizer`
+## Normalization and checkpoint ownership
 
-## 5. SQLAlchemy Adapter Details
+An `EventNormalizer` converts each raw record plus its descriptor into a
+`RowChange`. For `PollRunner` this is supplied explicitly; `PollTrigger` uses
+the package's SQLAlchemy-oriented normalizer by default. A custom source must
+supply compatible records or an appropriate normalizer; implementing the two
+protocol members alone does not certify semantic compatibility.
 
-### Required Inputs
-- url
-- table or query
-- cursor_column
-- pk_columns
+The runner derives the next checkpoint from the last normalized event and
+commits it **only after the entire handler batch succeeds**, under the current
+lease. Sources must not advance shared checkpoints in `fetch`. Preserve:
 
-### Required Responsibilities
-- Dialect-specific quoting
-- Stable ORDER BY generation
-- Parameter binding
-- row -> dict conversion
-- datetime normalization (UTC recommended)
+- Stable total ordering, including a primary-key tiebreaker for equal cursors.
+- Monotonic cursor and commit-visibility preconditions.
+- JSON-serializable cursor parts and a stable source fingerprint.
+- Lease renewal, fencing and conditional checkpoint commits in the state store.
+- Idempotent handlers: delivery is at-least-once under the
+  [source preconditions](03-semantics.md#12-source-preconditions), not exactly-once.
 
-### Recommended Implementation
-- Use SQLAlchemy Core
-- Minimize ORM session dependency
-- Schema reflection can be cached once at startup
+## SQLAlchemy source
 
-## 6. Query Builder Rules
+Use `table=` for reflected-table polling or the documented typed query-binding
+contract for query mode. The implementation owns dialect quoting, parameter
+binding, cursor predicates and stable ordering. Do not interpolate user values
+or identifiers into SQL: bind values and allow-list identifiers. Cursor-column
+polling cannot detect hard deletes or reconstruct every intermediate update.
+Use soft deletion or a polled outbox when those semantics are needed.
 
-### Table Mode Generation Rules
-```sql
-SELECT <projected_columns>
-FROM <schema.table>
-WHERE (
-  cursor > :cursor_value
-  OR (cursor = :cursor_value AND pk > :pk_value)
-)
-ORDER BY cursor ASC, pk ASC
-LIMIT :limit
-```
-
-For composite PKs, use tuple comparison or OR-expanded predicates.
-
-### Query Mode Rules
-Wrap the user query as a subquery.
-
-```sql
-SELECT *
-FROM (
-  <user_query>
-) AS source
-WHERE ...
-ORDER BY ...
-LIMIT ...
-```
-
-## 7. Delete Support Policy
-
-Adapters declare delete support via capability.
-
-```python
-@dataclass
-class AdapterCapability:
-    supports_delete_detection: bool
-    supports_before_image: bool
-    supports_native_resume_token: bool
-    supports_partitioning: bool
-```
-
-## 8. Adapter Implementation Checklist
-
-- [ ] Provide stable ordering
-- [ ] Handle empty results
-- [ ] Normalize timezones
-- [ ] Validate both string and integer PKs
-- [ ] Generate duplicate-safe checkpoints
-- [ ] Use SQL injection-safe parameterization
-- [ ] Implement schema reflection fallback
-- [ ] Include 3 or more integration tests
-
-## 9. Per-DB Notes
-
-### PostgreSQL
-- Recommended driver: `psycopg`
-- Prefer `timestamp with time zone`
-- Works well with the outbox strategy
-
-### MySQL / MariaDB
-- Be mindful of `updated_at` precision
-- Account for re-read potential depending on transaction isolation level
-
-### SQL Server
-- Can leverage `rowversion` or `datetime2`
-- Note that the official Azure SQL trigger uses change tracking + polling loop;
-  maintain the pseudo trigger documentation model honestly.
-
-### SQLite
-- Primarily for development/testing
-- Not recommended as a production pseudo trigger source
-
-## 10. Non-SQL Adapter Guidelines
-
-Adapters like MongoDB should be maintained as separate packages without a SQLAlchemy dependency.
-
-Examples:
-- `azure-functions-db-python-mongo`
-- `azure-functions-db-python-postgres-cdc`
-
-The key requirement is to maintain only the common `RowChange` contract.
+Backend-specific tests live in `tests/integration/db/test_source_live.py`;
+unit coverage is in `tests/test_adapter_sqlalchemy.py`. An in-memory custom
+source test does not establish any non-SQL backend support. Native change
+streams, resume tokens and partitioning would require separately specified
+semantics and verification; none are promised by this protocol.

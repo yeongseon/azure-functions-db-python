@@ -272,14 +272,14 @@ SQLAlchemy caches reflected table metadata on the `Engine`'s `MetaData` object. 
 
 ```text
 Azure Timer Trigger
-    -> PollRunner.start()
-        -> StateStore.load()
+    -> PollRunner.tick()
         -> StateStore.acquire_lease()    # CAS with ETag
-        -> SourceAdapter.fetch_changes()
+        -> StateStore.load_checkpoint()
+        -> SourceAdapter.fetch(cursor, batch_size)
         -> core normalizer(raw records → RowChange)
         -> Handler.invoke(events)
-        -> StateStore.commit()           # checkpoint + lease in one CAS write
-        -> StateStore.heartbeat()        # if handler is long-running
+        -> StateStore.renew_lease()      # before checkpoint commit
+        -> StateStore.commit_checkpoint()  # checkpoint under the current lease
 ```
 
 ## 3. Core Components
@@ -297,11 +297,12 @@ Responsibilities:
 ### 3.2 SourceAdapter
 Abstraction for reading changes from each database.
 
-Key methods:
-- `validate()`
-- `open()` / `close()`
-- `fetch_changes(checkpoint, limit)` → `FetchResult` (raw records + next_checkpoint)
-- `capability()` → `AdapterCapability`
+Shipped members:
+- `source_descriptor` property → `SourceDescriptor`
+- `fetch(cursor, batch_size)` → `Sequence[RawRecord]`
+
+Custom/non-SQL sources are experimental, not maintained backend integrations.
+See the [actual protocol and executable example](05-adapter-sdk.md).
 
 The adapter returns raw records; core normalizes them into `RowChange`.
 
