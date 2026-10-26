@@ -11,7 +11,7 @@ import time
 from typing import Any, Protocol, TypeVar, runtime_checkable
 import uuid
 
-from ..core.errors import CursorSerializationError
+from ..core.errors import ConfigurationError, CursorSerializationError
 from ..core.serializers import parse_checkpoint_cursor
 from ..core.types import CursorValue, RawRecord, SourceDescriptor
 from ..observability import (
@@ -40,6 +40,7 @@ from .errors import (
     SourceConfigurationError,
 )
 from .events import RowChange
+from .normalizers import default_normalizer
 from .retry import RetryPolicy
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,11 @@ class PollRunner:
         retry_policy: RetryPolicy | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
+        if normalizer is default_normalizer:
+            raise ConfigurationError(
+                "PollRunner requires a configured normalizer; use "
+                "make_normalizer(cursor_column=..., pk_columns=...) or PollTrigger."
+            )
         if asyncio.iscoroutinefunction(handler):
             msg = "Async handlers are not supported. Pass a synchronous function instead."
             raise TypeError(msg)

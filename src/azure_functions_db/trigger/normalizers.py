@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 import hashlib
 import logging
-import uuid
 
+from ..core.errors import ConfigurationError
 from ..core.serializers import serialize_cursor_part
 from ..core.types import CursorPart, CursorValue, RawRecord, SourceDescriptor
 from .events import RowChange
@@ -32,15 +32,12 @@ def _compute_event_id(
 
 
 def default_normalizer(record: RawRecord, descriptor: SourceDescriptor) -> RowChange:
-    return RowChange(
-        event_id=uuid.uuid4().hex,
-        op="upsert",
-        source=descriptor,
-        cursor=None,
-        pk={},
-        before=None,
-        after=dict(record),
-        metadata={},
+    """Select source-aware normalization in PollTrigger; direct calls require a factory."""
+    del record, descriptor
+    raise ConfigurationError(
+        "default_normalizer requires source cursor metadata. "
+        "Use make_normalizer(cursor_column=..., pk_columns=...) for direct calls "
+        "or pass default_normalizer to PollTrigger with a source exposing those attributes."
     )
 
 
