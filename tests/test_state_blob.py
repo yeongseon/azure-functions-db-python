@@ -207,6 +207,7 @@ class TestBlobCheckpointStoreAcquireLease:
             store.acquire_lease("test_poller", 120)
 
     def test_acquire_raises_conflict_on_cas_race(self) -> None:
+        """A competing state write must prevent acquisition with a stale ETag."""
         store, container = _make_store()
 
         # First acquire creates the blob
@@ -236,6 +237,7 @@ class TestBlobCheckpointStoreAcquireLease:
             store.acquire_lease("test_poller", 120)
 
     def test_acquire_increments_fencing_token(self) -> None:
+        """A replacement owner must receive a newer token than the expired owner."""
         store, container = _make_store()
         expired_at = datetime.now(UTC) - timedelta(minutes=10)
         _seed_blob(
@@ -250,6 +252,7 @@ class TestBlobCheckpointStoreAcquireLease:
         assert lease_id.endswith(":6")
 
     def test_acquire_uses_grace_period(self) -> None:
+        """Clock-skew grace prevents stealing a lease immediately after its expiry."""
         store, container = _make_store()
         # TTL=120, grace=5s. Lease expired 3s ago → still within grace.
         expired_at = datetime.now(UTC) - timedelta(seconds=3)
@@ -299,6 +302,7 @@ class TestBlobCheckpointStoreRenewLease:
             store.renew_lease("test_poller", fake_lease_id, 120)
 
     def test_renew_raises_lost_lease_on_wrong_token(self) -> None:
+        """Matching owner identity alone must not authorize a stale fencing token."""
         store, container = _make_store()
         lease_id = store.acquire_lease("test_poller", 120)
 
@@ -323,6 +327,7 @@ class TestBlobCheckpointStoreRenewLease:
             store.renew_lease("test_poller", lease_id, 120)
 
     def test_renew_raises_lost_lease_on_412(self) -> None:
+        """Renewal must fail if ownership changes between reading and writing state."""
         store, container = _make_store()
         lease_id = store.acquire_lease("test_poller", 120)
 
@@ -347,6 +352,7 @@ class TestBlobCheckpointStoreReleaseLease:
         assert abs((expires_at - datetime.now(UTC)).total_seconds()) < 2
 
     def test_release_preserves_fencing_token(self) -> None:
+        """Releasing ownership must never reset the monotonic fencing sequence."""
         store, container = _make_store()
         lease_id = store.acquire_lease("test_poller", 120)
 
@@ -478,6 +484,7 @@ class TestBlobCheckpointStoreCommitCheckpoint:
             store.commit_checkpoint("test_poller", {"cursor": 1}, "wrong-owner:1")
 
     def test_commit_raises_lost_lease_on_expired(self) -> None:
+        """An expired owner must not acknowledge a batch even without a successor."""
         store, container = _make_store()
         lease_id = store.acquire_lease("test_poller", 120)
 
@@ -491,6 +498,7 @@ class TestBlobCheckpointStoreCommitCheckpoint:
             store.commit_checkpoint("test_poller", {"cursor": 1}, lease_id)
 
     def test_commit_raises_lost_lease_on_412(self) -> None:
+        """A stale ETag must prevent checkpoint advance after a competing state write."""
         store, container = _make_store()
         lease_id = store.acquire_lease("test_poller", 120)
 

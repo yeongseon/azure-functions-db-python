@@ -43,6 +43,7 @@ def users_url(tmp_path: Path) -> str:
 
 class TestTransactionCommit:
     def test_begin_failure_returns_connection_and_preserves_cause(self, users_url: str) -> None:
+        """Failed transaction entry must return the connection without hiding its cause."""
         writer = DbWriter(url=users_url, table="users")
         writer._ensure_initialized()
         assert writer._engine is not None
@@ -67,6 +68,7 @@ class TestTransactionCommit:
         assert writer._tx_conn is None
 
     def test_begin_and_close_failure_preserves_begin_error(self, users_url: str) -> None:
+        """A cleanup failure must not replace the transaction-entry failure."""
         writer = DbWriter(url=users_url, table="users")
         writer._ensure_initialized()
         assert writer._engine is not None
@@ -108,6 +110,7 @@ class TestTransactionRollback:
         assert _row_count(users_url) == 0
 
     def test_transaction_rolls_back_on_write_error(self, users_url: str) -> None:
+        """A later duplicate-key failure must undo the earlier successful insert."""
         with DbWriter(url=users_url, table="users") as writer:
             with pytest.raises(WriteError), writer.transaction():
                 writer.insert(data={"id": 1, "name": "Alice"})
@@ -192,6 +195,7 @@ class TestCloseRollsBackActiveTransaction:
             assert writer._engine is None
 
     def test_close_inside_with_block_does_not_raise_on_exit(self, users_url: str) -> None:
+        """Context exit must not commit a transaction already rolled back by close()."""
         with DbWriter(url=users_url, table="users") as writer:
             with writer.transaction():
                 writer.insert(data={"id": 1, "name": "Alice"})
@@ -210,6 +214,7 @@ class TestCloseRollsBackActiveTransaction:
         assert _row_count(users_url) == 1
 
     def test_write_after_close_inside_transaction_is_rejected(self, users_url: str) -> None:
+        """Closing a transaction must not let later writes escape into autocommit."""
         writer = DbWriter(url=users_url, table="users")
         with writer.transaction():
             writer.insert(data={"id": 1, "name": "Alice"})

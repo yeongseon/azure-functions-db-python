@@ -497,6 +497,7 @@ def test_input_params_resolver_default_cannot_override_handler_default(
 
 
 def test_input_positional_call_with_injected_param_first(tmp_path: Path) -> None:
+    """Host positional arguments must bind against the signature without injected data."""
     url = _sqlite_url(tmp_path, "input-injected-first.db")
     _create_users_table(url)
 
@@ -538,6 +539,7 @@ def test_output_positional_call_with_injected_param_first(tmp_path: Path) -> Non
 
 
 def test_inject_reader_positional_call_with_injected_param_between(tmp_path: Path) -> None:
+    """A hidden reader parameter must not shift the host's positional arguments."""
     url = _sqlite_url(tmp_path, "inject-reader-injected-between.db")
     _create_users_table(url)
 
@@ -1336,6 +1338,7 @@ def test_inject_writer_async_transaction_commit(tmp_path: Path) -> None:
 
 
 def test_inject_writer_async_transaction_rollback_on_error(tmp_path: Path) -> None:
+    """Async handler failure must undo writes made through the pinned transaction."""
     url = _sqlite_url(tmp_path, "writer-async-tx-rollback.db")
     _create_orders_table(url)
 
@@ -1372,6 +1375,7 @@ def test_inject_writer_async_transaction_delete(tmp_path: Path) -> None:
 
 
 def test_inject_writer_async_transaction_concurrent_writes_serialized(tmp_path: Path) -> None:
+    """Concurrent awaits must serialize writes rather than share a connection concurrently."""
     url = _sqlite_url(tmp_path, "writer-async-tx-gather.db")
     _create_orders_table(url)
 
@@ -1394,6 +1398,7 @@ def test_inject_writer_async_transaction_concurrent_writes_serialized(tmp_path: 
 
 
 def test_async_transaction_cancellation_does_not_block_event_loop(tmp_path: Path) -> None:
+    """Cancellation cleanup must keep the event loop responsive while commit finishes."""
     url = _sqlite_url(tmp_path, "writer-async-tx-cancel.db")
     _create_orders_table(url)
     writer = DbWriter(url=url, table="processed_orders")
@@ -1484,6 +1489,7 @@ def test_async_transaction_enter_failure_propagates() -> None:
 
 
 def test_async_transaction_commit_error_propagates() -> None:
+    """A successful handler body must not hide a failed transaction commit."""
     from azure_functions_db import WriteError
 
     cm = _FakeTxCM(exit_exc=WriteError("commit fail"))
@@ -1500,6 +1506,8 @@ def test_async_transaction_commit_error_propagates() -> None:
 
 
 def test_async_transaction_rollback_error_is_swallowed() -> None:
+    """Rollback cleanup must preserve the original handler error across the thread boundary."""
+
     class _Boom(RuntimeError):
         pass
 
