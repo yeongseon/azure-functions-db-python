@@ -46,6 +46,24 @@ ADVISORY-ID owner added expires reason...
 
 `added` and `expires` are ISO dates; `expires` is the last day the waiver applies. A waiver that is expired, not yet added, malformed or longer than 90 days fails the gate (`tools/runtime_audit_args.py`). The gate reads the file from the tagged commit, so a waiver must be on `main` before the Release PR is merged. Pull-request CI does not run the gate, so check an edit with `python tools/runtime_audit_args.py security/runtime-advisory-exceptions.txt`.
 
+## Focused security hardening completion
+
+The repository-local tracker #470 was implemented through focused changes,
+not by merging the superseded broad draft #472:
+
+- #480: explicit opt-in for broad PostgreSQL Azure-service firewall access,
+  implemented by #485 and guarded by `tests/test_infra_postgres_firewall.py`.
+- #481: raw-SQL bound parameters and safe diagnostics, implemented by #486
+  and #489, with reader contract tests and the documented identifier boundary.
+- #482: fail-closed Bandit inventory/report checking, implemented by #491;
+  missing, empty, failed and incomplete scans are covered by gate tests.
+- #483: runtime dependency audit of the exact candidate wheel, implemented by
+  #490; existing OIDC publishing and build-artifact identity are preserved.
+
+All four child issues were verified closed on 2026-10-26. This records completed
+implementation, not a new cloud deployment or release certification. Release
+audits still execute on candidate tags; no release was cut for tracker closure.
+
 ## Static analysis gate: Bandit
 
 `make security` runs Bandit once over `src`, `examples`, `tools` and `benchmarks` with every Bandit test enabled and no skip list. Not scanned: `tests/`, every virtualenv below those directories (a directory that holds a `pyvenv.cfg`, whatever its name or depth, such as the `.venv` the example READMEs create) and every directory named `node_modules` or `site-packages`. `python tools/check_bandit_report.py --print-excludes <directories>` computes that list once, the recipe prints it when it is not empty (`bandit: excluding ...`), and Bandit's `-x` and the guard's list of expected files both get exactly that list. Everything else is scanned, including a package named `env`, `venv` or `.venv` that has no `pyvenv.cfg`; a `pyvenv.cfg`, `node_modules` or `site-packages` added to code that should be checked would exclude it, so review such a path in a diff. The required `bandit` check (`security.yml`), the `quality` job of `ci-test.yml` and the weekly `maintenance.yml` run it; `security.yml` uploads the report as `bandit-report-<run attempt>`, also when the check fails.
