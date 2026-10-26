@@ -9,6 +9,10 @@
 
 ## 2. Surface API
 
+Host/database identity changes may reject existing checkpoints. Follow the
+[source fingerprint migration procedure](35-source-fingerprint-migration.md)
+instead of disabling the check or silently reusing another dataset's cursor.
+
 ### Normalizer configuration
 
 `PollTrigger` infers cursor and primary-key columns from source attributes when
