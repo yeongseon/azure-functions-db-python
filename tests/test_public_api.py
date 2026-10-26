@@ -20,6 +20,7 @@ def test_public_api_exports() -> None:
         "CursorValue",
         "DbBindings",
         "DbConnectionError",
+        "DbConfig",
         "DbError",
         "DbOut",
         "DbReader",

@@ -4,6 +4,7 @@ __version__ = "0.8.3"
 
 from .adapter import SqlAlchemySource
 from .binding import DbReader, DbWriter
+from .core.config import DbConfig
 from .core.engine import EngineProvider
 from .core.errors import (
     ConfigurationError,
@@ -42,6 +43,7 @@ __all__ = [
     "CursorValue",
     "DbBindings",
     "DbConnectionError",
+    "DbConfig",
     "DbError",
     "DbReader",
     "DbWriter",
