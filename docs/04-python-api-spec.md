@@ -98,6 +98,17 @@ Internally, decorators manage `__signature__` to hide injected parameters from t
 
 ## 3. Core Types
 
+### SourceAdapter extension contract
+
+`azure_functions_db.trigger.SourceAdapter` exposes a `source_descriptor`
+property returning `SourceDescriptor`, and
+`fetch(cursor: CursorValue | None, batch_size: int) -> Sequence[RawRecord]`.
+It does not define lifecycle or capability methods. Custom sources are
+experimental, not shipped non-SQL backend support. See the
+[executable protocol example](05-adapter-sdk.md) for ordering, normalization
+and checkpoint responsibilities. `SqlAlchemySource` is the maintained built-in
+implementation; it conforms structurally rather than inheriting the protocol.
+
 ### 3.1 PollTrigger
 ```python
 class PollTrigger:
@@ -118,7 +129,7 @@ class PollTrigger:
 
 ### 3.2 SqlAlchemySource
 ```python
-class SqlAlchemySource(SourceAdapter):
+class SqlAlchemySource:
     def __init__(
         self,
         *,
