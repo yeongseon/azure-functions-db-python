@@ -155,6 +155,12 @@ interpreted by your shell (notably zsh with `EXTENDED_GLOB`).
 
 ## Example Coverage Policy
 
+For regression tests with non-obvious lease, checkpoint, transaction or async
+cleanup setup, use a single-line English docstring explaining the failure being
+prevented. Add a brief inline comment only for a surprising fake or deliberate
+concurrency order. Prefer expressive names and leave straightforward tests
+uncommented; do not add a comment quota or Given/When/Then boilerplate.
+
 Examples are part of the supported API experience and should stay verified.
 
 - Keep one representative example for the minimal DB trigger polling workflow.
