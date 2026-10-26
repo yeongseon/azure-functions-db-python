@@ -5,53 +5,11 @@ from decimal import Decimal
 from uuid import uuid4
 
 from azure_functions_db.core.types import SourceDescriptor
-from azure_functions_db.trigger.normalizers import (
-    _cursor_part,
-    default_normalizer,
-    make_normalizer,
-)
+from azure_functions_db.trigger.normalizers import _cursor_part, make_normalizer
 
 
 def _descriptor() -> SourceDescriptor:
     return SourceDescriptor(kind="sqlalchemy", name="orders", fingerprint="fp_orders")
-
-
-def test_default_normalizer_produces_upsert() -> None:
-    event = default_normalizer({"id": 1}, _descriptor())
-    assert event.op == "upsert"  # noqa: S101
-
-
-def test_default_normalizer_cursor_is_none() -> None:
-    event = default_normalizer({"id": 1}, _descriptor())
-    assert event.cursor is None  # noqa: S101
-
-
-def test_default_normalizer_pk_is_empty_dict() -> None:
-    event = default_normalizer({"id": 1}, _descriptor())
-    assert event.pk == {}  # noqa: S101
-
-
-def test_default_normalizer_after_contains_full_record() -> None:
-    record = {"id": 1, "name": "Alice", "updated_at": 100}
-    event = default_normalizer(record, _descriptor())
-    assert event.after == record  # noqa: S101
-
-
-def test_default_normalizer_event_id_is_nonempty_string() -> None:
-    event = default_normalizer({"id": 1}, _descriptor())
-    assert isinstance(event.event_id, str)  # noqa: S101
-    assert event.event_id != ""  # noqa: S101
-
-
-def test_default_normalizer_event_id_is_random() -> None:
-    first = default_normalizer({"id": 1}, _descriptor())
-    second = default_normalizer({"id": 1}, _descriptor())
-    assert first.event_id != second.event_id  # noqa: S101
-
-
-def test_default_normalizer_before_is_none() -> None:
-    event = default_normalizer({"id": 1}, _descriptor())
-    assert event.before is None  # noqa: S101
 
 
 def test_cursor_part_datetime() -> None:

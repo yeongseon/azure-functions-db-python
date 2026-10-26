@@ -7,7 +7,7 @@ import pytest
 from azure_functions_db.core.types import CursorValue, RawRecord, SourceDescriptor
 from azure_functions_db.trigger.errors import FetchError, HandlerError, LeaseAcquireError
 from azure_functions_db.trigger.events import RowChange
-from azure_functions_db.trigger.normalizers import default_normalizer
+from azure_functions_db.trigger.normalizers import make_normalizer
 from azure_functions_db.trigger.poll import PollTrigger
 from tests.test_trigger_runner import RecordingMetricsCollector
 
@@ -249,7 +249,7 @@ def test_explicit_normalizer_used() -> None:
 
     def explicit_normalizer(record: RawRecord, descriptor: SourceDescriptor) -> RowChange:
         calls.append((record, descriptor))
-        return default_normalizer(record, descriptor)
+        return make_normalizer(cursor_column="updated_at", pk_columns=["id"])(record, descriptor)
 
     trigger = PollTrigger(
         name="test_poller",

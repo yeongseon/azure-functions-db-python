@@ -4,8 +4,13 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from azure_functions_db.core.errors import ConfigurationError
 from azure_functions_db.observability import MetricsCollector
-from azure_functions_db.trigger.normalizers import EventNormalizer, make_normalizer
+from azure_functions_db.trigger.normalizers import (
+    EventNormalizer,
+    default_normalizer,
+    make_normalizer,
+)
 from azure_functions_db.trigger.retry import RetryPolicy
 from azure_functions_db.trigger.runner import PollRunner, SourceAdapter, StateStore
 
@@ -43,7 +48,7 @@ class PollTrigger:
         self._retry_policy = retry_policy
         self._metrics = metrics
 
-        if normalizer is not None:
+        if normalizer is not None and normalizer is not default_normalizer:
             self._normalizer = normalizer
         else:
             cursor_column = getattr(source, "cursor_column", None)
@@ -58,8 +63,10 @@ class PollTrigger:
                     "Source does not expose 'cursor_column' and 'pk_columns' "
                     "attributes. Cannot auto-detect normalizer. Use a source that "
                     "exposes cursor metadata (e.g., SqlAlchemySource) or pass an "
-                    "explicit normalizer."
+                    "explicit normalizer created by make_normalizer."
                 )
+                if normalizer is default_normalizer:
+                    raise ConfigurationError(msg)
                 raise ValueError(msg)
 
     @property
