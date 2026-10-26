@@ -9,6 +9,21 @@
 
 ## 2. Surface API
 
+### Normalizer configuration
+
+`PollTrigger` infers cursor and primary-key columns from source attributes when
+`normalizer` is omitted or is the exported `default_normalizer`. Without those
+attributes, supply `make_normalizer(cursor_column=..., pk_columns=...)` or a
+custom callable. Explicit `default_normalizer` without source metadata raises
+`ConfigurationError` at construction.
+
+Direct `default_normalizer(record, descriptor)` calls cannot infer columns:
+`SourceDescriptor` contains only identity fields. They now raise
+`ConfigurationError` rather than produce events with no checkpoint cursor.
+`PollRunner` also rejects the unconfigured default at construction; give it a
+factory-created normalizer. This is an intentional incompatible correction.
+See [migration instructions](33-default-normalizer-migration.md).
+
 ### 2.1 Recommended Approach: Helper + Azure Schedule Decorator
 
 ```python
