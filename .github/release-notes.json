@@ -1,0 +1,24 @@
+{
+  "repo": "yeongseon/azure-functions-db-python",
+  "owner_login": "yeongseon",
+  "legacy_repos": [
+    "yeongseon/azure-functions-db"
+  ],
+  "non_human_logins": [
+    "sisyphus-dev-ai"
+  ],
+  "protected": {
+    "v0.9.0": [
+      "make the public default normalizer checkpoint-safe"
+    ]
+  },
+  "annotations": {
+    "v0.9.0": {
+      "upgrade": [
+        "Direct callers and wrappers that used `default_normalizer(record, descriptor)` must switch to `make_normalizer(cursor_column=..., pk_columns=...)`: the default now raises `ConfigurationError` when the descriptor has no cursor metadata, and `PollRunner` rejects the unconfigured default at construction. `PollTrigger` resolves the default from the source's cursor/key metadata, and omitted or custom normalizers keep their behavior (#503).",
+        "",
+        "Reminder: this package provides a poll-based pseudo trigger built on the Azure Functions timer trigger. It is not a native Azure Functions SQL trigger or binding extension."
+      ]
+    }
+  }
+}
