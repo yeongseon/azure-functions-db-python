@@ -1,0 +1,20 @@
+{
+  "repo": "yeongseon/azure-functions-db-python",
+  "package": "azure-functions-db",
+  "mainline": "main",
+  "tag_prefix": "v",
+  "version_files": [
+    "src/azure_functions_db/__init__.py"
+  ],
+  "changelog": "CHANGELOG.md",
+  "grace_hours": 12,
+  "approved": {
+    "0.5.2": {
+      "codes": [
+        "RELEASE_WITHOUT_PYPI"
+      ],
+      "reason": "Release candidate whose Azure release certification failed before publish: the e2e workflow at the tag did not produce the certification record the gate requires; 0.5.3 ships the fix and its changes.",
+      "ref": "docs/release_history.md#v052-unpublished-superseded-by-v053"
+    }
+  }
+}
