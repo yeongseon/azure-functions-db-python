@@ -37,6 +37,7 @@ nav:
   - Contributing:
       - Guidelines: contributing.md
       - Testing: testing.md
+      - Release History: release_history.md
   - Troubleshooting: troubleshooting.md
   - FAQ: faq.md
   - Security: security.md

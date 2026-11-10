@@ -8,11 +8,51 @@
     "sisyphus-dev-ai"
   ],
   "protected": {
+    "v0.2.2": [
+      "contains no package modules"
+    ],
+    "v0.3.0": [
+      "contains no package modules"
+    ],
+    "v0.4.0": [
+      "contains no package modules"
+    ],
+    "v0.4.1": [
+      "contains no package modules"
+    ],
+    "v0.5.2": [
+      "was not published to PyPI"
+    ],
     "v0.9.0": [
       "make the public default normalizer checkpoint-safe"
     ]
   },
   "annotations": {
+    "v0.2.2": {
+      "notes": [
+        "> **The PyPI wheel of `0.2.2` contains no package modules.** `pip install azure-functions-db==0.2.2` installs the package metadata only, so `import azure_functions_db` fails. The source distribution is complete, but building it with `pip` or `python -m build` produces the same empty wheel. `0.4.2`, the first later version whose wheel works, contains every change listed here. The tag is kept unchanged as an audit record; see [Release history and provenance](https://github.com/yeongseon/azure-functions-db-python/blob/main/docs/release_history.md#empty-wheels-v022-v030-v040-and-v041)."
+      ]
+    },
+    "v0.3.0": {
+      "notes": [
+        "> **The PyPI wheel of `0.3.0` contains no package modules.** `pip install azure-functions-db==0.3.0` installs the package metadata only, so `import azure_functions_db` fails. The source distribution is complete, but building it with `pip` or `python -m build` produces the same empty wheel. `0.4.2`, the first later version whose wheel works, contains every change listed here. The tag is kept unchanged as an audit record; see [Release history and provenance](https://github.com/yeongseon/azure-functions-db-python/blob/main/docs/release_history.md#empty-wheels-v022-v030-v040-and-v041)."
+      ]
+    },
+    "v0.4.0": {
+      "notes": [
+        "> **The PyPI wheel of `0.4.0` contains no package modules.** `pip install azure-functions-db==0.4.0` installs the package metadata only, so `import azure_functions_db` fails. The source distribution is complete, but building it with `pip` or `python -m build` produces the same empty wheel. `0.4.2`, the first later version whose wheel works, contains every change listed here. The tag is kept unchanged as an audit record; see [Release history and provenance](https://github.com/yeongseon/azure-functions-db-python/blob/main/docs/release_history.md#empty-wheels-v022-v030-v040-and-v041)."
+      ]
+    },
+    "v0.4.1": {
+      "notes": [
+        "> **The PyPI wheel of `0.4.1` contains no package modules.** `pip install azure-functions-db==0.4.1` installs the package metadata only, so `import azure_functions_db` fails. The source distribution is complete, but building it with `pip` or `python -m build` produces the same empty wheel. This version changed only the version number (`d1b5abc`) and its test assertion (`f5ee040`), an attempt to fix the empty wheel of `0.4.0` that did not change the build. `0.4.2`, the first later version whose wheel works, contains the same source plus the build fix. The tag is kept unchanged as an audit record; see [Release history and provenance](https://github.com/yeongseon/azure-functions-db-python/blob/main/docs/release_history.md#empty-wheels-v022-v030-v040-and-v041)."
+      ]
+    },
+    "v0.5.2": {
+      "notes": [
+        "> **`v0.5.2` was not published to PyPI.** Its release candidate passed the build, library tests and the package runtime gate, but the Azure release certification check failed, so the publish job was skipped. The check requires an `azure-cert` record from an `e2e-azure` run on this exact commit, and the `e2e-azure` workflow at this tag did not produce one: the check was added the day before, and the step that writes the record came with `0.5.3`. `0.5.3`, tagged four weeks later, is the first published release after `0.5.1` and contains every change listed here. The tag is kept unchanged as an audit record; see [Release history and provenance](https://github.com/yeongseon/azure-functions-db-python/blob/main/docs/release_history.md#v052-unpublished-superseded-by-v053)."
+      ]
+    },
     "v0.9.0": {
       "upgrade": [
         "Direct callers and wrappers that used `default_normalizer(record, descriptor)` must switch to `make_normalizer(cursor_column=..., pk_columns=...)`: the default now raises `ConfigurationError` when the descriptor has no cursor metadata, and `PollRunner` rejects the unconfigured default at construction. `PollTrigger` resolves the default from the source's cursor/key metadata, and omitted or custom normalizers keep their behavior (#503).",
