@@ -20,6 +20,7 @@ Part of the **Azure Functions Python DX Toolkit**. SQLAlchemy-backed database bi
 - [Output Binding](https://yeongseon.dev/azure-functions-python/db/examples/output_binding/): Write rows.
 - [Trigger](https://yeongseon.dev/azure-functions-python/db/examples/trigger/): React to changes.
 - [Client Injection](https://yeongseon.dev/azure-functions-python/db/examples/client_injection/): Imperative access.
+- [Managed Identity (Azure SQL)](https://yeongseon.dev/azure-functions-python/db/examples/managed_identity_mssql/): Token-based Azure SQL / SQL Server connection example.
 
 ## Reference
 - [API Reference](https://yeongseon.dev/azure-functions-python/db/api/): Public API surface.

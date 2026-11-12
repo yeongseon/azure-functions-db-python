@@ -25,6 +25,10 @@ token per **new** connection, and `pool_recycle=1800` recycles connections every
 performs a network round-trip when the cached token nears expiry, so calling it
 per new connection is cheap.
 
+> A step-by-step guide to reading and reviewing this example (including what a local
+> check does and does not prove) is in
+> [docs/examples/managed_identity_mssql.md](../../docs/examples/managed_identity_mssql.md).
+
 ## Prerequisites
 
 ### Python
