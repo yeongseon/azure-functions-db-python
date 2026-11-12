@@ -232,3 +232,23 @@ def test_input_decorator_injects_result():
 | Lease race | Two runners start simultaneously, only one commits |
 | Schema drift | Additional columns do not break existing handlers |
 | Empty tick | No changes detected, no-op succeeds |
+
+## Benchmarks (opt-in)
+
+`benchmarks/bench_catchup.py` is a local catch-up throughput probe for `PollRunner` and
+`SqlAlchemySource`. It is not part of `make test`; the `Performance Benchmark` workflow runs it
+as a non-blocking (`continue-on-error`) job with no speed threshold. From a development
+environment with the package installed (`pip install -e ".[dev]"`):
+
+```bash
+python benchmarks/bench_catchup.py                      # 10000 rows, batch size 500
+python benchmarks/bench_catchup.py --rows 50000 --batch-size 1000 --json
+```
+
+It reports the configuration, Python/SQLite/SQLAlchemy/package versions, processed rows and
+batches, and rows per second. It fails if the run does not process every row once, in the expected
+number of batches, with the checkpoint at the last cursor. The timing covers an in-memory SQLite
+source, an in-process fake state store and a no-op handler only; it excludes network, real
+database servers, Azure Blob checkpoint/lease calls and handler work, so it is machine-dependent
+and not a production or Azure performance claim. `tests/test_bench_catchup.py` checks the
+correctness assertions with small inputs and no timing thresholds.

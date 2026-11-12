@@ -40,6 +40,15 @@ def _build_host_signature(
     return sig.replace(parameters=params)
 
 
+class _HostBoundArguments(inspect.BoundArguments):
+    """Host-bound arguments that also remember how many positional arguments
+    the caller supplied, so the outgoing call can mirror the caller's style."""
+
+    __slots__ = ("positional_count",)
+
+    positional_count: int
+
+
 def _bind_host_args(
     host_sig: inspect.Signature, args: tuple[Any, ...], kwargs: dict[str, Any]
 ) -> inspect.BoundArguments:
@@ -49,10 +58,16 @@ def _bind_host_args(
     reinserted (#446) -- forwarding the raw ``args`` tuple unchanged would
     instead bind by raw position against the original function's real
     signature, which still contains the hidden injected parameter.
+
+    The returned object records how many positional arguments the caller
+    supplied (#538) so :func:`_finalize_injected_call` can keep keyword
+    arguments as keywords.
     """
     bound = host_sig.bind(*args, **kwargs)
     bound.apply_defaults()
-    return bound
+    host_bound = _HostBoundArguments(host_sig, bound.arguments)
+    host_bound.positional_count = len(args)
+    return host_bound
 
 
 def _finalize_injected_call(
@@ -62,15 +77,64 @@ def _finalize_injected_call(
     injected_value: Any,
 ) -> tuple[tuple[Any, ...], dict[str, Any]]:
     """Combine the host-bound caller arguments with the injected value and
-    return a call shape that matches *fn*'s own real signature -- respecting
-    each parameter's original kind (positional-only, positional-or-keyword,
-    keyword-only) regardless of how the caller invoked the exposed wrapper.
+    return a call shape for *fn*.
+
+    Positional-only parameters are always passed positionally. A
+    positional-or-keyword parameter is passed positionally only when the caller
+    supplied it (or an earlier-bound parameter) positionally, or when it
+    precedes such a parameter in *fn*'s real order (for example the injected
+    parameter, #446). Everything else stays a keyword, as it was before 0.9.0.
+    A wrapped callable that advertises positional-or-keyword parameters but
+    accepts only some of them positionally (for example
+    ``azure-functions-validation``'s ``wrapper(req, **kw)``) therefore still
+    works when called by keyword (#538).
     """
     full_sig = inspect.signature(fn, follow_wrapped=False)
     full_bound = full_sig.bind_partial()
     full_bound.arguments.update(host_bound.arguments)
     full_bound.arguments[arg_name] = injected_value
-    return full_bound.args, full_bound.kwargs
+
+    supplied_positionally = getattr(host_bound, "positional_count", None)
+    if supplied_positionally is None:
+        # Not produced by _bind_host_args: fall back to the signature's own kinds.
+        return full_bound.args, full_bound.kwargs
+
+    # Names of the host parameters the caller filled positionally, in order.
+    positional_host = [
+        name
+        for name, p in host_bound.signature.parameters.items()
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ][:supplied_positionally]
+    caller_positional = set(positional_host)
+
+    params = list(full_sig.parameters.values())
+    has_var_positional = any(
+        p.kind is inspect.Parameter.VAR_POSITIONAL and full_bound.arguments.get(p.name)
+        for p in params
+    )
+    # Index of the last parameter that must be passed positionally.
+    last_positional = -1
+    for index, p in enumerate(params):
+        if p.kind is inspect.Parameter.POSITIONAL_ONLY or p.name in caller_positional:
+            last_positional = index
+        elif p.kind is inspect.Parameter.VAR_POSITIONAL and has_var_positional:
+            last_positional = index
+
+    call_args: list[Any] = []
+    call_kwargs: dict[str, Any] = {}
+    for index, p in enumerate(params):
+        value = full_bound.arguments[p.name]
+        if p.kind is inspect.Parameter.VAR_POSITIONAL:
+            call_args.extend(value)
+        elif p.kind is inspect.Parameter.VAR_KEYWORD:
+            call_kwargs.update(value)
+        elif p.kind is inspect.Parameter.KEYWORD_ONLY:
+            call_kwargs[p.name] = value
+        elif index <= last_positional:
+            call_args.append(value)
+        else:
+            call_kwargs[p.name] = value
+    return tuple(call_args), call_kwargs
 
 
 def _validate_resolver(
