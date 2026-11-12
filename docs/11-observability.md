@@ -116,6 +116,39 @@ Examples below are deployment-agnostic and assume your metrics backend supports 
 - Last successful tick age: `now() - azfdb_last_success_timestamp{poller_name="orders"}`
 - Current lag: `azfdb_lag_seconds{poller_name="orders"}`
 
+### 3.3. Runnable offline example (SQLite, no credentials)
+
+`examples/observability_metrics.py` runs a `PollTrigger` with a recording
+`MetricsCollector` against a temporary SQLite file with synthetic rows, once
+with a good query and once with a deliberately failing query (missing table).
+
+Scope: the supported metrics surface is the `MetricsCollector` protocol that
+`PollTrigger` accepts through `metrics=`. `DbReader` and `DbWriter` emit no
+metrics, and this example does not add any hook or change a metrics default.
+
+| Run | Emitted (labels) |
+|---|---|
+| Success, two rows | `azfdb_batches_total` = 1 (`poller_name`, `source`, `result=success`); `azfdb_events_total` = 2 (`poller_name`, `source`); histograms `azfdb_batch_size`, `azfdb_fetch_duration_ms`, `azfdb_handler_duration_ms`, `azfdb_commit_duration_ms`; gauge `azfdb_last_success_timestamp` |
+| Failed query | `azfdb_failures_total` = 1 (`poller_name`, `source`, `error_type=FetchError`); `azfdb_batches_total` = 1 with `result=failure` |
+
+Duration and timestamp values differ on every run, so the tests assert only
+metric names, labels and counts, never a timing threshold.
+
+What must not become telemetry: **query text, connection credentials and record
+values are never metric labels or attributes.** Labels stay within `poller_name`,
+`source`, `result` and `error_type`. For query-mode sources `source` is an
+opaque hash (`query_<12 hex>`), not the SQL, and a custom collector must not
+add the SQL, URL or row contents as extra labels.
+
+```bash
+pip install -e .
+python examples/observability_metrics.py
+python -m pytest tests/test_observability_metrics_example.py --no-cov -q
+```
+
+Source:
+[`examples/observability_metrics.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/observability_metrics.py).
+
 ## 4. Tracing
 
 Tracing is deferred to `azure-functions-db-python-otel` so the base package keeps zero extra dependencies.
