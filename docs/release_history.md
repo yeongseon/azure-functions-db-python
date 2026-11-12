@@ -201,7 +201,10 @@ workflow; see [Release verification and alerts](release_process.md#release-verif
 cannot see that a wheel contains no package modules (see
 [Empty wheels](#empty-wheels-v022-v030-v040-and-v041)), and it does not verify file checksums or
 attestations. For new releases the publish job refuses a wheel without modules and imports the
-built wheel in a clean environment before it uploads anything (#239); the steps under
+built wheel in a clean environment before it uploads anything (#239). Pull-request CI also runs
+`python -m tools.check_wheel_contents` on the wheel built by `python -m build` and compares it with
+the modules under `src/azure_functions_db`, and `tests/test_check_wheel_contents.py` rebuilds the
+wheel the same way and fails on the configuration that produced the four empty wheels (#532). The steps under
 [How this was verified](#how-this-was-verified) show how the history was checked.
 
 ---
