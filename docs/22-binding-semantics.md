@@ -29,6 +29,31 @@ Unlike triggers, they do not manage state (checkpoint/lease) and operate on a pe
 - No long-lived sessions are maintained
 - Calling close() releases reader resources (engine pool is retained)
 
+### 3.4 Duplicate Result Labels
+
+A join can return two columns with the same label (for example
+`u.name AS name, a.name AS name`). The reader APIs treat that differently:
+
+| API | Result for `SELECT u.name AS name, a.name AS name, u.id AS id ...` |
+|---|---|
+| `scalar()` | `'user-name'`: the **first column by position** |
+| `query()` / `one()` / `one_or_none()` | `{'name': 'account-name', 'id': 1}`: rows are dicts, so the later column replaces the earlier one |
+| SQLAlchemy `row._mapping` | same collapse as `query()`; its `keys()` still lists `name` twice |
+
+Give columns distinct labels (`a.name AS account_name`) whenever you need every value;
+the library does not parse or rewrite SQL. This is verified with SQLite through
+SQLAlchemy only; do not assume other backends or drivers label duplicate columns the same way.
+
+Runnable offline recipe (synthetic data, temporary SQLite file, no credentials):
+
+```bash
+pip install -e .
+python examples/duplicate_result_labels.py
+python -m pytest tests/test_duplicate_result_labels_example.py --no-cov -q
+```
+
+Source: [`examples/duplicate_result_labels.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/duplicate_result_labels.py).
+
 ## 4. Output Binding (DbWriter)
 
 ### 4.1 Basic Contract

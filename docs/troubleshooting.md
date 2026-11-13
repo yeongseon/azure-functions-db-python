@@ -78,6 +78,30 @@ Common issues and solutions for `azure-functions-db-python`.
 - Duplicates can occur during process crashes, lease transitions, or commit failures.
 - Handlers must be idempotent — design operations to be safely re-applied.
 
+### ConfigurationError: `default_normalizer requires source cursor metadata`
+
+Raised after upgrading a custom source or wrapper that calls `default_normalizer(record, descriptor)` directly, or passes it to `PollRunner`. `SourceDescriptor` only carries `name`, `kind`, and `fingerprint`, so it cannot tell the normalizer which columns are the cursor and primary key. Earlier releases silently returned `cursor=None` and a random event ID, which made checkpoint progress and replay identity unsafe; the direct call now fails fast instead.
+
+Fix: build an explicit normalizer with `make_normalizer` and pass it as `normalizer=`.
+
+```python
+from azure_functions_db.core.types import SourceDescriptor
+from azure_functions_db.trigger import make_normalizer
+
+# Prerequisites: your source must expose a monotonic cursor column and every
+# primary-key column (the cursor is followed by each key as a tiebreaker).
+normalizer = make_normalizer(cursor_column="updated_at", pk_columns=["tenant_id", "id"])
+
+descriptor = SourceDescriptor(name="orders", kind="sqlalchemy", fingerprint="demo")
+event = normalizer({"tenant_id": 1, "id": 7, "updated_at": 100}, descriptor)
+print(event.cursor, event.pk)  # (100, 1, 7) {'tenant_id': 1, 'id': 7}
+```
+
+- `PollTrigger` with a `SqlAlchemySource` (or any source exposing `cursor_column` and `pk_columns`) needs no change: omitting `normalizer`, or passing `default_normalizer`, selects the source-aware normalizer.
+- A wrapper around `default_normalizer` cannot supply the missing metadata; migrate it to `make_normalizer` too.
+- This only changes how events are normalized. The checkpoint format and polling runtime are unchanged, and delivery stays poll-based at-least-once, not a native SQL trigger and not exactly-once.
+- See [Default normalizer and checkpoint progress](33-default-normalizer-migration.md) for the full migration guide.
+
 ### Hard deletes not detected
 
 - Cursor-based polling only detects inserts and updates.

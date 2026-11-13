@@ -136,6 +136,42 @@ on every cached engine. Use it in tests and in custom shutdown paths. You do
 **not** need to call it on every invocation — Azure Functions tears the
 process down for you.
 
+### 3.4 Percent-encoded values in connection URLs
+
+`%NAME%` is the only token the package expands, and it expands it **once**,
+when `DbConfig`/`url=` is resolved. A URL-encoded byte is exactly two hex
+digits (`%40` for `@`, `%2F` for `/`, `%25` for `%`), so it never matches the
+token pattern (a token name must start with a letter or underscore). The
+resolved URL is handed to SQLAlchemy unchanged; the driver-level credentials
+are decoded once, by SQLAlchemy.
+
+Synthetic example (no real credentials; the user is `app@example` and the
+secret is `s3/cr@t%`):
+
+| Stage | Value |
+|---|---|
+| Template | `postgresql+psycopg://app%40example:s3%2Fcr%40t%25@%DB_HOST%:5432/orders` |
+| `DB_HOST` | `db.example.invalid` |
+| Effective URL | `postgresql+psycopg://app%40example:s3%2Fcr%40t%25@db.example.invalid:5432/orders` |
+| Masked for logs | `postgresql+psycopg://app%40example:***@db.example.invalid:5432/orders` |
+
+Rules of thumb:
+
+- Encode reserved characters in the user and password yourself; do not also
+  write them as `%TOKEN%`.
+- An environment-variable **value** is never expanded a second time, even if
+  it contains text shaped like `%OTHER%` or like a percent-escape.
+- Use `%%` for a literal percent sign outside an encoded byte.
+- Never log the raw URL; use
+  `sqlalchemy.engine.make_url(url).render_as_string(hide_password=True)`.
+
+The runnable offline demo is
+[`examples/percent_encoded_url.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/percent_encoded_url.py)
+(`pip install -e .` then `python examples/percent_encoded_url.py`); it never
+connects to a database. The regression tests live in
+`tests/test_percent_encoded_url_example.py` and use a mocked `create_engine`
+so no driver or server is required.
+
 ---
 
 ## 4. Recommended pool settings for serverless
@@ -244,6 +280,25 @@ DbConfig(
     engine_kwargs={"poolclass": StaticPool},
 )
 ```
+
+Runnable offline recipe: [`examples/sqlite_staticpool.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/sqlite_staticpool.py)
+builds that config through an `EngineProvider`, writes one row, runs two
+sequential reads against the same in-memory database, and then calls
+`dispose_all()` in a `finally` block. After `dispose_all()` the next
+`get_engine()` for the same config is a new engine over an **empty** database,
+because the in-memory data lived in the disposed connection.
+
+```bash
+pip install -e .
+python examples/sqlite_staticpool.py
+python -m pytest tests/test_sqlite_staticpool_example.py --no-cov -q
+```
+
+`StaticPool` is a local-demo and test tool, not a production pool: it holds one
+connection, so work is serialised and it is not suited to concurrent threads.
+Each Azure Functions worker process builds its own engine, so nothing about it
+carries over to Azure Functions scale-out. For a real database use the
+`QueuePool` guidance in §4.1-4.3.
 
 These defaults were verified with SQLAlchemy 2.0.50 on 2026-10-16. See
 [SQLite threading/pooling behavior](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#threading-pooling-behavior)
