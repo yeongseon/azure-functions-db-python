@@ -33,6 +33,8 @@ nav:
       - Trigger: examples/trigger.md
       - Trigger + Binding: examples/trigger_with_binding.md
       - Client Injection: examples/client_injection.md
+      - Managed Identity (Azure SQL): examples/managed_identity_mssql.md
+      - Transaction Rollback: examples/transaction_rollback.md
   - API Reference: api.md
   - Contributing:
       - Guidelines: contributing.md

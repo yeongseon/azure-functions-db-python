@@ -74,7 +74,7 @@ Every PR should address:
 - Unit tests for all new code.
 - Adapter changes must include integration tests.
 - Lease and checkpoint changes must include race condition tests.
-- Coverage threshold: 90%.
+- Coverage threshold: 95% (`fail_under` in `pyproject.toml`, see [Testing](testing.md#coverage)).
 
 See [Testing](testing.md) for details on running and writing tests.
 
