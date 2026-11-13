@@ -45,6 +45,50 @@ def complex_read(reader: DbReader) -> None:
 | `get(pk={...})` | Fetch a single row by primary key. Returns `dict \| None`. |
 | `query(sql, params={...})` | Execute a SQL query. Returns `list[dict]`. |
 
+### Composite primary keys
+
+When a table's primary key spans two columns, `get()` needs **both** columns, and
+the pair identifies exactly one row. The recipe below uses a temporary SQLite
+table; nothing needs a network or an external database.
+
+```sql
+CREATE TABLE order_items (
+    order_id INTEGER,
+    item_id  INTEGER,
+    qty      INTEGER,
+    PRIMARY KEY (order_id, item_id)
+);
+-- rows: (1, 1, 2), (1, 2, 3), (2, 1, 1)
+```
+
+```python
+from azure_functions_db import DbBindings, DbReader
+
+db = DbBindings()
+
+
+@db.inject_reader("reader", url="%ORDER_ITEMS_URL%", table="order_items")
+def read_line(order_id: int, item_id: int, reader: DbReader) -> dict[str, object] | None:
+    # Both columns together identify one row.
+    return reader.get(pk={"order_id": order_id, "item_id": item_id})
+
+
+print(read_line(1, 2))  # {'order_id': 1, 'item_id': 2, 'qty': 3}
+print(read_line(9, 9))  # None: no row has this key pair
+```
+
+- An exact match returns that row as a `dict`; a key pair that matches nothing
+  returns `None` (not an error).
+- The order of keys in `pk` does not matter, but every primary-key column must be
+  present: `reader.get(pk={"order_id": 1})` raises `ConfigurationError`
+  ("Incomplete primary key") instead of returning one of the two matching rows.
+- A column that is not part of the primary key is rejected the same way. To look
+  rows up by a non-key column, use `query()` with bound parameters.
+
+The snippet above is executed against a temporary SQLite database by
+`tests/test_docs_composite_pk_example.py`
+(`python -m pytest tests/test_docs_composite_pk_example.py --no-cov -q`).
+
 !!! warning "Raw SQL is not restricted"
     `query()` runs any SQL the connection is allowed to execute, including writes. Bind
     untrusted values with `:name` placeholders and `params`, choose identifiers from an
