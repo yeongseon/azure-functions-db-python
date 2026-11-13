@@ -266,6 +266,45 @@ Polling resumes automatically when storage becomes available.
 required — the last committed checkpoint is intact and polling resumes from
 it.
 
+### 5.11 Runnable replay recipe (offline)
+
+`examples/poller_checkpoint_replay.py` reproduces §5.5, §5.7 and §9 end to end
+with a temporary SQLite database and a temporary JSON checkpoint file. No Azure
+account, Azurite, database server or credentials are needed.
+
+Scenario (four rows, `batch_size=2`, cursor column `version`, key `id`):
+
+1. Tick 1: the handler succeeds; the checkpoint becomes cursor `[20, 2]`.
+2. Tick 2: the handler records row 3, then fails before row 4.
+   `HandlerError` is raised and the checkpoint stays `[20, 2]`.
+3. A simulated restart builds new objects over the same checkpoint file. The
+   next tick delivers rows 3 and 4 again, with the same `event_id` values, and
+   the checkpoint moves to `[40, 4]`. Row 3 was seen twice.
+4. Two more rows arrive; the handler succeeds but the checkpoint write fails
+   (`CommitError`). The batch is delivered again on the next tick.
+
+The recipe's sink de-duplicates on `event_id`, which is why each row is
+*applied* once even though it is *delivered* more than once. This is
+at-least-once delivery, not exactly-once: the library never un-does a side
+effect that a failed batch already performed, and it cannot make the handler's
+side effect and the checkpoint commit atomic. Idempotent handlers (§9) are your
+responsibility.
+
+The demo's `LocalFileStateStore` has a no-op lease and is for this recipe only:
+it provides no lease or fencing guarantee, so do not use it with concurrent
+pollers. A deployed app uses `BlobCheckpointStore` (see
+[Checkpoint / Lease Spec](06-checkpoint-lease-spec.md)).
+
+```bash
+pip install -e .
+python examples/poller_checkpoint_replay.py
+python -m pytest tests/test_poller_checkpoint_replay_example.py --no-cov -q
+```
+
+Source:
+[`examples/poller_checkpoint_replay.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/poller_checkpoint_replay.py);
+tests: `tests/test_poller_checkpoint_replay_example.py`.
+
 ---
 
 ## 6. Partial-Batch Failure Behavior
