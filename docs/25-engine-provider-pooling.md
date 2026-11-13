@@ -281,6 +281,25 @@ DbConfig(
 )
 ```
 
+Runnable offline recipe: [`examples/sqlite_staticpool.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/sqlite_staticpool.py)
+builds that config through an `EngineProvider`, writes one row, runs two
+sequential reads against the same in-memory database, and then calls
+`dispose_all()` in a `finally` block. After `dispose_all()` the next
+`get_engine()` for the same config is a new engine over an **empty** database,
+because the in-memory data lived in the disposed connection.
+
+```bash
+pip install -e .
+python examples/sqlite_staticpool.py
+python -m pytest tests/test_sqlite_staticpool_example.py --no-cov -q
+```
+
+`StaticPool` is a local-demo and test tool, not a production pool: it holds one
+connection, so work is serialised and it is not suited to concurrent threads.
+Each Azure Functions worker process builds its own engine, so nothing about it
+carries over to Azure Functions scale-out. For a real database use the
+`QueuePool` guidance in §4.1-4.3.
+
 These defaults were verified with SQLAlchemy 2.0.50 on 2026-10-16. See
 [SQLite threading/pooling behavior](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#threading-pooling-behavior)
 and [connection pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html).
