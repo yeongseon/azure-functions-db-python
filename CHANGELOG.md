@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.9.1](https://github.com/yeongseon/azure-functions-db-python/compare/v0.9.0...v0.9.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **decorator:** keep keyword arguments as keywords when forwarding to the wrapped callable ([#541](https://github.com/yeongseon/azure-functions-db-python/issues/541)) ([c809455](https://github.com/yeongseon/azure-functions-db-python/commit/c809455e09c9a3bd4babe49eb111aa04098edbf3)), closes [#538](https://github.com/yeongseon/azure-functions-db-python/issues/538)
+
+
+### Performance
+
+* **db:** make the poller catch-up benchmark reproducible and self-checking ([ff300e0](https://github.com/yeongseon/azure-functions-db-python/commit/ff300e056347584ed47c66fbfaa75a8676e646f3)), closes [#531](https://github.com/yeongseon/azure-functions-db-python/issues/531)
+
 ## [0.9.0](https://github.com/yeongseon/azure-functions-db-python/compare/v0.8.3...v0.9.0) (2026-11-01)
 
 
