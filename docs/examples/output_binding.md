@@ -76,6 +76,9 @@ def create_order(req: func.HttpRequest, out: DbOut) -> func.HttpResponse:
 The return value (`HttpResponse`) is sent to the caller. The database write
 happens independently via `out.set()`.
 
+For several writes that must succeed or fail together, see
+[Transaction Rollback](transaction_rollback.md).
+
 ## Configuration Reference
 
 | Parameter | Type | Description |
