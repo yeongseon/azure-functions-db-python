@@ -107,6 +107,8 @@ No. They are mutually exclusive. Choose one pattern per handler.
 Wrap variable names in percent signs: `url="%DB_URL%"`. The value is resolved
 from the environment at runtime. Partial substitution is also supported:
 `url="postgresql+psycopg://%DB_USER%:%DB_PASS%@%DB_HOST%/mydb"`.
+Percent-encoded bytes such as `%40` are left untouched; see
+[Percent-encoded values in connection URLs](25-engine-provider-pooling.md#34-percent-encoded-values-in-connection-urls).
 
 ### Can I pass custom SQLAlchemy engine options?
 
