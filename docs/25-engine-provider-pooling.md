@@ -172,6 +172,37 @@ connects to a database. The regression tests live in
 `tests/test_percent_encoded_url_example.py` and use a mocked `create_engine`
 so no driver or server is required.
 
+### 3.5 Reuse and separation across configurations (runnable)
+
+One module-level `EngineProvider` can serve several independent databases.
+`examples/engine_provider_reuse.py` uses two temporary SQLite files:
+
+- **Reuse:** equal `DbConfig` values (same URL and options, §3.2) return the same
+  engine, so a reader and a writer for database A use one pool.
+- **Separation:** a different URL, or the same URL with different `engine_kwargs`,
+  returns a different engine. Rows written through database A's config are never
+  visible through database B's.
+- **Ownership:** a `DbReader`/`DbWriter` created with `engine_provider=` never disposes
+  the provider's engine when it closes; the provider owns the engines and
+  `dispose_all()` is the cleanup. Readers and writers created *without* a provider own
+  a private engine and dispose it themselves.
+- **Warm invocations:** keep the provider at module level and build a short-lived
+  reader/writer per invocation; the engine is reused while the worker process is warm.
+
+The engine cache lives in one worker process. `EngineProvider` does not share a pool
+across Azure Functions workers or scale-out instances, and a warm process may be
+recycled at any time, so never rely on a pooled connection surviving between
+invocations.
+
+```bash
+pip install -e .
+python examples/engine_provider_reuse.py
+python -m pytest tests/test_engine_provider_reuse_example.py --no-cov -q
+```
+
+Source:
+[`examples/engine_provider_reuse.py`](https://github.com/yeongseon/azure-functions-db-python/blob/main/examples/engine_provider_reuse.py).
+
 ---
 
 ## 4. Recommended pool settings for serverless
