@@ -1,4 +1,5 @@
 <!-- Title: `type: description` or `type(scope): description`. See "Title Convention" in CONTRIBUTING.md. Link issues in the body (Closes #123), not in the title. -->
+<!-- Use concrete change-focused wording. Avoid unexplained internal codes, review-round counters, and vague process jargon. Describe actual risks in plain English; separate published changes from local or planned work. Check the title and description before review. See AGENTS.md: Pull Request Writing. -->
 
 ## Summary
 
@@ -51,4 +52,4 @@
 - Review source and reviewed commit SHA:
 - Material findings and disposition (fixed / acknowledged-wont-fix / deferred-with-issue), or "none":
 - Unresolved blockers, or "none":
-- R3 (workflow permissions, release/publishing, checkpoint/transaction/retry/lease behavior, security-sensitive credential/data-access, review-policy files): yes/no — if yes, human authorization record:
+- High-risk change (workflow permissions, release/publishing, checkpoint/transaction/retry/lease behavior, security-sensitive credential/data-access, review-policy files): yes/no — if yes, describe the affected behavior and include the human authorization record:
