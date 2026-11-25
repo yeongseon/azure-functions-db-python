@@ -46,6 +46,14 @@
 - Translation sync is **not** required in the same PR as an English change, and a PR is **never** blocked by translation drift. Update translations opportunistically; when you do, keep them faithful to the current English source.
 - Each translated README carries a staleness banner linking back to the canonical English README. Keep that banner in place so readers always know the translation may be out of date.
 
+## Pull Request Writing
+
+Follow the Title Convention in `CONTRIBUTING.md` and the repository PR template. Explain what changed, why, actual validation results, and related issues.
+
+- Make the title identify the concrete component and change in plain English; do not use unexplained internal risk codes (such as `R3`), review-round counters, phase IDs, or vague process jargon. Retain established technical terms and the Conventional Commit type, scope, and breaking-change marker.
+- Make the description understandable without reading prior agent sessions or linked issues. Describe the actual risk and affected behavior in words, separate published changes from planned or local-only work, and preserve required review evidence and explicit maintainer authorization.
+- When creating, updating, or reviewing a PR, check the title and description for these points and correct unclear wording before merge. Do not change release-generated or dependency-bot titles solely for style.
+
 ## Unified PR Review and Merge Policy
 
 Use the same criteria for human-authored and AI-assisted changes,
