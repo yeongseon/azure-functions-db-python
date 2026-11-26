@@ -8,8 +8,7 @@
 > verified in this repository (see "Rollout" below).
 
 This repository runs with zero required native GitHub approvals (#310's final decision) because
-the sole maintainer cannot approve their own PR. Independent review still happens — GitHub
-Copilot code review, or a human — but prior to this policy nothing recorded *who* reviewed
+the sole maintainer cannot approve their own PR. Before this policy, nothing recorded *who* reviewed
 *which commit*, *what* was found, or whether findings were resolved before merge. This document
 defines that evidence record. It does **not** reopen #310 (zero native approvals stands) and does
 **not** replace CI.
@@ -17,9 +16,8 @@ defines that evidence record. It does **not** reopen #310 (zero native approvals
 ## Roles
 
 - **Implementer** — the person or agent that authored the change (may be the maintainer).
-- **Independent reviewer** — a review source distinct from the implementer: GitHub Copilot code
-  review, or a human maintainer/contributor who did not author the diff. A review is only
-  independent evidence if it evaluates the PR's current head commit; a thread opened against an
+- **Independent reviewer** — a maintainer or contributor who did not author the diff.
+  A review is only independent evidence if it evaluates the PR's current head commit; a thread opened against an
   earlier commit is stale once the diff changes (see "SHA binding" below).
 
 Implementer-managed helper reviews (e.g. an agent re-running its own linter and calling the
@@ -67,9 +65,7 @@ In the PR body (see the extended `PULL_REQUEST_TEMPLATE.md` fields):
   behavior, or the identity of a package actually deployed to Azure (see #422, #442 for the
   separate operation-matrix and candidate-deployment evidence this does not duplicate).
 
-External contributors must not need an internal AI subscription, credentials, or local tooling to
-satisfy this — Copilot review runs automatically on PRs against this repository; a contributor
-without Copilot access simply records "no automated review available, human review requested."
+External contributors can request a human review and record the reviewed commit and findings.
 
 ## R3 scope
 
@@ -104,11 +100,9 @@ exceptions in PR history rather than being recorded as if a review had occurred:
 - **GitHub Actions SHA updates**: never auto-merged; require a human diff check confirming the
   pinned SHA matches its claimed tag (see AGENTS.md). This human check *is* the review evidence —
   record the SHA/tag comparison performed.
-- **Forks**: external PRs are reviewed by a maintainer before merge; Copilot review may be
-  unavailable or restricted on fork PRs depending on repository settings — record "unavailable"
-  explicitly rather than silently skipping the field.
-- **Reviewer outages / emergencies**: if Copilot review is unavailable (quota, outage, provider
-  error), record the unavailability and fall back to human review before merge. This is never a
+- **Forks**: external PRs are reviewed by a maintainer before merge.
+- **Reviewer outages / emergencies**: if a review tool is unavailable,
+  record the unavailability and fall back to human review before merge. This is never a
   reason to merge with the review field left blank.
 
 ## Provenance pitfalls (do not accept as evidence)
